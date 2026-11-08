@@ -1,0 +1,38 @@
+// Interaction tests: exercise the actual handlers without touching host services.
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const nodes=new Map(),opened=[];
+function node(selector){if(!nodes.has(selector))nodes.set(selector,{textContent:'',value:'',hidden:false,disabled:false,isConnected:true,open:false,innerHTML:'',dataset:{},classList:{add(){},toggle(){}},setAttribute(){},removeAttribute(){},replaceChildren(){},append(){},addEventListener(){},focus(){},reset(){},close(){this.open=false},showModal(){this.open=true},closest(){return null},querySelectorAll(){return []}});return nodes.get(selector)}
+const context=vm.createContext({console,AbortSignal,URL,JSON,Date,Number,Set,Map,Promise,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{open(url){opened.push(url);return {opener:{}}}},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(){return []},createElement(){return node('new-link')},createTextNode(t){return t},addEventListener(){}},fetch(){throw Error('Unexpected network call')},EventSource:class{close(){}},prompt(){return 'renamed'}});
+vm.runInContext(fs.readFileSync('static/sessions.js','utf8'),context);context.RemoteHubSessions=context.window.RemoteHubSessions;
+vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*$/,''),context);
+vm.runInContext(`me={role:'admin',host:{system:'Darwin'}};globalThis.calls=[];globalThis.confirmations=[];globalThis.updates=0;api=async(p,b)=>{calls.push({p,b});return {id:'saved-task'}};confirmAction=async(t,m)=>{confirmations.push({t,m});return true};refresh=async()=>{updates++}`,context);
+const run=code=>vm.runInContext(code,context);
+await run("act('docker','container-id','start')");
+assert.equal(run('confirmations.length'),0,'Starting a stopped container needs no redundant confirmation');
+assert.equal(run('calls.length'),1);
+await run("act('docker','container-id','stop')");
+assert.equal(run('confirmations.length'),1,'Stopping has exactly one confirmation');
+assert.equal(run('calls.at(-1).b.confirm'),'container-id','Backend target protection retained');
+run("mountTerminal('saved-session')");
+assert.equal(opened.at(-1),'/terminal/open/saved-session');
+assert.ok(!opened.includes('about:blank'));
+assert.equal(run('confirmations.length'),1,'Terminal entry never opens a parent-console confirmation');
+run(`api=async()=>({sessions:[{name:'old',status:'exited',detail:''},{name:'live',status:'running',detail:''}],processes:[]});renderVersion=1`);
+await run('zellijView(1)');
+assert.match(node('#content').innerHTML,/session-workspace/);
+assert.ok(!node('#content').innerHTML.includes('class="notice"'),'No explanatory notice boxes');
+assert.match(node('#sessionDetail').innerHTML,/恢复并进入/);
+assert.match(node('#sessionDetail').innerHTML,/\/terminal\/open\/old/);
+run(`api=async(p,b)=>{calls.push({p,b});return {id:'saved-task'}}`);
+node('#taskName').value='task';node('#taskArgv').value='["python3","-V"]';node('#taskCwd').value='/tmp';
+await node('#taskForm').onsubmit({preventDefault(){},submitter:{value:'run',textContent:'保存并启动',setAttribute(){},removeAttribute(){},isConnected:true}});
+assert.deepEqual(JSON.parse(run('JSON.stringify(calls.slice(-2).map(x=>x.p))')),['/tasks','/tasks/saved-task']);
+assert.equal(run('confirmations.length'),1,'Save-and-start is a single explicit user action');
+run(`globalThis.release=null;globalThis.count=0;globalThis.work=()=>new Promise(r=>{count++;release=r});globalThis.pending=withBusy(null,'single','等待',work)`);
+await run("withBusy(null,'single','等待',work)");
+assert.equal(run('count'),1,'Double clicks cannot submit a second operation');
+run('release()');await run('pending');
+assert.equal(run('pendingOperations.size'),0,'Busy state always released');
+console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, save-and-start, duplicate protection passed.');

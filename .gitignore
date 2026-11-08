@@ -1,0 +1,21 @@
+# Host credentials and runtime state
+.env
+.env.*
+!.env.example
+.runtime/
+*.sqlite*
+*.log
+*.pem
+*.key
+# Local environments and generated files
+.venv/
+venv/
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+# Historical local reports contain host process output and screenshots.
+docs/*
+!docs/architecture.md
+!docs/validation.md

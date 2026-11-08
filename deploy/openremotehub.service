@@ -1,0 +1,12 @@
+# User service template: replace /ABSOLUTE/PATH/open-remote-hub before installation.
+[Unit]
+Description=OpenRemoteHub personal server console
+After=default.target
+[Service]
+Type=simple
+WorkingDirectory=/ABSOLUTE/PATH/open-remote-hub
+ExecStart=/ABSOLUTE/PATH/open-remote-hub/.venv/bin/python /ABSOLUTE/PATH/open-remote-hub/scripts/server.py
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=default.target

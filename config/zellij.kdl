@@ -1,0 +1,7 @@
+// Used only for sessions newly created by OpenRemoteHub.
+// The user's global Zellij configuration and existing sessions are untouched.
+web_sharing "on"
+show_startup_tips false
+show_release_notes false
+session_serialization true
+serialize_pane_viewport true
