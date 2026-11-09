@@ -4,9 +4,9 @@ import subprocess
 import psutil
 
 
-def command(args, timeout=15):
+def command(args, timeout=15, cwd=None):
     try:
-        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, env={**{k:v for k,v in __import__('os').environ.items() if not k.startswith('ORH_')}, 'TERM':'xterm-256color'})
+        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd, env={**{k:v for k,v in __import__('os').environ.items() if not k.startswith('ORH_')}, 'TERM':'xterm-256color'})
     except (OSError, subprocess.TimeoutExpired) as e:
         raise RuntimeError(str(e)) from e
     if p.returncode:

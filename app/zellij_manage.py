@@ -71,7 +71,7 @@ def stop(name):
 def mutate(name,action,new_name=''):
     m=main();m.zname(name)
     with mutex:
-        if action=='create':return {'output':m.cli(['zellij','--config',str(m.ROOT/'config/zellij.kdl'),'attach','--create-background',name],8)}
+        if action=='create':return {'output':m.cli(['zellij','--config',str(m.ROOT/'config/zellij.kdl'),'attach','--create-background',name],8,**({'cwd':str(Path.home())} if not current(name) else {}))}
         if action=='rename':
             m.zname(new_name)
             if new_name==name:return {'output':''}

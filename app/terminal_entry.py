@@ -1,4 +1,5 @@
 """One user action prepares a native terminal; never force-runs saved commands."""
+from pathlib import Path
 import threading
 import time
 import httpx
@@ -42,7 +43,7 @@ def prepare(name):
         state='reused'
         if not existing or existing['status']!='running':
             # No --force-run-commands: archived programs remain held by Zellij.
-            main.cli(['zellij','--config',str(main.ROOT/'config/zellij.kdl'),'attach','--create-background',name],8)
+            main.cli(['zellij','--config',str(main.ROOT/'config/zellij.kdl'),'attach','--create-background',name],8,**({'cwd':str(Path.home())} if not existing else {}))
             state='restored' if existing else 'created'
             for _ in range(20):
                 if any(s['name']==name and s['status']=='running' for s in host_sessions()):break

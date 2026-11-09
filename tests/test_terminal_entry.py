@@ -31,7 +31,7 @@ def test_restore_never_force_runs_archived_commands(monkeypatch):
     monkeypatch.setattr(entry,'host_sessions',lambda:rows)
     monkeypatch.setattr(entry,'ensure_web',lambda:None)
     monkeypatch.setattr(main,'audit',lambda *a:None)
-    def create(args,timeout):
+    def create(args,timeout,**kwargs):
         commands.append(args);rows[0]['status']='running';return ''
     monkeypatch.setattr(main,'cli',create)
     assert entry.prepare('saved')['state']=='restored'
@@ -94,7 +94,7 @@ def test_two_browsers_do_not_create_duplicate_session(monkeypatch):
     monkeypatch.setattr(entry,'host_sessions',lambda:list(rows))
     monkeypatch.setattr(entry,'ensure_web',lambda:None)
     monkeypatch.setattr(main,'audit',lambda *a:None)
-    def create(args,timeout):
+    def create(args,timeout,**kwargs):
         time.sleep(.05);creates.append(args);rows.append(dict(name='parallel',status='running'));return ''
     monkeypatch.setattr(main,'cli',create)
     with ThreadPoolExecutor(2) as pool:

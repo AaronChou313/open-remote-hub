@@ -224,8 +224,8 @@ def history(hours:int=1):
     return [max(values[i:i+step],key=lambda x:x['cpu']) for i in range(0,len(values),step)]
 
 
-def cli(args,timeout=20):
-    try:return command(args,timeout)
+def cli(args,timeout=20,cwd=None):
+    try:return command(args,timeout,cwd=cwd) if cwd is not None else command(args,timeout)
     except RuntimeError as e:raise HTTPException(503,str(e))
 
 
