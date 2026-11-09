@@ -1,15 +1,35 @@
 'use strict';
 window.RemoteHubWorkspace=(()=>{
- const state={root:'',path:'',selected:null,text:null,dirty:false,project:null,environment:null,showHidden:localStorage.getItem('orh-files-hidden')==='true',sort:'name',order:'asc'};
- let current=()=>true,selectionVersion=0,preparedList=null;
+ const state={root:'',path:'',selected:null,text:null,dirty:false,project:null,environment:null,showHidden:localStorage.getItem('orh-files-hidden')==='true',sort:'name',order:'asc',projectQuery:'',projectScroll:0};
+ let current=()=>true,selectionVersion=0,environmentSelection=0,preparedList=null,projectOpener=null;
  const query=o=>new URLSearchParams(o).toString();
  const join=(a,b)=>[a,b].filter(Boolean).join('/');
  const endpoint=(name,extra={})=>'/files/'+name+'?'+query({root:state.root,path:state.path,show_hidden:state.showHidden,sort:state.sort,order:state.order,...extra});
  const admin=()=>me.role==='admin';
- function failure(e){showError(e)}
+ function failure(e){showError(e);if($('#filePreviewDialog').open){$('#filePreviewError').textContent=e.message;$('#filePreviewError').hidden=false;$('#filePreviewError').scrollIntoView({block:'nearest'})}}
  function guarded(fn){return async e=>{e?.preventDefault();try{await fn(e)}catch(err){failure(err)}}}
  function bind(id,fn){const el=$(id);if(el)el.onclick=guarded(fn)}
  async function canLeave(){if(!state.dirty)return true;if(await confirmAction('放弃未保存的编辑？','尚未保存的文件修改将丢失。')){state.dirty=false;return true}return false}
+ async function closeFilePreview(){
+  if(!await canLeave())return;
+  selectionVersion++;
+  state.selected=null;state.text=null;
+  $('#filePreviewDialog').close();
+ }
+ function showFilePreview(){
+  const dialog=$('#filePreviewDialog');
+  $('#filePreviewError').hidden=true;
+  dialog.oncancel=guarded(async event=>{event.preventDefault();await closeFilePreview()});
+  $('#filePreviewClose').onclick=guarded(closeFilePreview);
+  if(!dialog.open)dialog.showModal();
+ }
+ function showWorkspaceDetail(title,body){
+  $('#workspaceDetailTitle').textContent=title;
+  $('#workspaceDetailBody').innerHTML=body;
+  const dialog=$('#workspaceDetailDialog');
+  $('#workspaceDetailClose').onclick=()=>dialog.close();
+  if(!dialog.open)dialog.showModal();
+ }
  function form(title,fields,submit='保存'){
   const d=$('#workspaceDialog');if(d.open)return Promise.resolve(null);
   $('#workspaceDialogTitle').textContent=title;
@@ -26,7 +46,7 @@ window.RemoteHubWorkspace=(()=>{
   if(!roots.length){$('#content').innerHTML=empty('尚未授权文件目录。请在本机 .env 中设置 ORH_FILE_ROOTS。');return}
   if(!roots.some(x=>x.id===state.root)){state.root=config.default?.root||roots[0].id;state.path=config.default?.path||'';state.selected=null}
   const d=preparedList&&preparedList.root===state.root&&preparedList.path===state.path?preparedList:await api(endpoint('list'));preparedList=null;if(!check())return;
-  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileHome">主目录</button><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传</button><input id="filePicker" type="file" hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div class="file-filters"><label class="check-label"><input id="fileHidden" type="checkbox" ${state.showHidden?'checked':''}>显示隐藏文件</label><label for="fileSort">排序</label><select id="fileSort"><option value="name">名称</option><option value="modified">修改时间</option><option value="size">大小</option><option value="kind">类型</option></select><button id="fileOrder">${state.order==='asc'?'升序':'降序'}</button></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}<div id="fileDetail"></div>`;
+  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileHome">主目录</button><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传</button><input id="filePicker" type="file" hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div class="file-filters"><label class="check-label"><input id="fileHidden" type="checkbox" ${state.showHidden?'checked':''}>显示隐藏文件</label><label for="fileSort">排序</label><select id="fileSort"><option value="name">名称</option><option value="modified">修改时间</option><option value="size">大小</option><option value="kind">类型</option></select><button id="fileOrder">${state.order==='asc'?'升序':'降序'}</button></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}`;
   $('#fileRoot').onchange=guarded(async e=>{if(!await canLeave()){e.target.value=state.root;return}state.root=e.target.value;await folder('')});
   $('#filePathForm').onsubmit=guarded(()=>folder($('#filePath').value.trim().replace(/^\//,'')));
   bind('#fileUp',()=>folder(state.path.split('/').slice(0,-1).join('/')));
@@ -54,8 +74,8 @@ window.RemoteHubWorkspace=(()=>{
     if(!await canLeave())return;
     const rows=(await api(endpoint('trash'))).entries;
     $('#fileDetail').innerHTML=panel('当前目录的回收记录',rows.length?table(['原名称','大小','操作'],rows.map((f,i)=>`<tr><td class="file-name">${esc(f.original_name)}</td><td>${bytes(f.size)}</td><td><button data-restore="${i}">恢复</button></td></tr>`)):empty('此目录暂无回收记录。'));
-    $('#fileDetail').scrollIntoView({block:'start'});
-    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=guarded(async()=>{const row=rows[Number(b.dataset.restore)];await withBusy(b,'file:restore','恢复中…',()=>api('/files/restore',{root:state.root,path:state.path,name:row.name,revision:row.revision,confirm:row.original_name}));state.selected=null;await rerender();notify('已恢复，未覆盖其他文件')}));
+    showFilePreview();
+    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=guarded(async()=>{const row=rows[Number(b.dataset.restore)];await withBusy(b,'file:restore','恢复中…',()=>api('/files/restore',{root:state.root,path:state.path,name:row.name,revision:row.revision,confirm:row.original_name}));state.selected=null;$('#filePreviewDialog').close();await rerender();notify('已恢复，未覆盖其他文件')}));
    });
    bind('#fileTerminal',()=>terminal(state.root,state.path));
    bind('#fileProject',()=>addProject(state.root,state.path));
@@ -95,9 +115,9 @@ window.RemoteHubWorkspace=(()=>{
   if(token!==selectionVersion||!check())return;
   state.selected={...f,path};state.dirty=false;state.text=loaded;
   $('#fileDetail').innerHTML=panel(path,`<div class="file-detail-body"><div class="toolbar">${f.kind==='file'?`<a class="button" href="/api${endpoint('download',{path})}">${icon('download')}下载</a>`:''}${admin()&&!readOnly?'<button data-file-op="copy">复制</button><button data-file-op="move">移动</button><button data-file-op="rename">重命名</button><button class="danger" data-file-op="delete">删除</button>':''}<button id="fileClose">关闭详情</button></div>${detail}</div>`);
-  if(scroll)$('#fileDetail').scrollIntoView({block:'start'});
+  showFilePreview();
   $('#fileEditor')?.addEventListener('input',()=>{state.dirty=true;$('#fileDirty').textContent='未保存'});
-  bind('#fileClose',async()=>{if(await canLeave()){state.dirty=false;state.selected=null;$('#fileDetail').replaceChildren()}});
+  bind('#fileClose',closeFilePreview);
   bind('#fileSave',async()=>{if(!state.dirty)return;if(!await confirmAction('保存 '+path,'用当前编辑内容覆盖此文件。文件已在其他地方修改时将阻止覆盖。'))return;await withBusy($('#fileSave'),'file:save','保存中…',async()=>{const editor=$('#fileEditor'),submitted=editor.value;const result=await api('/files/text',{root:state.root,path,text:submitted,revision:state.text.revision,confirm:path});if(state.selected?.path===path&&$('#fileEditor')===editor){state.text.revision=result.revision;state.selected.revision=result.revision;state.dirty=editor.value!==submitted;$('#fileDirty').textContent=state.dirty?'仍有未保存修改':'已保存'}notify('文件已保存')})});
   document.querySelectorAll('[data-file-op]').forEach(b=>b.onclick=guarded(()=>fileOperation(b.dataset.fileOp,b)));
  }
@@ -109,7 +129,7 @@ window.RemoteHubWorkspace=(()=>{
    destination=action==='rename'?join(f.path.split('/').slice(0,-1).join('/'),n):n;
   }
   if(action!=='copy'&&!await confirmAction({delete:'删除',move:'移动',rename:'重命名'}[action]+' '+f.path,action==='delete'?'移入所在目录的私有回收目录。目录内含受保护文件时会拒绝。':`目标：${destination}\n现有目标不会被覆盖。`))return;
-  await withBusy(button,'file:operation','处理中…',()=>api('/files/operation',{root:state.root,path:f.path,revision:f.revision,action,destination,confirm:f.path}));state.dirty=false;state.selected=null;await rerender();notify('操作完成');
+  await withBusy(button,'file:operation','处理中…',()=>api('/files/operation',{root:state.root,path:f.path,revision:f.revision,action,destination,confirm:f.path}));state.dirty=false;state.selected=null;$('#filePreviewDialog').close();await rerender();notify('操作完成');
  }
  async function terminal(root,path,preferred=''){
   const sessions=(await api('/zellij')).sessions;
@@ -121,22 +141,30 @@ window.RemoteHubWorkspace=(()=>{
  async function addProject(root,path){const values=await form('添加本地项目',[{name:'name',label:'项目名称',value:path.split('/').at(-1)||'项目'},{name:'path',label:'根目录下的项目路径',value:path,required:false}],'添加项目');if(!values)return;const result=await api('/projects',{root,path:values.path,name:values.name});state.project=result.id;switchView('projects')}
  async function projects(check){
   current=check;
-  const list=(await api('/projects')).projects;if(!check())return;
-  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="projectSearch">搜索项目</label><input id="projectSearch" placeholder="搜索项目名称或路径">${admin()?`<button class="primary" id="addProject">${icon('plus')}添加项目</button>`:''}</div><div id="projectList"></div><div id="projectDetail"></div>`;
+  const list=(await api('/projects')).projects.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN',{numeric:true,sensitivity:'base'})||a.path.localeCompare(b.path));if(!check())return;
+  $('#content').innerHTML=`<div id="projectOverview"><div class="work-toolbar"><label class="sr-only" for="projectSearch">搜索项目</label><input id="projectSearch" placeholder="搜索项目名称或路径">${admin()?`<button class="primary" id="addProject">${icon('plus')}添加项目</button>`:''}</div><div id="projectList"></div></div><div id="projectDetail" hidden></div>`;
   function draw(q=''){
    const filtered=list.filter(p=>(p.name+' '+p.path).toLowerCase().includes(q.toLowerCase()));
-   $('#projectList').innerHTML=filtered.length?`<div class="project-list">${filtered.map((p,i)=>`<article class="project-row"><div><h2>${esc(p.name)}</h2><p class="mono">${esc(p.path||'/')}</p><p>${p.available?esc(p.stack.join(' · ')||'未发现常见技术栈标记'):'目录不可用或不再授权'}</p></div><div class="toolbar"><button data-project="${i}" ${!p.available?'disabled':''}>打开项目</button>${admin()?`<button data-remove-project="${i}">${p.discovered?'隐藏项目':'移除记录'}</button>`:''}</div></article>`).join('')}</div>`:empty(list.length?'没有匹配的项目。':'从文件管理器打开一个项目目录，或添加现有目录。');
-   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=guarded(async()=>{state.project=filtered[Number(b.dataset.project)].id;await showProject(state.project,check)}));
+   $('#projectList').innerHTML=filtered.length?`<div class="project-grid">${filtered.map((p,i)=>`<article class="project-card"><div><h2>${esc(p.name)}</h2><p class="mono">${esc(p.path||'/')}</p><p>${p.available?esc(p.stack.join(' · ')||'未发现常见技术栈标记'):'目录不可用或不再授权'}</p></div><div class="toolbar"><button data-project="${i}" ${!p.available?'disabled':''}>打开项目</button>${admin()?`<button data-remove-project="${i}">${p.discovered?'隐藏项目':'移除记录'}</button>`:''}</div></article>`).join('')}</div>`:empty(list.length?'没有匹配的项目。':'从文件管理器打开一个项目目录，或添加现有目录。');
+   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=guarded(async()=>{projectOpener=b;state.projectScroll=window.scrollY||0;state.project=filtered[Number(b.dataset.project)].id;await withBusy(b,'project:open','打开中…',()=>showProject(state.project,check))}));
    document.querySelectorAll('[data-remove-project]').forEach(b=>b.onclick=guarded(async()=>{const p=filtered[Number(b.dataset.removeProject)];if(!await confirmAction('移除项目记录 '+p.name,'仅从控制台移除记录；保留磁盘文件、现有终端和后台任务。'))return;await withBusy(b,'project:'+p.id,'移除中…',()=>api('/projects/'+p.id,{action:'remove',revision:p.revision,confirm:p.id}));if(state.project===p.id)state.project=null;await rerender()}));
   }
-  draw();$('#projectSearch').oninput=e=>draw(e.target.value);
+  $('#projectSearch').value=state.projectQuery;draw(state.projectQuery);$('#projectSearch').oninput=e=>{state.projectQuery=e.target.value;draw(state.projectQuery)};
   bind('#addProject',async()=>{const roots=(await api('/files/roots')).roots;if(!roots.length)throw Error('请先授权文件目录');const v=await form('添加本地项目',[{name:'root',label:'授权根目录',options:roots.map(r=>[r.id,r.path])},{name:'path',label:'根目录下的相对路径',value:'',required:false},{name:'name',label:'项目名称'}],'添加项目');if(v){const p=await api('/projects',v);state.project=p.id;await rerender()}});
   if(state.project&&list.some(x=>x.id===state.project&&x.available))await showProject(state.project,check);
  }
  async function showProject(id,check){
   if(state.project!==id||!check())return;
   const p=await api('/projects/'+id);if(!check()||state.project!==id)return;
-  $('#projectDetail').innerHTML=panel(p.name,`<div class="file-detail-body"><p class="mono">${esc(p.absolute_path)}</p><div class="workspace-summary"><span>${esc(p.stack.join(' · ')||'未检测到技术栈')}</span><span>${esc(p.environment_markers.join(' · '))}</span><span>环境：${esc(p.environment?.name||'未绑定')}</span></div><div class="toolbar"><button id="projectFiles">打开文件</button>${admin()?`<button id="projectTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="projectBind">绑定环境</button>`:''}<button id="projectEnvironment" ${!p.environment?'disabled':''}>环境详情</button></div><h3>Git</h3><div class="workspace-tabs">${[['status','状态'],['branches','分支'],['commits','最近提交'],['diff','工作区 Diff'],['staged','暂存区 Diff']].map(([k,l])=>`<button data-git="${k}" ${!p.git?'disabled':''}>${l}</button>`).join('')}</div><pre id="projectGit">${p.git?'选择一项查看仓库信息。':'此目录不是 Git 仓库根目录。'}</pre><h3>预设任务</h3>${p.presets.length?table(['任务','实际命令 / 项目脚本','操作'],p.presets.map((t,i)=>`<tr><td>${esc(t.label)}</td><td class="file-name"><code>${esc(JSON.stringify(t.argv))}</code><br><small>${esc(t.description)}</small></td><td>${admin()?`<button data-preset="${i}">运行</button>`:''}</td></tr>`)): '<p class="muted">未发现受支持的预设。可在“任务与服务”中配置其他命令。</p>'}<div class="toolbar"><button id="projectTasks">查看任务与日志</button></div></div>`);
+  $('#projectDetail').innerHTML='<button id="projectBack" class="detail-back">返回项目列表</button>'+panel(p.name,`<div class="file-detail-body"><p class="mono">${esc(p.absolute_path)}</p><div class="workspace-summary"><span>${esc(p.stack.join(' · ')||'未检测到技术栈')}</span><span>${esc(p.environment_markers.join(' · '))}</span><span>环境：${esc(p.environment?.name||'未绑定')}</span></div><div class="toolbar"><button id="projectFiles">打开文件</button>${admin()?`<button id="projectTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="projectBind">绑定环境</button>`:''}<button id="projectEnvironment" ${!p.environment?'disabled':''}>环境详情</button></div><h3>Git</h3><div class="workspace-tabs">${[['status','状态'],['branches','分支'],['commits','最近提交'],['diff','工作区 Diff'],['staged','暂存区 Diff']].map(([k,l])=>`<button data-git="${k}" ${!p.git?'disabled':''}>${l}</button>`).join('')}</div><pre id="projectGit">${p.git?'选择一项查看仓库信息。':'此目录不是 Git 仓库根目录。'}</pre><h3>预设任务</h3>${p.presets.length?table(['任务','实际命令 / 项目脚本','操作'],p.presets.map((t,i)=>`<tr><td>${esc(t.label)}</td><td class="file-name"><code>${esc(JSON.stringify(t.argv))}</code><br><small>${esc(t.description)}</small></td><td>${admin()?`<button data-preset="${i}">运行</button>`:''}</td></tr>`)): '<p class="muted">未发现受支持的预设。可在“任务与服务”中配置其他命令。</p>'}<div class="toolbar"><button id="projectTasks">查看任务与日志</button></div></div>`);
+  const firstOpen=$('#projectDetail').hidden;
+  $('#projectOverview').hidden=true;$('#projectDetail').hidden=false;
+  if(firstOpen){window.scrollTo?.(0,0);$('#projectBack').focus()}
+  bind('#projectBack',()=>{
+   state.project=null;$('#projectDetail').hidden=true;$('#projectOverview').hidden=false;
+   window.scrollTo?.(0,state.projectScroll);
+   if(projectOpener?.isConnected)projectOpener.focus();else document.querySelector('[data-project]')?.focus();
+  });
   bind('#projectFiles',()=>{state.root=p.root;state.path=p.path;state.selected=null;switchView('files')});
   bind('#projectTasks',()=>switchView('tasks'));
   bind('#projectEnvironment',()=>{state.environment=p.environment?.id;switchView('environments')});
@@ -152,18 +180,18 @@ window.RemoteHubWorkspace=(()=>{
    if(p.environment&&!await confirmAction('更改 '+p.name+' 的环境绑定','只更新项目记录，不删除、重建或停止环境；已有任务保持原状态。'))return;
    await api('/projects/'+p.id,{action:'environment',revision:p.revision,environment:v.environment,confirm:p.id});await showProject(p.id,check);
   });
-  document.querySelectorAll('[data-git]').forEach(b=>b.onclick=guarded(async()=>{await withBusy(b,'git:'+p.id,'读取中…',async()=>{const r=await api('/projects/'+p.id+'/git?'+query({kind:b.dataset.git}));if(check())$('#projectGit').textContent=(r.output||'无变更')+(r.truncated?'\n[输出已截断]':'')})}));
+  document.querySelectorAll('[data-git]').forEach(b=>b.onclick=guarded(async()=>{await withBusy(b,'git:'+p.id,'读取中…',async()=>{const r=await api('/projects/'+p.id+'/git?'+query({kind:b.dataset.git}));if(check()&&state.project===p.id)$('#projectGit').textContent=(r.output||'无变更')+(r.truncated?'\n[输出已截断]':'')})}));
   document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=guarded(async()=>{const t=p.presets[Number(b.dataset.preset)];if(!await confirmAction('运行 '+p.name+' · '+t.label,`目录：${p.absolute_path}\n参数：${JSON.stringify(t.argv)}\n项目脚本：${t.description}\n此任务可执行项目代码，以当前用户权限运行。`))return;await withBusy(b,'project:run:'+p.id,'启动中…',()=>api('/projects/'+p.id,{action:'run',revision:p.revision,confirm:p.id,preset:t.key,digest:t.digest}));notify('任务已启动，可在任务与服务查看日志');await showProject(p.id,check)}));
  }
  async function environments(check){
   current=check;
   const d=await api('/environments');if(!check())return;
-  $('#content').innerHTML=panel('主机开发工具',table(['工具','版本','路径'],d.tools.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.available?t.version:'未发现')}</td><td class="file-name mono">${esc(t.path||'—')}</td></tr>`)))+`<div class="work-toolbar"><button id="softwareInventory">已安装软件</button>${admin()?`<button id="createEnvironment">${icon('plus')}创建项目 venv</button>`:''}</div><div id="softwareOutput"></div>`+panel('项目与已检测环境',d.environments.length?table(['环境','类型 / 版本','路径','操作'],d.environments.map((e,i)=>`<tr><td>${esc(e.name)}</td><td>${esc(e.kind)} · ${esc(e.version||'')}</td><td class="file-name mono">${esc(e.path)}</td><td><button data-environment="${i}">查看依赖</button></td></tr>`)):empty('尚未发现环境。添加项目后会检测其 .venv 和 venv。'))+'<div id="environmentDetail"></div>';
-  bind('#softwareInventory',async e=>{await withBusy(e.target,'software:query','查询中…',async()=>{const r=await api('/environments/software');if(check()){$('#softwareOutput').innerHTML=panel(r.manager,'<pre id="softwareText"></pre>');$('#softwareText').textContent=r.output+(r.truncated?'\n[输出已截断]':'')}})});
+  $('#content').innerHTML=panel('主机开发工具',table(['工具','版本','路径'],d.tools.map(t=>`<tr><td>${esc(t.name)}</td><td>${esc(t.available?t.version:'未发现')}</td><td class="file-name mono">${esc(t.path||'—')}</td></tr>`)))+`<div class="work-toolbar"><button id="softwareInventory">已安装软件</button>${admin()?`<button id="createEnvironment">${icon('plus')}创建项目 venv</button>`:''}</div>`+panel('项目与已检测环境',d.environments.length?table(['环境','类型 / 版本','路径','操作'],d.environments.map((e,i)=>`<tr><td>${esc(e.name)}</td><td>${esc(e.kind)} · ${esc(e.version||'')}</td><td class="file-name mono">${esc(e.path)}</td><td><button data-environment="${i}">查看依赖</button></td></tr>`)):empty('尚未发现环境。添加项目后会检测其 .venv 和 venv。'));
+  bind('#softwareInventory',async e=>{await withBusy(e.target,'software:query','查询中…',async()=>{const r=await api('/environments/software');if(check()){output(r.manager,r.output+(r.truncated?'\n[输出已截断]':''))}})});
   async function inspect(id){
-   const e=await api('/environments/'+id);if(!check())return;
-   $('#environmentDetail').innerHTML=panel(e.name,`<div class="file-detail-body"><p class="mono">${esc(e.path)}</p><div class="dependency-list">${e.packages.length?table(['依赖','版本'],e.packages.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.version)}</td></tr>`)):empty('此环境没有可读取的安装包元数据。')}</div>${e.truncated?'<p class="muted">依赖列表已截断。</p>':''}</div>`);
-   state.environment=id;
+   const selection=++environmentSelection;const e=await api('/environments/'+id);if(!check()||selection!==environmentSelection)return;
+   showWorkspaceDetail(e.name,`<div class="file-detail-body"><p class="mono">${esc(e.path)}</p><div class="dependency-list">${e.packages.length?table(['依赖','版本'],e.packages.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.version)}</td></tr>`)):empty('此环境没有可读取的安装包元数据。')}</div>${e.truncated?'<p class="muted">依赖列表已截断。</p>':''}</div>`);
+   state.environment=null;
   }
   document.querySelectorAll('[data-environment]').forEach(b=>b.onclick=guarded(()=>withBusy(b,'environment:read','读取中…',()=>inspect(d.environments[Number(b.dataset.environment)].id))));
   bind('#createEnvironment',async()=>{
@@ -176,5 +204,12 @@ window.RemoteHubWorkspace=(()=>{
   });
   if(state.environment&&d.environments.some(e=>e.id===state.environment))await inspect(state.environment);
  }
- return {files,projects,environments,canLeave,reset:()=>{state.dirty=false;state.text=null;state.selected=null},isDirty:()=>state.dirty,form,terminal,state,addProject};
+ function reset(){
+  selectionVersion++;environmentSelection++;
+  state.dirty=false;state.text=null;state.selected=null;
+  $('#filePreviewDialog').close();$('#workspaceDetailDialog').close();
+  $('#fileDetail').replaceChildren();$('#workspaceDetailBody').replaceChildren();
+  $('#filePreviewError').textContent='';$('#filePreviewError').hidden=true;
+ }
+ return {files,projects,environments,canLeave,reset,isDirty:()=>state.dirty,form,terminal,state,addProject};
 })();

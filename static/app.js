@@ -105,7 +105,7 @@ $('#refresh').onclick=refresh;$('#theme').onclick=()=>{document.body.classList.t
 };
 setInterval(()=>{if(!['files','projects','environments','dsh'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!$('#taskDialog').open&&!$('#confirmDialog').open)refresh()},5000);
 
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh'].includes(view)&&!$('#workspaceDialog').open)refresh()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');
 $('#cancelSession').onclick=()=>$('#sessionDialog').close();$('#sessionForm').onsubmit=e=>{e.preventDefault();const name=$('#sessionName').value.trim();if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)){$('#sessionError').textContent='名称仅支持字母、数字、点、下划线、短横线';return}if(mountTerminal(name))$('#sessionDialog').close()};
 
