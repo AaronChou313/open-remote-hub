@@ -14,7 +14,7 @@ vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*
 vm.runInContext(`me={role:'admin'};view='files';globalThis.release=null;globalThis.started=false;confirmAction=async()=>false;
 api=async path=>{
  if(path==='/files/roots')return {roots:[{id:'root',path:'/allowed'}]};
- if(path.startsWith('/files/list'))return {root:'root',path:'',entries:[{name:'<img onerror=bad>.txt',kind:'file',revision:'a',size:1,modified:0},{name:'second.txt',kind:'file',revision:'b',size:1,modified:0}],next_offset:null};
+ if(path.startsWith('/files/list'))return {root:'root',path:'',editor_url:'vscode://vscode-remote/ssh-remote+fixture@server/allowed/',entries:[{name:'<img onerror=bad>.txt',kind:'file',revision:'a',size:1,modified:0},{name:'second.txt',kind:'file',revision:'b',size:1,modified:0}],next_offset:null};
  if(path.includes('text')&&path.includes('second.txt'))return {text:'SECOND',revision:'b'};
  if(path.includes('text'))return new Promise(r=>{started=true;release=()=>r({text:'FIRST',revision:'a'})});
  throw Error('Unexpected API '+path);
@@ -23,6 +23,13 @@ const run=code=>vm.runInContext(code,context);
 await run('RemoteHubWorkspace.files(()=>true)');
 assert.match(node('#content').innerHTML,/&lt;img onerror=bad&gt;/);
 assert.ok(!node('#content').innerHTML.includes('<img onerror=bad>'));
+assert.match(node('#content').innerHTML,/webkitdirectory/);
+assert.match(node('#content').innerHTML,/href="vscode:\/\/vscode-remote\/ssh-remote\+fixture@server\/allowed\/"/);
+run('window.RemoteHubUploads={start:async value=>{globalThis.lastUpload=value},isUploading:()=>false}');
+await node('#folderPicker').onchange({preventDefault(){},target:{files:[{name:'node.py',webkitRelativePath:'algorithm/node.py',size:1}],value:'selected'}});
+assert.equal(run('lastUpload.folder'),true);
+assert.equal(run('lastUpload.root'),'root');
+assert.equal(run('lastUpload.files[0].webkitRelativePath'),'algorithm/node.py');
 const first=fileButtons[0].onclick();
 for(let i=0;i<10&&!run('started');i++)await Promise.resolve();
 assert.equal(run('started'),true);

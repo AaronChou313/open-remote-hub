@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 import shutil
 import threading
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from app import file_access as fs, workspace_store as store
 from app.workspace_commands import run
+from app.editor import folder_url
 
 router=APIRouter(prefix='/api/projects',tags=['projects'])
 lock=threading.RLock()
@@ -143,9 +144,9 @@ def presets(p):
 
 
 @router.get('/{key}')
-def detail(key:str):
+def detail(key:str,request:Request):
     p=project(key)
-    return dict(p,**detect(p),absolute_path=absolute(p),presets=presets(p))
+    return dict(p,**detect(p),absolute_path=absolute(p),presets=presets(p),editor_url=folder_url(request,absolute(p)))
 
 
 @router.get('/{key}/git')

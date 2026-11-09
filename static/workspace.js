@@ -9,7 +9,7 @@ window.RemoteHubWorkspace=(()=>{
  function failure(e){showError(e);if($('#filePreviewDialog').open){$('#filePreviewError').textContent=e.message;$('#filePreviewError').hidden=false;$('#filePreviewError').scrollIntoView({block:'nearest'})}}
  function guarded(fn){return async e=>{e?.preventDefault();try{await fn(e)}catch(err){failure(err)}}}
  function bind(id,fn){const el=$(id);if(el)el.onclick=guarded(fn)}
- async function canLeave(){if(!state.dirty)return true;if(await confirmAction('放弃未保存的编辑？','尚未保存的文件修改将丢失。')){state.dirty=false;return true}return false}
+ async function canLeave(){if(window.RemoteHubUploads?.isUploading()){notify('请先完成或取消文件上传');return false}if(!state.dirty)return true;if(await confirmAction('放弃未保存的编辑？','尚未保存的文件修改将丢失。')){state.dirty=false;return true}return false}
  async function closeFilePreview(){
   if(!await canLeave())return;
   selectionVersion++;
@@ -46,7 +46,7 @@ window.RemoteHubWorkspace=(()=>{
   if(!roots.length){$('#content').innerHTML=empty('尚未授权文件目录。请在本机 .env 中设置 ORH_FILE_ROOTS。');return}
   if(!roots.some(x=>x.id===state.root)){state.root=config.default?.root||roots[0].id;state.path=config.default?.path||'';state.selected=null}
   const d=preparedList&&preparedList.root===state.root&&preparedList.path===state.path?preparedList:await api(endpoint('list'));preparedList=null;if(!check())return;
-  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileHome">主目录</button><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传</button><input id="filePicker" type="file" hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div class="file-filters"><label class="check-label"><input id="fileHidden" type="checkbox" ${state.showHidden?'checked':''}>显示隐藏文件</label><label for="fileSort">排序</label><select id="fileSort"><option value="name">名称</option><option value="modified">修改时间</option><option value="size">大小</option><option value="kind">类型</option></select><button id="fileOrder">${state.order==='asc'?'升序':'降序'}</button></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}`;
+  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileHome">主目录</button><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传文件</button><input id="filePicker" type="file" multiple hidden><button id="fileUploadFolder" ${d.read_only?'disabled':''}>${icon('folder')}上传文件夹</button><input id="folderPicker" type="file" webkitdirectory multiple hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><a class="button" href="${esc(d.editor_url)}" title="通过 Remote SSH 在当前设备的 VS Code 中打开">${icon('code')}用 VS Code 打开</a><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div class="file-filters"><label class="check-label"><input id="fileHidden" type="checkbox" ${state.showHidden?'checked':''}>显示隐藏文件</label><label for="fileSort">排序</label><select id="fileSort"><option value="name">名称</option><option value="modified">修改时间</option><option value="size">大小</option><option value="kind">类型</option></select><button id="fileOrder">${state.order==='asc'?'升序':'降序'}</button></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}`;
   $('#fileRoot').onchange=guarded(async e=>{if(!await canLeave()){e.target.value=state.root;return}state.root=e.target.value;await folder('')});
   $('#filePathForm').onsubmit=guarded(()=>folder($('#filePath').value.trim().replace(/^\//,'')));
   bind('#fileUp',()=>folder(state.path.split('/').slice(0,-1).join('/')));
@@ -62,14 +62,14 @@ window.RemoteHubWorkspace=(()=>{
 
   if(admin()){
    bind('#fileMkdir',async()=>{const n=await requestName('新建目录','','创建',255);if(n){await api('/files/operation',{root:state.root,path:join(state.path,n),action:'mkdir'});await folder(state.path)}});
-   bind('#fileUpload',()=>$('#filePicker').click());$('#filePicker').onchange=guarded(async e=>{
-    const file=e.target.files[0];if(!file)return;
-    await withBusy($('#fileUpload'),'file:upload','上传中…',()=>new Promise((resolve,reject)=>{
-     const statusNode=$('#uploadStatus');const xhr=new XMLHttpRequest();xhr.open('POST','/api'+endpoint('upload',{path:join(state.path,file.name)}));xhr.setRequestHeader('X-ORH-Request','1');xhr.timeout=30*60*1000;
-     xhr.upload.onprogress=p=>{statusNode.textContent=p.lengthComputable?`上传 ${Math.round(p.loaded/p.total*100)}%`:`已上传 ${bytes(p.loaded)}`};
-     xhr.onload=()=>{if(xhr.status>=200&&xhr.status<300)resolve();else{let m='上传失败';try{m=JSON.parse(xhr.responseText).detail||m}catch{}reject(Error(m))}};xhr.onerror=()=>reject(Error('上传连接中断；原文件未覆盖'));xhr.ontimeout=()=>reject(Error('上传超时'));xhr.send(file);
-    }));notify('上传完成');await folder(state.path);
-   });
+   for(const [button,picker,folderUpload] of [['#fileUpload','#filePicker',false],['#fileUploadFolder','#folderPicker',true]]){
+    bind(button,()=>$(picker).click());
+    $(picker).onchange=guarded(async event=>{
+     const files=Array.from(event.target.files);event.target.value='';
+     const root=state.root,path=state.path;
+     await withBusy($(button),'file:upload','上传中…',()=>window.RemoteHubUploads.start({files,root,path,folder:folderUpload,onRefresh:()=>folder(path)}));
+    });
+   }
    bind('#fileTrash',async()=>{
     if(!await canLeave())return;
     const rows=(await api(endpoint('trash'))).entries;
@@ -156,7 +156,7 @@ window.RemoteHubWorkspace=(()=>{
  async function showProject(id,check){
   if(state.project!==id||!check())return;
   const p=await api('/projects/'+id);if(!check()||state.project!==id)return;
-  $('#projectDetail').innerHTML='<button id="projectBack" class="detail-back">返回项目列表</button>'+panel(p.name,`<div class="file-detail-body"><p class="mono">${esc(p.absolute_path)}</p><div class="workspace-summary"><span>${esc(p.stack.join(' · ')||'未检测到技术栈')}</span><span>${esc(p.environment_markers.join(' · '))}</span><span>环境：${esc(p.environment?.name||'未绑定')}</span></div><div class="toolbar"><button id="projectFiles">打开文件</button>${admin()?`<button id="projectTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="projectBind">绑定环境</button>`:''}<button id="projectEnvironment" ${!p.environment?'disabled':''}>环境详情</button></div><h3>Git</h3><div class="workspace-tabs">${[['status','状态'],['branches','分支'],['commits','最近提交'],['diff','工作区 Diff'],['staged','暂存区 Diff']].map(([k,l])=>`<button data-git="${k}" ${!p.git?'disabled':''}>${l}</button>`).join('')}</div><pre id="projectGit">${p.git?'选择一项查看仓库信息。':'此目录不是 Git 仓库根目录。'}</pre><h3>预设任务</h3>${p.presets.length?table(['任务','实际命令 / 项目脚本','操作'],p.presets.map((t,i)=>`<tr><td>${esc(t.label)}</td><td class="file-name"><code>${esc(JSON.stringify(t.argv))}</code><br><small>${esc(t.description)}</small></td><td>${admin()?`<button data-preset="${i}">运行</button>`:''}</td></tr>`)): '<p class="muted">未发现受支持的预设。可在“任务与服务”中配置其他命令。</p>'}<div class="toolbar"><button id="projectTasks">查看任务与日志</button></div></div>`);
+  $('#projectDetail').innerHTML='<button id="projectBack" class="detail-back">返回项目列表</button>'+panel(p.name,`<div class="file-detail-body"><p class="mono">${esc(p.absolute_path)}</p><div class="workspace-summary"><span>${esc(p.stack.join(' · ')||'未检测到技术栈')}</span><span>${esc(p.environment_markers.join(' · '))}</span><span>环境：${esc(p.environment?.name||'未绑定')}</span></div><div class="toolbar"><button id="projectFiles">打开文件</button>${admin()?`<button id="projectTerminal">${icon('terminal')}终端 ${icon('external')}</button><a class="button" href="${esc(p.editor_url)}" title="通过 Remote SSH 在当前设备的 VS Code 中打开">${icon('code')}用 VS Code 打开</a><button id="projectBind">绑定环境</button>`:''}<button id="projectEnvironment" ${!p.environment?'disabled':''}>环境详情</button></div><h3>Git</h3><div class="workspace-tabs">${[['status','状态'],['branches','分支'],['commits','最近提交'],['diff','工作区 Diff'],['staged','暂存区 Diff']].map(([k,l])=>`<button data-git="${k}" ${!p.git?'disabled':''}>${l}</button>`).join('')}</div><pre id="projectGit">${p.git?'选择一项查看仓库信息。':'此目录不是 Git 仓库根目录。'}</pre><h3>预设任务</h3>${p.presets.length?table(['任务','实际命令 / 项目脚本','操作'],p.presets.map((t,i)=>`<tr><td>${esc(t.label)}</td><td class="file-name"><code>${esc(JSON.stringify(t.argv))}</code><br><small>${esc(t.description)}</small></td><td>${admin()?`<button data-preset="${i}">运行</button>`:''}</td></tr>`)): '<p class="muted">未发现受支持的预设。可在“任务与服务”中配置其他命令。</p>'}<div class="toolbar"><button id="projectTasks">查看任务与日志</button></div></div>`);
   const firstOpen=$('#projectDetail').hidden;
   $('#projectOverview').hidden=true;$('#projectDetail').hidden=false;
   if(firstOpen){window.scrollTo?.(0,0);$('#projectBack').focus()}
@@ -206,10 +206,11 @@ window.RemoteHubWorkspace=(()=>{
  }
  function reset(){
   selectionVersion++;environmentSelection++;
+  window.RemoteHubUploads?.reset();
   state.dirty=false;state.text=null;state.selected=null;
   $('#filePreviewDialog').close();$('#workspaceDetailDialog').close();
   $('#fileDetail').replaceChildren();$('#workspaceDetailBody').replaceChildren();
   $('#filePreviewError').textContent='';$('#filePreviewError').hidden=true;
  }
- return {files,projects,environments,canLeave,reset,isDirty:()=>state.dirty,form,terminal,state,addProject};
+ return {files,projects,environments,canLeave,reset,isDirty:()=>state.dirty||!!window.RemoteHubUploads?.isUploading(),form,terminal,state,addProject};
 })();

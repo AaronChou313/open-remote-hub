@@ -141,6 +141,42 @@ ORH_MAX_UPLOAD_MB=2048
 
 文件路径采用目录 FD 与 `O_NOFOLLOW` 逐级访问，`unrestricted` 模式先解析链接、核验目标范围再打开目录 FD；递归复制保留链接而不递归进入链接目标。上传/复制先私有暂存再原子无覆盖发布。macOS/Linux 使用原子无覆盖重命名；其他平台失败关闭。版本检查和进程锁保护控制台内并发操作；这不是 OS 沙箱，不能阻止拥有相同系统账户权限的本机进程移动已打开目录，也不提供对外部编辑器写入的文件系统级事务快照。
 
+## 远程开发与 ROS 2 工作区
+
+文件页和项目详情页提供“用 VS Code 打开”，点击后由浏览器调用访问设备上安装的 VS Code，通过 Remote - SSH 打开 Mac / Linux 主机的目录。默认使用当前浏览器访问的主机地址与服务账户用户名，支持在局域网和私有组网地址之间切换。访问设备需安装 VS Code、OpenSSH 客户端及 Microsoft Remote - SSH 扩展，第一次连接由 VS Code 完成 SSH 主机确认和账户 / 密钥认证。主机需要已启用 SSH 服务。[VS Code 官方说明](https://code.visualstudio.com/docs/remote/ssh)
+
+可以在主机 `.env` 指定连接用户名或客户端的 SSH 别名，修改后重启控制台。
+
+```dotenv
+# 默认使用服务账户用户名
+# ORH_SSH_USER=aaron
+# 可选，覆盖默认连接地址。此别名需在访问设备的 SSH config 中存在。
+# ORH_VSCODE_SSH_AUTHORITY=mac-mini
+```
+
+自定义 SSH 端口、跳板机和通过 localhost 转发访问控制台时，使用访问设备上配置好的 SSH 别名。例如在访问设备 `~/.ssh/config` 中配置以下内容，再将控制台的 `ORH_VSCODE_SSH_AUTHORITY` 设为 `mac-mini`。
+
+```sshconfig
+Host mac-mini
+    HostName 100.66.1.4
+    User aaron
+    Port 22
+```
+
+“上传文件”支持多选，“上传文件夹”保留所选目录名及普通文件的子目录结构，自动创建缺失目录。上传进度、取消和失败项重试在居中窗口中完成。同名文件保留原内容并列入失败项；重试只处理失败和未上传的文件，每个失败文件从头传输。浏览器页面关闭后上传会停止，已完成的文件保留。浏览器文件选择器不提供空目录和软链接元数据，这两项不随文件夹上传传输；可在主机终端使用 Git 获取完整仓库。
+
+当前 ROS 2 环境已将 `/Users/aaron/Projects/ros2_ws` 绑定到容器 `/workspaces/ros2_ws`。在文件页进入 `/Users/aaron/Projects/ros2_ws/src` 后上传算法文件夹，容器会看到同一份源码。也可从项目终端执行以下命令，替换示例仓库地址和包名。
+
+```sh
+cd ~/Projects/ros2_ws
+git clone <仓库地址> src/<仓库目录>
+./ros deps
+./ros build --packages-up-to <ROS包名>
+./ros exec ros2 run <ROS包名> <节点名>
+```
+
+`./ros deps` 会按项目依赖执行安装，由用户在终端手动运行。VS Code 通过 Remote SSH 打开 `ros2_ws` 后，安装 Dev Containers 扩展，执行 **Dev Containers: Attach to Running Container...**，选择 `ros2-humble-lab-dev-1`，打开 `/workspaces/ros2_ws`，即可在现有 ROS 环境中编辑、编译和调试。连接使用现有运行容器。[官方远程容器开发说明](https://code.visualstudio.com/remote/advancedcontainers/develop-remote-host)
+
 ## 部署与维护
 
 配置见 `.env.example`。安装只创建项目虚拟环境、配置和运行目录，不执行 sudo/brew，也不下载容器镜像。

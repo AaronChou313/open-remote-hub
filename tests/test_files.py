@@ -254,3 +254,30 @@ def test_os_permission_errors_and_invalid_policy(workspace,monkeypatch):
     if sys.platform=='darwin':assert '完全磁盘访问权限' in denied.json()['detail']
     monkeypatch.setenv('ORH_FILE_POLICY','typo')
     assert c.get('/api/files/list',params={'root':key}).status_code==503
+
+
+def test_folder_upload_preserves_tree_and_reports_conflicts(workspace):
+    c,key,root=workspace
+    for path,data in [('algorithm/package.xml',b'<package/>'),('algorithm/scripts/node.py',b'print("fixture")')]:
+        params=dict(root=key,path=path,create_parents='true')
+        assert c.post('/api/files/upload',params=params,content=data).status_code==200
+        assert (root/path).read_bytes()==data
+        assert c.post('/api/files/upload',params=params,content=b'overwrite').status_code==409
+        assert (root/path).read_bytes()==data
+    assert c.post('/api/files/upload',params=dict(root=key,path='missing/note'),content=b'no parents').status_code==404
+    for path in ('../escape/file','algorithm/../../escape/file','/absolute/file','.ssh/key'):
+        assert c.post('/api/files/upload',params=dict(root=key,path=path,create_parents='true'),content=b'fixture').status_code==403
+    (root/'algorithm/escape').symlink_to(root/'algorithm',target_is_directory=True)
+    assert c.post('/api/files/upload',params=dict(root=key,path='algorithm/escape/no',create_parents='true'),content=b'fixture').status_code==403
+    assert not (root/'algorithm/no').exists()
+    assert not list(root.rglob('.orh-*'))
+
+
+def test_file_page_has_client_vscode_remote_url(workspace,monkeypatch):
+    c,key,root=workspace
+    monkeypatch.setenv('ORH_SSH_USER','fixture-user')
+    monkeypatch.delenv('ORH_VSCODE_SSH_AUTHORITY',raising=False)
+    (root/'folder #中文').mkdir()
+    data=c.get('/api/files/list',params={'root':key,'path':'folder #中文'}).json()
+    assert data['editor_url'].startswith('vscode://vscode-remote/ssh-remote+fixture-user@127.0.0.1/')
+    assert data['editor_url'].endswith('folder%20%23%E4%B8%AD%E6%96%87/')

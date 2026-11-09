@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from app import file_access as fs
+from app.editor import folder_url
 
 router=APIRouter(prefix='/api/files',tags=['files'])
 TEXT_LIMIT=1024**2
@@ -27,7 +28,7 @@ def roots():return {'roots':fs.roots(),'default':fs.locate(Path.home()),'home':s
 
 
 @router.get('/list')
-def listing(root:str,path:str='',offset:int=0,show_hidden:bool=True,sort:str='name',order:str='asc'):
+def listing(request:Request,root:str,path:str='',offset:int=0,show_hidden:bool=True,sort:str='name',order:str='asc'):
     if sort not in ('name','modified','size','kind') or order not in ('asc','desc'):raise HTTPException(400,'无效排序方式')
     if offset<0:raise HTTPException(400,'无效分页')
     base=Path(fs.root(root)['path'])/path
@@ -46,7 +47,7 @@ def listing(root:str,path:str='',offset:int=0,show_hidden:bool=True,sort:str='na
         items.sort(key=key,reverse=order=='desc')
         items.sort(key=lambda x:x['kind']!='directory')
         absolute=Path(fs.root(root)['path'])/path
-        return dict(root=root,path=path,entries=items[offset:offset+200],next_offset=offset+200 if len(items)>offset+200 else None,truncated=truncated,read_only=fs.readonly(absolute))
+        return dict(root=root,path=path,entries=items[offset:offset+200],next_offset=offset+200 if len(items)>offset+200 else None,truncated=truncated,read_only=fs.readonly(absolute),editor_url=folder_url(request,str(absolute)))
 
 
 @router.get('/search')
@@ -163,10 +164,18 @@ def edit(body:Edit):
 
 
 @router.post('/upload')
-async def upload(request:Request,root:str,path:str):
+async def upload(request:Request,root:str,path:str,create_parents:bool=False):
     limit=max(1,min(8192,int(os.environ.get('ORH_MAX_UPLOAD_MB','2048'))))*1024**2
     length=request.headers.get('content-length')
     if length and (not length.isdecimal() or int(length)>limit):raise HTTPException(413,'上传超过配置上限')
+    if create_parents:
+        chunks=fs.parts(path,False)
+        for i,name in enumerate(chunks[:-1]):
+            with fs.directory(root,'/'.join(chunks[:i]),write=True) as fd:
+                try:os.mkdir(name,mode=0o700,dir_fd=fd)
+                except FileExistsError:pass
+            # Validate existing directories, including the selected link policy.
+            with fs.directory(root,'/'.join(chunks[:i+1]),write=True):pass
     with fs.parent(root,path,write=True) as (fd,name):
         temp='.orh-'+secrets.token_hex(16);total=0
         child=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
