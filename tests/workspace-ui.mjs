@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 const nodes=new Map(),fileButtons=[0,1].map(i=>({dataset:{file:String(i)}}));
 function node(key){if(!nodes.has(key))nodes.set(key,{textContent:'',innerHTML:'',value:'',hidden:false,open:false,dataset:{},classList:{add(v){this[v]=true},toggle(v){this[v]=!this[v]},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},addEventListener(){},scrollIntoView(){},focus(){}});return nodes.get(key)}
 const context=vm.createContext({console,URLSearchParams,AbortSignal,FormData,Date,JSON,Number,Promise,Set,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(s){return s==='[data-file]'?fileButtons:[]},addEventListener(){}},fetch(){throw Error('Unexpected fetch')},EventSource:class{close(){}}});
+vm.runInContext(fs.readFileSync('static/icons.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/workspace.js','utf8'),context);context.RemoteHubWorkspace=context.window.RemoteHubWorkspace;
 vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*$/,''),context);
 vm.runInContext(`me={role:'admin'};view='files';globalThis.release=null;globalThis.started=false;confirmAction=async()=>false;
@@ -25,6 +26,8 @@ assert.equal(run('started'),true);
 await fileButtons[1].onclick();run('release()');await first;
 assert.equal(run('RemoteHubWorkspace.state.selected.path'),'second.txt');
 assert.match(node('#fileDetail').innerHTML,/SECOND/);
+assert.match(node('#fileDetail').innerHTML,/icons.svg#save/);
+assert.ok(!node('#fileDetail').innerHTML.includes('${icon('));
 assert.ok(!node('#fileDetail').innerHTML.includes('FIRST'));
 run('RemoteHubWorkspace.state.dirty=true');
 await run("switchView('projects')");assert.equal(run('view'),'files');

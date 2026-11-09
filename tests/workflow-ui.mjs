@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 const nodes=new Map(),opened=[];
 function node(selector){if(!nodes.has(selector))nodes.set(selector,{textContent:'',value:'',hidden:false,disabled:false,isConnected:true,open:false,innerHTML:'',dataset:{},classList:{add(v){this[v]=true},toggle(v){this[v]=!this[v]},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},append(){},addEventListener(){},focus(){},reset(){},close(){this.open=false},showModal(){this.open=true},closest(){return null},querySelectorAll(){return []}});return nodes.get(selector)}
 const context=vm.createContext({console,AbortSignal,URL,JSON,Date,Number,Set,Map,Promise,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{open(url){opened.push(url);return {opener:{}}}},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(){return []},createElement(){return node('new-link')},createTextNode(t){return t},addEventListener(){}},fetch(){throw Error('Unexpected network call')},EventSource:class{close(){}},prompt(){return 'renamed'}});
+vm.runInContext(fs.readFileSync('static/icons.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/sessions.js','utf8'),context);context.RemoteHubSessions=context.window.RemoteHubSessions;
 vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*$/,''),context);
 vm.runInContext(`me={role:'admin',host:{system:'Darwin'}};globalThis.calls=[];globalThis.confirmations=[];globalThis.updates=0;api=async(p,b)=>{calls.push({p,b});return {id:'saved-task'}};confirmAction=async(t,m)=>{confirmations.push({t,m});return true};refresh=async()=>{updates++}`,context);
@@ -37,4 +38,7 @@ await run("withBusy(null,'single','等待',work)");
 assert.equal(run('count'),1,'Double clicks cannot submit a second operation');
 run('release()');await run('pending');
 assert.equal(run('pendingOperations.size'),0,'Busy state always released');
+node('#iconBusy').innerHTML=run("icon('start')")+'启动';
+await run("withBusy(document.querySelector('#iconBusy'),'icon:busy','启动中…',async()=>{})");
+assert.match(node('#iconBusy').innerHTML,/icons.svg#play/,'Busy state restores SVG markup');
 console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, save-and-start, duplicate protection passed.');
