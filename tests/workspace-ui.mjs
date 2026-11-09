@@ -1,0 +1,34 @@
+// Exercise real file-view handlers: escaping, out-of-order reads and dirty edits.
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const nodes=new Map(),fileButtons=[0,1].map(i=>({dataset:{file:String(i)}}));
+function node(key){if(!nodes.has(key))nodes.set(key,{textContent:'',innerHTML:'',value:'',hidden:false,open:false,dataset:{},classList:{add(){},toggle(){}},setAttribute(){},removeAttribute(){},replaceChildren(){},addEventListener(){},scrollIntoView(){},focus(){}});return nodes.get(key)}
+const context=vm.createContext({console,URLSearchParams,AbortSignal,FormData,Date,JSON,Number,Promise,Set,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(s){return s==='[data-file]'?fileButtons:[]},addEventListener(){}},fetch(){throw Error('Unexpected fetch')},EventSource:class{close(){}}});
+vm.runInContext(fs.readFileSync('static/workspace.js','utf8'),context);context.RemoteHubWorkspace=context.window.RemoteHubWorkspace;
+vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*$/,''),context);
+vm.runInContext(`me={role:'admin'};view='files';globalThis.release=null;globalThis.started=false;confirmAction=async()=>false;
+api=async path=>{
+ if(path==='/files/roots')return {roots:[{id:'root',path:'/allowed'}]};
+ if(path.startsWith('/files/list'))return {root:'root',path:'',entries:[{name:'<img onerror=bad>.txt',kind:'file',revision:'a',size:1,modified:0},{name:'second.txt',kind:'file',revision:'b',size:1,modified:0}],next_offset:null};
+ if(path.includes('text')&&path.includes('second.txt'))return {text:'SECOND',revision:'b'};
+ if(path.includes('text'))return new Promise(r=>{started=true;release=()=>r({text:'FIRST',revision:'a'})});
+ throw Error('Unexpected API '+path);
+}`,context);
+const run=code=>vm.runInContext(code,context);
+await run('RemoteHubWorkspace.files(()=>true)');
+assert.match(node('#content').innerHTML,/&lt;img onerror=bad&gt;/);
+assert.ok(!node('#content').innerHTML.includes('<img onerror=bad>'));
+const first=fileButtons[0].onclick();
+for(let i=0;i<10&&!run('started');i++)await Promise.resolve();
+assert.equal(run('started'),true);
+await fileButtons[1].onclick();run('release()');await first;
+assert.equal(run('RemoteHubWorkspace.state.selected.path'),'second.txt');
+assert.match(node('#fileDetail').innerHTML,/SECOND/);
+assert.ok(!node('#fileDetail').innerHTML.includes('FIRST'));
+run('RemoteHubWorkspace.state.dirty=true');
+await run("switchView('projects')");assert.equal(run('view'),'files');
+assert.equal(run('RemoteHubWorkspace.isDirty()'),true);
+run("api=async()=>{throw Error('Dirty editor must not refresh')}");await run('RemoteHubWorkspace.files(()=>true)');
+assert.match(node('#fileDetail').innerHTML,/SECOND/);
+console.log('Workspace UI: filename escaping, stale read protection, and unsaved-edit navigation guard passed.');

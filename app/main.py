@@ -419,6 +419,12 @@ def task_logs(key:str):
 
 @app.get('/')
 def index():return FileResponse(ROOT/'static/index.html')
+from app.environments import router as environments_router
+app.include_router(environments_router)
+from app.projects import router as projects_router
+app.include_router(projects_router)
+from app.files import router as files_router
+app.include_router(files_router)
 from app.native_terminal import router as native_router
 app.include_router(native_router)
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')

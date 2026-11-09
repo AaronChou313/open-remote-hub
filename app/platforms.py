@@ -73,3 +73,14 @@ def service_detail(name):
     else:
         result['logs']['journal']=command(['journalctl','--user','-u',name,'-n','150','--no-pager'])
     return result
+
+
+def software_inventory():
+    """Query installed packages only; never update Homebrew/APT indexes."""
+    import shutil
+    from app.workspace_commands import run
+    if platform.system()=='Darwin':
+        binary=shutil.which('brew')
+        return dict(manager='Homebrew',available=bool(binary),**(run([binary,'list','--versions'],timeout=15) if binary else {'output':'未发现 Homebrew','truncated':False}))
+    binary=shutil.which('dpkg-query')
+    return dict(manager='APT / dpkg',available=bool(binary),**(run([binary,'-W','-f=${binary:Package}\t${Version}\n'],timeout=10) if binary else {'output':'此平台未发现 dpkg-query；未执行安装','truncated':False}))
