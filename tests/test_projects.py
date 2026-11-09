@@ -56,3 +56,18 @@ def test_repository_cannot_redirect_worktree_or_run_fsmonitor(workspace):
     subprocess.run(['git','-C',str(folder),'config','core.worktree',str(outside)],check=True)
     assert c.get('/api/projects/'+p['id']+'/git?kind=diff').status_code==403
     assert c.get('/api/projects/'+p['id']+'/git?kind=status%3Btouch').status_code in (400,403)
+
+
+def test_discover_projects_and_removal_does_not_reappear(workspace,monkeypatch):
+    c,key,root=workspace
+    folder=root/'Projects';folder.mkdir()
+    (folder/'demo').mkdir();(folder/'other').mkdir();(folder/'.hidden').mkdir();(folder/'alias').symlink_to(folder/'demo')
+    monkeypatch.setenv('ORH_PROJECTS_DIR',str(folder))
+    rows=c.get('/api/projects').json()['projects']
+    assert {p['name'] for p in rows}=={'demo','other'}
+    assert all(p['discovered'] for p in rows)
+    assert len(c.get('/api/projects').json()['projects'])==2
+    p=rows[0]
+    assert c.post('/api/projects/'+p['id'],json=dict(action='remove',revision=p['revision'],confirm=p['id'])).status_code==200
+    assert len(c.get('/api/projects').json()['projects'])==1
+    assert (folder/p['name']).is_dir()

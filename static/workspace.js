@@ -1,10 +1,10 @@
 'use strict';
 window.RemoteHubWorkspace=(()=>{
- const state={root:'',path:'',selected:null,text:null,dirty:false,project:null,environment:null};
+ const state={root:'',path:'',selected:null,text:null,dirty:false,project:null,environment:null,showHidden:localStorage.getItem('orh-files-hidden')==='true',sort:'name',order:'asc'};
  let current=()=>true,selectionVersion=0,preparedList=null;
  const query=o=>new URLSearchParams(o).toString();
  const join=(a,b)=>[a,b].filter(Boolean).join('/');
- const endpoint=(name,extra={})=>'/files/'+name+'?'+query({root:state.root,path:state.path,...extra});
+ const endpoint=(name,extra={})=>'/files/'+name+'?'+query({root:state.root,path:state.path,show_hidden:state.showHidden,sort:state.sort,order:state.order,...extra});
  const admin=()=>me.role==='admin';
  function failure(e){showError(e)}
  function guarded(fn){return async e=>{e?.preventDefault();try{await fn(e)}catch(err){failure(err)}}}
@@ -18,15 +18,15 @@ window.RemoteHubWorkspace=(()=>{
   return new Promise(resolve=>{d.onclose=()=>resolve(d.returnValue==='save'?Object.fromEntries(new FormData($('#workspaceForm'))):null);$('#workspaceForm').onsubmit=e=>{e.preventDefault();d.close('save')};$('#workspaceCancel').onclick=()=>d.close('cancel')});
  }
  async function rerender(){await refresh()}
- async function folder(path){if(!await canLeave())return;preparedList=await api('/files/list?'+query({root:state.root,path}));state.dirty=false;state.text=null;state.selected=null;state.path=path;await rerender()}
+ async function folder(path){if(!await canLeave())return;preparedList=await api('/files/list?'+query({root:state.root,path,show_hidden:state.showHidden,sort:state.sort,order:state.order}));state.dirty=false;state.text=null;state.selected=null;state.path=path;await rerender()}
  async function files(check){
   current=check;
   if(state.dirty)return;
-  const roots=(await api('/files/roots')).roots;if(!check())return;
+  const config=await api('/files/roots'),roots=config.roots;if(!check())return;
   if(!roots.length){$('#content').innerHTML=empty('尚未授权文件目录。请在本机 .env 中设置 ORH_FILE_ROOTS。');return}
-  if(!roots.some(x=>x.id===state.root)){state.root=roots[0].id;state.path='';state.selected=null}
+  if(!roots.some(x=>x.id===state.root)){state.root=config.default?.root||roots[0].id;state.path=config.default?.path||'';state.selected=null}
   const d=preparedList&&preparedList.root===state.root&&preparedList.path===state.path?preparedList:await api(endpoint('list'));preparedList=null;if(!check())return;
-  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传</button><input id="filePicker" type="file" hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}<div id="fileDetail"></div>`;
+  $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="fileRoot">授权目录</label><select id="fileRoot">${roots.map(r=>`<option value="${r.id}" ${r.id===state.root?'selected':''}>${esc(r.path)}</option>`).join('')}</select><form id="filePathForm"><label class="sr-only" for="filePath">相对路径</label><input id="filePath" value="${esc(state.path)}" placeholder="根目录下的相对路径" autocomplete="off"><button>前往</button></form><button id="fileHome">主目录</button><button id="fileUp" ${!state.path?'disabled':''}>上一级</button></div><div class="work-toolbar"><form id="fileSearchForm"><label class="sr-only" for="fileSearch">搜索文件名</label><input id="fileSearch" placeholder="在当前目录搜索文件名" maxlength="100"><button>搜索</button></form>${admin()?`<button id="fileUpload" ${d.read_only?'disabled':''}>${icon('upload')}上传</button><input id="filePicker" type="file" hidden><button id="fileMkdir" ${d.read_only?'disabled':''}>${icon('mkdir')}新建目录</button><button id="fileTrash" ${d.read_only?'disabled':''}>${icon('restore')}回收记录</button><button id="fileTerminal">${icon('terminal')}终端 ${icon('external')}</button><button id="fileProject">添加为项目</button>`:''}<span id="uploadStatus" role="status">${d.read_only?'系统目录 · 只读':''}</span></div><div class="file-filters"><label class="check-label"><input id="fileHidden" type="checkbox" ${state.showHidden?'checked':''}>显示隐藏文件</label><label for="fileSort">排序</label><select id="fileSort"><option value="name">名称</option><option value="modified">修改时间</option><option value="size">大小</option><option value="kind">类型</option></select><button id="fileOrder">${state.order==='asc'?'升序':'降序'}</button></div><div id="fileResults">${fileTable(d.entries)}</div>${d.next_offset!==null?'<button id="fileMore">加载更多</button>':''}${d.truncated?'<p class="muted">目录超过 10000 项，仅展示前 10000 项。请缩小范围。</p>':''}<div id="fileDetail"></div>`;
   $('#fileRoot').onchange=guarded(async e=>{if(!await canLeave()){e.target.value=state.root;return}state.root=e.target.value;await folder('')});
   $('#filePathForm').onsubmit=guarded(()=>folder($('#filePath').value.trim().replace(/^\//,'')));
   bind('#fileUp',()=>folder(state.path.split('/').slice(0,-1).join('/')));
@@ -34,6 +34,12 @@ window.RemoteHubWorkspace=(()=>{
   let entries=d.entries,offset=d.next_offset;
   bind('#fileMore',async()=>{const next=await api(endpoint('list',{offset}));if(!check())return;entries=entries.concat(next.entries);offset=next.next_offset;$('#fileResults').innerHTML=fileTable(entries);wireFiles(entries);if(offset===null)$('#fileMore')?.remove()});
   wireFiles(entries);
+  $('#fileSort').value=state.sort;
+  $('#fileHidden').onchange=guarded(async e=>{if(!await canLeave()){e.target.checked=state.showHidden;return}state.showHidden=e.target.checked;localStorage.setItem('orh-files-hidden',state.showHidden);preparedList=null;await rerender()});
+  $('#fileSort').onchange=guarded(async e=>{if(!await canLeave())return;state.sort=e.target.value;preparedList=null;await rerender()});
+  bind('#fileOrder',async()=>{if(!await canLeave())return;state.order=state.order==='asc'?'desc':'asc';preparedList=null;await rerender()});
+  bind('#fileHome',async()=>{if(!config.default)throw Error('主目录不在授权范围');if(!await canLeave())return;state.root=config.default.root;await folder(config.default.path)});
+
   if(admin()){
    bind('#fileMkdir',async()=>{const n=await requestName('新建目录','','创建',255);if(n){await api('/files/operation',{root:state.root,path:join(state.path,n),action:'mkdir'});await folder(state.path)}});
    bind('#fileUpload',()=>$('#filePicker').click());$('#filePicker').onchange=guarded(async e=>{
@@ -56,10 +62,27 @@ window.RemoteHubWorkspace=(()=>{
   }
   if(state.selected){const found=entries.find(x=>join(state.path,x.name)===state.selected.path);if(found)await selectFile(found,state.selected.path,d.read_only,false)}
  }
- function fileTable(entries,search=false){return entries.length?table(['名称','大小','修改时间','操作'],entries.map((f,i)=>`<tr><td class="file-name"><button class="file-link" data-file="${i}" ${f.protected?'disabled':''}>${icon(f.kind==='directory'?'folder':f.kind==='link'?'link':/\.(png|jpe?g|gif|webp)$/i.test(f.name)?'image':/\.(py|js|ts|json|html|css|sh|toml|yaml|yml)$/i.test(f.name)?'code':'file')} ${esc(search?f.path:f.name)}</button>${f.protected?'<span class="muted">受保护</span>':''}</td><td>${f.kind==='directory'?'—':bytes(f.size)}</td><td>${new Date(f.modified*1000).toLocaleString()}</td><td>${!f.protected?`<button data-file-menu="${i}" aria-label="${esc(f.name)} 操作">操作</button>`:'—'}</td></tr>`)):empty('此目录没有可显示的文件。')}
+ function fileTable(entries,search=false){return entries.length?table(['名称','大小','修改时间','操作'],entries.map((f,i)=>`<tr><td class="file-name"><button class="file-link" data-file="${i}" ${f.protected?'disabled':''}>${icon(f.kind==='directory'?'folder':f.kind==='link'?'link':/\.(png|jpe?g|gif|webp)$/i.test(f.name)?'image':/\.(py|js|ts|json|html|css|sh|toml|yaml|yml)$/i.test(f.name)?'code':'file')} ${esc(search?f.path:f.name)}</button>${f.protected?`<span class="muted">${esc(f.protection_reason||'受保护')}</span>`:''}</td><td>${f.kind==='directory'?'—':bytes(f.size)}</td><td>${new Date(f.modified*1000).toLocaleString()}</td><td>${!f.protected?`<button data-file-menu="${i}" aria-label="${esc(f.name)} 操作">操作</button>`:'—'}</td></tr>`)):empty('此目录没有可显示的文件。')}
  function wireFiles(entries,search=false){
   document.querySelectorAll('[data-file]').forEach(b=>b.onclick=guarded(async()=>{const f=entries[Number(b.dataset.file)],path=search?f.path:join(state.path,f.name);if(f.kind==='directory')await folder(path);else await selectFile(f,path)}));
-  document.querySelectorAll('[data-file-menu]').forEach(b=>b.onclick=guarded(async()=>{const f=entries[Number(b.dataset.fileMenu)];await selectFile(f,search?f.path:join(state.path,f.name))}));
+  document.querySelectorAll('[data-file-menu]').forEach(b=>b.onclick=guarded(async()=>{const f=entries[Number(b.dataset.fileMenu)];await fileMenu(f,search?f.path:join(state.path,f.name))}));
+ }
+ async function fileMenu(file,path){
+  if(!await canLeave())return;
+  state.selected={...file,path};
+  const dialog=$('#fileActionDialog');
+  $('#fileActionTitle').textContent=file.name;
+  $('#fileActionPath').textContent=path;
+  const operations=admin()?(file.read_only?['copy']:['copy','move','rename','delete']):[];
+  const labels={copy:'复制到…',move:'移动到…',rename:'重命名',delete:'移入回收目录'};
+  $('#fileActionButtons').innerHTML=`<button data-folder-action="open">${file.kind==='directory'?'打开文件夹':'查看文件'}</button>${operations.map(action=>`<button data-folder-action="${action}" ${action==='delete'?'class="danger"':''}>${esc(labels[action])}</button>`).join('')}`;
+  $('#fileActionCancel').onclick=()=>dialog.close();
+  dialog.showModal();
+  document.querySelectorAll('[data-folder-action]').forEach(button=>button.onclick=guarded(async()=>{
+   const action=button.dataset.folderAction;dialog.close();
+   if(action==='open'){if(file.kind==='directory')await folder(path);else await selectFile(file,path);return}
+   await fileOperation(action);
+  }));
  }
  async function selectFile(f,path,readOnly=f.read_only||false,scroll=true){
   if(state.selected?.path!==path&&!await canLeave())return;
@@ -102,7 +125,7 @@ window.RemoteHubWorkspace=(()=>{
   $('#content').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="projectSearch">搜索项目</label><input id="projectSearch" placeholder="搜索项目名称或路径">${admin()?`<button class="primary" id="addProject">${icon('plus')}添加项目</button>`:''}</div><div id="projectList"></div><div id="projectDetail"></div>`;
   function draw(q=''){
    const filtered=list.filter(p=>(p.name+' '+p.path).toLowerCase().includes(q.toLowerCase()));
-   $('#projectList').innerHTML=filtered.length?`<div class="project-list">${filtered.map((p,i)=>`<article class="project-row"><div><h2>${esc(p.name)}</h2><p class="mono">${esc(p.path||'/')}</p><p>${p.available?esc(p.stack.join(' · ')||'未发现常见技术栈标记'):'目录不可用或不再授权'}</p></div><div class="toolbar"><button data-project="${i}" ${!p.available?'disabled':''}>打开项目</button>${admin()?`<button data-remove-project="${i}">移除记录</button>`:''}</div></article>`).join('')}</div>`:empty(list.length?'没有匹配的项目。':'从文件管理器打开一个项目目录，或添加现有目录。');
+   $('#projectList').innerHTML=filtered.length?`<div class="project-list">${filtered.map((p,i)=>`<article class="project-row"><div><h2>${esc(p.name)}</h2><p class="mono">${esc(p.path||'/')}</p><p>${p.available?esc(p.stack.join(' · ')||'未发现常见技术栈标记'):'目录不可用或不再授权'}</p></div><div class="toolbar"><button data-project="${i}" ${!p.available?'disabled':''}>打开项目</button>${admin()?`<button data-remove-project="${i}">${p.discovered?'隐藏项目':'移除记录'}</button>`:''}</div></article>`).join('')}</div>`:empty(list.length?'没有匹配的项目。':'从文件管理器打开一个项目目录，或添加现有目录。');
    document.querySelectorAll('[data-project]').forEach(b=>b.onclick=guarded(async()=>{state.project=filtered[Number(b.dataset.project)].id;await showProject(state.project,check)}));
    document.querySelectorAll('[data-remove-project]').forEach(b=>b.onclick=guarded(async()=>{const p=filtered[Number(b.dataset.removeProject)];if(!await confirmAction('移除项目记录 '+p.name,'仅从控制台移除记录；保留磁盘文件、现有终端和后台任务。'))return;await withBusy(b,'project:'+p.id,'移除中…',()=>api('/projects/'+p.id,{action:'remove',revision:p.revision,confirm:p.id}));if(state.project===p.id)state.project=null;await rerender()}));
   }

@@ -23,29 +23,34 @@ def audit(root,path,action):
 
 
 @router.get('/roots')
-def roots():return {'roots':fs.roots()}
+def roots():return {'roots':fs.roots(),'default':fs.locate(Path.home()),'home':str(Path.home())}
 
 
 @router.get('/list')
-def listing(root:str,path:str='',offset:int=0):
+def listing(root:str,path:str='',offset:int=0,show_hidden:bool=True,sort:str='name',order:str='asc'):
+    if sort not in ('name','modified','size','kind') or order not in ('asc','desc'):raise HTTPException(400,'无效排序方式')
     if offset<0:raise HTTPException(400,'无效分页')
     base=Path(fs.root(root)['path'])/path
     with fs.directory(root,path) as fd:
         items=[];truncated=False
         with os.scandir(fd) as iterator:
             for row in iterator:
-                if row.name.startswith('.orh-') or row.name=='.remotehub-trash':continue
+                if row.name.startswith('.orh-') or row.name=='.remotehub-trash' or (not show_hidden and row.name.startswith('.')):continue
                 try:
-                    item=fs.entry(fd,row.name);item['read_only']=fs.readonly(base/row.name);item['protected']|=fs.sensitive_absolute(base/row.name);items.append(item)
+                    item=fs.entry(fd,row.name);item['read_only']=fs.readonly(base/row.name);item['protected']|=fs.sensitive_absolute(base/row.name)
+                    item['protection_reason']=('软链接不直接跟随' if item['kind']=='link' else '系统或凭据路径保护' if fs.protected([row.name]) or fs.sensitive_absolute(base/row.name) else '硬链接或特殊文件保护' if item['protected'] else '系统目录只读' if item['read_only'] else '')
+                    items.append(item)
                 except FileNotFoundError:continue
                 if len(items)>=10000:truncated=True;break
-        items.sort(key=lambda x:(x['kind']!='directory',x['name'].casefold()))
+        key=(lambda x:x['name'].casefold()) if sort=='name' else (lambda x:(x[sort],x['name'].casefold()))
+        items.sort(key=key,reverse=order=='desc')
+        items.sort(key=lambda x:x['kind']!='directory')
         absolute=Path(fs.root(root)['path'])/path
         return dict(root=root,path=path,entries=items[offset:offset+200],next_offset=offset+200 if len(items)>offset+200 else None,truncated=truncated,read_only=fs.readonly(absolute))
 
 
 @router.get('/search')
-def search(root:str,path:str='',q:str=''):
+def search(root:str,path:str='',q:str='',show_hidden:bool=True):
     if not q.strip() or len(q)>100:raise HTTPException(400,'搜索词长度须为 1–100')
     found=[];count=0;start=time.monotonic();truncated=False;base=Path(fs.root(root)['path'])
     def walk(folder,depth=0):
@@ -54,6 +59,7 @@ def search(root:str,path:str='',q:str=''):
         with fs.directory(root,folder) as fd:
             with os.scandir(fd) as iterator:
                 for row in iterator:
+                    if not show_hidden and row.name.startswith('.'):continue
                     count+=1
                     if count>10000 or len(found)>=100 or time.monotonic()-start>3:truncated=True;return
                     try:item=fs.entry(fd,row.name)

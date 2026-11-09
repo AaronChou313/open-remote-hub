@@ -157,3 +157,19 @@ def test_host_root_does_not_enable_system_writes(workspace,monkeypatch):
     assert c.get('/api/files/list',params={'root':host}).status_code==200
     assert c.post('/api/files/operation',json=dict(root=host,path='usr/orh-must-not-be-created',action='mkdir')).status_code==403
     assert c.get('/api/files/text',params={'root':host,'path':'Users/aaron/.ssh/id_ed25519'}).status_code==403
+
+
+def test_sort_hidden_filter_and_home_default(workspace,monkeypatch):
+    c,key,root=workspace
+    monkeypatch.setattr(Path,'home',classmethod(lambda cls:root))
+    (root/'.hidden').mkdir();(root/'folder').mkdir()
+    (root/'z.txt').write_text('zzz');(root/'a.txt').write_text('a')
+    assert c.get('/api/files/roots').json()['default']=={'root':key,'path':''}
+    query={'root':key,'show_hidden':'false','sort':'size','order':'desc'}
+    result=c.get('/api/files/list',params=query).json()
+    assert [r['name'] for r in result['entries']]==['folder','z.txt','a.txt']
+    assert '.hidden' in [r['name'] for r in c.get('/api/files/list',params={**query,'show_hidden':'true'}).json()['entries']]
+    assert not c.get('/api/files/search',params={'root':key,'q':'hidden','show_hidden':'false'}).json()['entries']
+    assert c.get('/api/files/list',params={**query,'sort':'invalid'}).status_code==400
+    (root/'node_modules').mkdir()
+    assert c.get('/api/files/list',params={'root':key,'path':'node_modules'}).status_code==200

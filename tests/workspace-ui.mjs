@@ -2,9 +2,10 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+const menuButtons=[0,1].map(i=>({dataset:{fileMenu:String(i)}}));
 const nodes=new Map(),fileButtons=[0,1].map(i=>({dataset:{file:String(i)}}));
-function node(key){if(!nodes.has(key))nodes.set(key,{textContent:'',innerHTML:'',value:'',hidden:false,open:false,dataset:{},classList:{add(v){this[v]=true},toggle(v){this[v]=!this[v]},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},addEventListener(){},scrollIntoView(){},focus(){}});return nodes.get(key)}
-const context=vm.createContext({console,URLSearchParams,AbortSignal,FormData,Date,JSON,Number,Promise,Set,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(s){return s==='[data-file]'?fileButtons:[]},addEventListener(){}},fetch(){throw Error('Unexpected fetch')},EventSource:class{close(){}}});
+function node(key){if(!nodes.has(key))nodes.set(key,{textContent:'',innerHTML:'',value:'',hidden:false,open:false,dataset:{},classList:{add(v){this[v]=true},toggle(v){this[v]=!this[v]},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},addEventListener(){},scrollIntoView(){},focus(){},showModal(){this.open=true},close(){this.open=false}});return nodes.get(key)}
+const context=vm.createContext({console,URLSearchParams,AbortSignal,FormData,Date,JSON,Number,Promise,Set,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(s){return s==='[data-file]'?fileButtons:s==='[data-file-menu]'?menuButtons:[]},addEventListener(){}},fetch(){throw Error('Unexpected fetch')},EventSource:class{close(){}}});
 vm.runInContext(fs.readFileSync('static/icons.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/workspace.js','utf8'),context);context.RemoteHubWorkspace=context.window.RemoteHubWorkspace;
 vm.runInContext(fs.readFileSync('static/app.js','utf8').replace(/\nenter\(\);\s*$/,''),context);
@@ -29,6 +30,10 @@ assert.match(node('#fileDetail').innerHTML,/SECOND/);
 assert.match(node('#fileDetail').innerHTML,/icons.svg#save/);
 assert.ok(!node('#fileDetail').innerHTML.includes('${icon('));
 assert.ok(!node('#fileDetail').innerHTML.includes('FIRST'));
+const previousDetail=node('#fileDetail').innerHTML;
+await menuButtons[1].onclick();assert.equal(node('#fileActionDialog').open,true);assert.equal(node('#fileDetail').innerHTML,previousDetail,'Operation menu opens without appending a bottom panel');
+assert.match(node('#fileActionButtons').innerHTML,/data-folder-action="rename"/);
+node('#fileActionCancel').onclick();
 run('RemoteHubWorkspace.state.dirty=true');
 await run("switchView('projects')");assert.equal(run('view'),'files');
 assert.equal(run('RemoteHubWorkspace.isDirty()'),true);

@@ -49,8 +49,30 @@ class Add(BaseModel):
     name:str=Field(min_length=1,max_length=100)
 
 
+def discover_projects():
+    folder=Path(os.environ.get('ORH_PROJECTS_DIR',str(Path.home()/'Projects'))).expanduser()
+    location=fs.locate(folder)
+    if not location:return
+    with lock:
+        known={(p['root'],p['path']) for p in store.rows('project')}
+        hidden={p['id'] for p in store.rows('project-hidden')}
+        try:
+            with fs.directory(location['root'],location['path']) as fd:
+                for name in sorted(os.listdir(fd))[:2000]:
+                    if name.startswith('.') or fs.protected([name]):continue
+                    row=fs.entry(fd,name)
+                    if row['kind']!='directory' or row['protected']:continue
+                    path='/'.join(filter(None,[location['path'],name]))
+                    identity=(location['root'],path)
+                    key=hashlib.sha256((identity[0]+':'+path).encode()).hexdigest()[:16]
+                    if identity in known or key in hidden:continue
+                    store.save('project',dict(name=name,root=identity[0],path=path,environment=None,session='',tasks={},discovered=True),key)
+        except (HTTPException,OSError):return
+
+
 @router.get('')
 def list_projects(q:str=''):
+    discover_projects()
     result=[]
     for value in store.rows('project'):
         if q.casefold() not in (value['name']+' '+value['path']).casefold():continue
@@ -150,6 +172,9 @@ def update(key:str,body:Update):
         if p['revision']!=body.revision:raise HTTPException(409,'项目记录已改变，请刷新')
         if body.action=='remove':
             if body.confirm!=key:raise HTTPException(400,'请确认移除项目记录；不会删除项目文件')
+            if p.get('discovered'):
+                try:store.get('project-hidden',key)
+                except HTTPException:store.save('project-hidden',{},key)
             store.remove('project',key,body.revision);return {'ok':True}
         p=project(key);value=clean(p)
         if body.action=='environment':

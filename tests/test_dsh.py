@@ -139,3 +139,17 @@ def test_native_auth_logs_redact_launch_token(tmp_path):
     save(tmp_path,dict(port=9741,cookie='unit-cookie',launch_token=token,renew_after=123))
     assert (tmp_path/'dsh-auth.json').stat().st_mode&0o777==0o600
     assert not list(tmp_path.glob('.dsh-auth-*'))
+
+
+def test_managed_pid_tolerates_clock_rounding(dsh_client,monkeypatch):
+    import json
+    from app.dsh import state_path
+    state_path().write_text(json.dumps({'pid':123,'created':1000.001,'argv':['python','/owned/dsh_host.py','/owned/plan.json']}))
+    class Process:
+        def create_time(self):return 1000.001001
+        def status(self):return 'running'
+        def cmdline(self):return ['Python','/owned/dsh_host.py','/owned/plan.json']
+    monkeypatch.setattr(dsh.psutil,'Process',lambda pid:Process())
+    assert dsh.managed()
+    monkeypatch.setattr(Process,'create_time',lambda self:1001)
+    assert not dsh.managed()

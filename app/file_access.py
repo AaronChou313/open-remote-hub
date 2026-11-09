@@ -19,7 +19,7 @@ from fastapi import HTTPException
 
 mutex=threading.RLock()
 DIR=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC
-BLOCKED={'.git','.ssh','.aws','.gnupg','.codex','.dsh','.kube','.docker','.config','.runtime','.remotehub-trash','node_modules'}
+BLOCKED={'.git','.ssh','.aws','.gnupg','.codex','.dsh','.kube','.docker','.config','.runtime','.remotehub-trash'}
 SENSITIVE={'.npmrc','.pypirc','.netrc','.git-credentials','.credentials.yaml','credentials.json','auth.json','id_rsa','id_ed25519'}
 SYSTEM=('/System','/Library','/private','/etc','/usr','/bin','/sbin','/dev','/proc','/sys','/root','/opt','/Applications','/cores','/.vol','/.nofollow','/.resolve')
 
@@ -50,6 +50,16 @@ def sensitive_absolute(path):
 
 def readonly(path):
     return any(path==Path(x) or Path(x) in path.parents for x in SYSTEM)
+
+
+def locate(absolute):
+    absolute=Path(absolute).expanduser()
+    for item in sorted(roots(),key=lambda r:len(r['path']),reverse=True):
+        base=Path(item['path'])
+        if absolute==base or base in absolute.parents:
+            relative=absolute.relative_to(base).as_posix()
+            return dict(root=item['id'],path='' if relative=='.' else relative)
+    return None
 
 
 def root(key):

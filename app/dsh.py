@@ -73,7 +73,7 @@ def state_path():
 def managed():
     try:
         data=json.loads(state_path().read_text());p=psutil.Process(data['pid'])
-        if p.create_time()==data['created'] and p.status()!=psutil.STATUS_ZOMBIE and p.cmdline()[1:]==data['argv'][1:]:
+        if abs(p.create_time()-data['created'])<0.01 and p.status()!=psutil.STATUS_ZOMBIE and p.cmdline()[1:]==data['argv'][1:]:
             return p
     except (OSError,ValueError,KeyError,psutil.Error):pass
     return None
@@ -84,7 +84,7 @@ def listener():
     cfg=settings()
     for p in psutil.process_iter(['pid','cmdline']):
         args=p.info['cmdline'] or []
-        if not any('/@deepseek-ai/dsh/' in a or Path(a).name=='dsh' for a in args):continue
+        if not any('/@deepseek-ai/dsh/' in a or '/@deepseek-ai/dsh-desktop-host/' in a or Path(a).name=='dsh' for a in args):continue
         try:
             candidates=[p,*p.children(recursive=True)]
             for child in candidates:
