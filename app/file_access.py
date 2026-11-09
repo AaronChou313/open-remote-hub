@@ -1,9 +1,4 @@
-"""Capability-style filesystem access: explicit roots, pinned directory FDs, no links.
-
-All traversals use openat/O_NOFOLLOW. Never use a client path in FileResponse,
-subprocess cwd, or a recursive shutil operation. Local same-user administrators
-can still rename an already-open directory; this is not an OS sandbox.
-"""
+"""Configured file policy with pinned descriptors and OS-account permissions."""
 import contextlib
 import ctypes
 import errno
@@ -24,7 +19,14 @@ SENSITIVE={'.npmrc','.pypirc','.netrc','.git-credentials','.credentials.yaml','c
 SYSTEM=('/System','/Library','/private','/etc','/usr','/bin','/sbin','/dev','/proc','/sys','/root','/opt','/Applications','/cores','/.vol','/.nofollow','/.resolve')
 
 
+def unrestricted():
+    policy=os.environ.get('ORH_FILE_POLICY','protected')
+    if policy not in ('protected','unrestricted'):raise HTTPException(503,'ORH_FILE_POLICY 必须为 protected 或 unrestricted')
+    return policy=='unrestricted'
+
+
 def protected(parts):
+    if unrestricted():return False
     return any(p.lower() in BLOCKED|SENSITIVE or p.lower()=='.env' or p.lower().startswith('.env.') or p.lower().startswith('.orh-') or p.lower().endswith(('.pem','.key','.p12','.pfx')) for p in parts)
 
 
@@ -39,16 +41,18 @@ def roots():
             key=hashlib.sha256(str(p).encode()).hexdigest()[:16]
             if not any(x['id']==key for x in out):out.append(dict(id=key,name=p.name or '/',path=str(p)))
         return out
-    except (ValueError,TypeError,OSError):raise HTTPException(503,'ORH_FILE_ROOTS 配置无效：请使用存在的非敏感目录绝对路径 JSON 数组')
+    except (ValueError,TypeError,OSError):raise HTTPException(503,'ORH_FILE_ROOTS 配置无效：请使用存在且符合访问策略的目录绝对路径 JSON 数组')
 
 
 def sensitive_absolute(path):
+    if unrestricted():return False
     homes=[Path.home()/'Library'/x for x in ('Keychains','Cookies','Safari','Accounts','Mail','Messages','Application Support/Google/Chrome','Application Support/Microsoft Edge','Application Support/Firefox','Application Support/com.apple.TCC','Application Support/@deepseek-ai/dsh-desktop')]
     custom_dsh=Path(os.environ.get('ORH_DSH_HOME',str(Path.home()/'.dsh'))).expanduser().resolve()
     return path==custom_dsh or custom_dsh in path.parents or any(path==p or p in path.parents for p in homes) or any(path==Path(x) or Path(x) in path.parents for x in ('/dev','/proc','/sys','/private/var/db','/private/var/root'))
 
 
 def readonly(path):
+    if unrestricted():return False
     return any(path==Path(x) or Path(x) in path.parents for x in SYSTEM)
 
 
@@ -85,10 +89,16 @@ def directory(key,path='',write=False):
     absolute=Path(info['path']).joinpath(*chunks)
     if write and readonly(absolute):denied('系统目录只读')
     if sensitive_absolute(absolute):denied('系统或凭据敏感目录受保护')
+    if unrestricted():
+        try:absolute=absolute.resolve(strict=True)
+        except (OSError,RuntimeError) as e:raise error(e) from e
+        if locate(absolute) is None:denied('软链接目标不在授权目录内')
+        components=absolute.parts[1:]
+    else:components=Path(info['path']).parts[1:]+tuple(chunks)
     # Pin the canonical root without following symlinks in its ancestry either.
     fd=os.open('/',DIR)
     try:
-        for name in Path(info['path']).parts[1:]+tuple(chunks):
+        for name in components:
             new=os.open(name,DIR,dir_fd=fd);os.close(fd);fd=new
         yield fd
     except OSError as e:raise error(e) from e
@@ -104,12 +114,18 @@ def parent(key,path,write=False):
 
 
 def error(e):
+    if isinstance(e,PermissionError) or getattr(e,'errno',None) in (errno.EACCES,errno.EPERM):
+        message='操作系统拒绝访问，请检查当前服务账户的文件权限'
+        if sys.platform=='darwin':message+='；下载、桌面、文稿等目录需在 Mac「系统设置 → 隐私与安全性 → 完全磁盘访问权限」中授权运行 RemoteHub 的 Python.app，随后重启控制台'
+        return HTTPException(403,message)
+    if isinstance(e,RuntimeError) or getattr(e,'errno',None)==errno.ELOOP:return HTTPException(409,'软链接循环或目标发生变化，请刷新后重试')
     return HTTPException(404 if e.errno==errno.ENOENT else 409 if e.errno in (errno.EEXIST,errno.ENOTEMPTY) else 403,'目标不存在' if e.errno==errno.ENOENT else '文件已存在、被修改或不可安全访问')
 
 
 def regular(fd):
     s=os.fstat(fd)
-    if not stat.S_ISREG(s.st_mode) or s.st_nlink!=1:denied('仅支持普通文件；硬链接和特殊文件受保护')
+    if not stat.S_ISREG(s.st_mode):denied('此操作仅支持普通文件')
+    if s.st_nlink!=1 and not unrestricted():denied('硬链接受保护')
     return s
 
 
@@ -118,8 +134,11 @@ def version(s):return hashlib.sha256(f'{s.st_dev}:{s.st_ino}:{s.st_size}:{s.st_m
 
 def entry(fd,name):
     s=os.stat(name,dir_fd=fd,follow_symlinks=False)
-    kind='directory' if stat.S_ISDIR(s.st_mode) else 'file' if stat.S_ISREG(s.st_mode) else 'link' if stat.S_ISLNK(s.st_mode) else 'special'
-    return dict(name=name,kind=kind,size=s.st_size,modified=s.st_mtime,revision=version(s),protected=protected([name]) or kind in ('link','special') or (kind=='file' and s.st_nlink!=1))
+    target=s;symlink=stat.S_ISLNK(s.st_mode)
+    if symlink and unrestricted():
+        with contextlib.suppress(OSError):target=os.stat(name,dir_fd=fd)
+    kind='directory' if stat.S_ISDIR(target.st_mode) else 'file' if stat.S_ISREG(target.st_mode) else 'link' if symlink else 'special'
+    return dict(name=name,kind=kind,size=target.st_size,modified=target.st_mtime,revision=version(s),symlink=symlink,protected=protected([name]) or kind=='special' or (not unrestricted() and (symlink or (kind=='file' and s.st_nlink!=1))))
 
 
 def check(fd,name,expected):
@@ -131,11 +150,23 @@ def check(fd,name,expected):
 
 @contextlib.contextmanager
 def opened(key,path):
+    key,path=file_target(key,path)
     with parent(key,path) as (fd,name):
         try:child=os.open(name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=fd)
         except OSError as e:raise error(e) from e
         try:regular(child);yield child
         finally:os.close(child)
+
+
+def file_target(key,path):
+    """Follow a file link only in unrestricted mode, within configured roots."""
+    parts(path,False)
+    if not unrestricted():return key,path
+    try:absolute=(Path(root(key)['path'])/path).resolve(strict=True)
+    except (OSError,RuntimeError) as e:raise error(e) from e
+    location=locate(absolute)
+    if location is None:denied('软链接目标不在授权目录内')
+    return location['root'],location['path']
 
 
 def rename_exclusive(srcfd,src,dstfd,dst):
@@ -157,7 +188,7 @@ def scan_tree(fd,prefix='',budget=None,base=None):
         budget[0]+=1;budget[1]+=item['size'] if item['kind']=='file' else 0
         if budget[0]>10000 or budget[1]>1024**3:raise HTTPException(413,'目录操作上限为 10000 个条目 / 1 GiB，请缩小范围')
         yield prefix+name,item
-        if item['kind']=='directory':
+        if item['kind']=='directory' and not item['symlink']:
             child=os.open(name,DIR,dir_fd=fd)
             try:yield from scan_tree(child,prefix+name+'/',budget,base)
             finally:os.close(child)

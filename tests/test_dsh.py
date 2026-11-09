@@ -106,9 +106,10 @@ def test_dispatch_uses_socket_port_not_host_header(dsh_client,monkeypatch):
         assert client.get('/').content==b'official-ui-bytes'
 
 
-def test_dsh_files_are_protected():
+def test_dsh_files_are_protected(monkeypatch):
     from app.file_access import parts
     from fastapi import HTTPException
+    monkeypatch.setenv('ORH_FILE_POLICY','protected')
     for path in ('.dsh/.credentials.yaml','somewhere/.credentials.yaml'):
         with pytest.raises(HTTPException):parts(path)
 

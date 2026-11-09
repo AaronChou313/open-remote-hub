@@ -10,6 +10,7 @@ def workspace(tmp_path,monkeypatch):
     data=tmp_path/'private';data.mkdir();root=tmp_path/'files';root.mkdir()
     monkeypatch.setattr(main,'DATA',data)
     monkeypatch.setenv('ORH_FILE_ROOTS',json.dumps([str(root)]))
+    monkeypatch.setenv('ORH_FILE_POLICY','protected')
     # macOS pytest temporary fixtures live under /private; actual system writes remain blocked.
     monkeypatch.setattr(fs,'SYSTEM',tuple(x for x in fs.SYSTEM if x!='/private'))
     main.attempts.clear();passwords.save('files-test-password',initial=True)
@@ -173,3 +174,83 @@ def test_sort_hidden_filter_and_home_default(workspace,monkeypatch):
     assert c.get('/api/files/list',params={**query,'sort':'invalid'}).status_code==400
     (root/'node_modules').mkdir()
     assert c.get('/api/files/list',params={'root':key,'path':'node_modules'}).status_code==200
+
+
+def test_unrestricted_policy_allows_account_paths_and_credentials(workspace,monkeypatch):
+    c,key,root=workspace
+    monkeypatch.setenv('ORH_FILE_POLICY','unrestricted')
+    monkeypatch.setattr(fs,'SYSTEM',(str(root),))
+    (root/'.ssh').mkdir();(root/'.ssh'/'id_ed25519').write_text('test fixture')
+    assert not fs.readonly(root) and not fs.sensitive_absolute(Path.home()/'Library/Keychains')
+    listing=c.get('/api/files/list',params={'root':key,'path':'.ssh'}).json()
+    assert not listing['read_only'] and not listing['entries'][0]['protected']
+    assert c.get('/api/files/text',params={'root':key,'path':'.ssh/id_ed25519'}).json()['text']=='test fixture'
+    assert c.post('/api/files/upload',params={'root':key,'path':'.env'},content=b'fixture').status_code==200
+    row=c.get('/api/files/list',params={'root':key}).json()['entries']
+    folder=next(x for x in row if x['name']=='.ssh')
+    assert c.post('/api/files/operation',json=dict(root=key,path='.ssh',action='copy',destination='backup',revision=folder['revision'])).status_code==200
+    assert (root/'backup/id_ed25519').read_text()=='test fixture'
+
+
+def test_unrestricted_symlink_browsing_editing_and_link_operations(workspace,monkeypatch):
+    c,key,root=workspace
+    monkeypatch.setenv('ORH_FILE_POLICY','unrestricted')
+    (root/'folder').mkdir();(root/'folder/file.txt').write_text('before')
+    (root/'alias').symlink_to('folder',target_is_directory=True)
+    (root/'file-link').symlink_to('folder/file.txt')
+    (root/'folder/loop').symlink_to('.',target_is_directory=True)
+    assert c.get('/api/files/list',params={'root':key,'path':'alias'}).status_code==200
+    loaded=c.get('/api/files/text',params={'root':key,'path':'file-link'}).json()
+    saved=c.post('/api/files/text',json=dict(root=key,path='file-link',text='after',revision=loaded['revision'],confirm='file-link'))
+    assert saved.status_code==200,saved.text
+    assert (root/'file-link').is_symlink() and (root/'folder/file.txt').read_text()=='after'
+    assert saved.json()['entry_revision']!=saved.json()['revision']
+    os.link(root/'folder/file.txt',root/'hardlink')
+    assert c.get('/api/files/download',params={'root':key,'path':'hardlink'}).content==b'after'
+    entries=c.get('/api/files/list',params={'root':key}).json()['entries']
+    link=next(x for x in entries if x['name']=='alias')
+    assert link['kind']=='directory' and link['symlink'] and not link['protected']
+    body=dict(root=key,path='alias',revision=link['revision'],confirm='alias')
+    assert c.post('/api/files/operation',json={**body,'action':'copy','destination':'alias-copy'}).status_code==200
+    assert (root/'alias-copy').is_symlink()
+    assert c.post('/api/files/operation',json={**body,'action':'delete'}).status_code==200
+    assert not (root/'alias').exists() and (root/'folder/file.txt').exists()
+    folder=next(x for x in entries if x['name']=='folder')
+    # Removing the alias does not change this folder's own revision.
+    assert c.post('/api/files/operation',json=dict(root=key,path='folder',action='copy',destination='folder-copy',revision=folder['revision'])).status_code==200
+    assert (root/'folder-copy/loop').is_symlink()
+    assert (root/'folder-copy/file.txt').read_text()=='after'
+
+
+def test_unrestricted_links_respect_explicit_roots_and_invalid_paths(workspace,monkeypatch,tmp_path):
+    c,key,root=workspace
+    monkeypatch.setenv('ORH_FILE_POLICY','unrestricted')
+    outside=tmp_path/'outside';outside.mkdir();(outside/'note').write_text('outside fixture')
+    (root/'escape').symlink_to(outside,target_is_directory=True)
+    (root/'escape-file').symlink_to(outside/'note')
+    assert c.get('/api/files/list',params={'root':key,'path':'escape'}).status_code==403
+    assert c.get('/api/files/text',params={'root':key,'path':'escape-file'}).status_code==403
+    for path in ('../outside','/etc','a/../b'):
+        assert c.get('/api/files/list',params={'root':key,'path':path}).status_code==403
+    monkeypatch.setenv('ORH_FILE_ROOTS',json.dumps([str(root),str(outside)]))
+    assert c.get('/api/files/list',params={'root':key,'path':'escape'}).status_code==200
+    assert c.get('/api/files/text',params={'root':key,'path':'escape-file'}).json()['text']=='outside fixture'
+    (root/'loop').symlink_to('loop')
+    assert c.get('/api/files/list',params={'root':key,'path':'loop'}).status_code==409
+
+
+def test_os_permission_errors_and_invalid_policy(workspace,monkeypatch):
+    import errno
+    c,key,root=workspace
+    monkeypatch.setenv('ORH_FILE_POLICY','unrestricted')
+    original=os.open
+    def deny_downloads(path,*args,**kwargs):
+        if path=='Downloads':raise PermissionError(errno.EACCES,'fixture permission denied')
+        return original(path,*args,**kwargs)
+    (root/'Downloads').mkdir()
+    monkeypatch.setattr(os,'open',deny_downloads)
+    denied=c.get('/api/files/list',params={'root':key,'path':'Downloads'})
+    assert denied.status_code==403 and '操作系统拒绝访问' in denied.json()['detail']
+    if sys.platform=='darwin':assert '完全磁盘访问权限' in denied.json()['detail']
+    monkeypatch.setenv('ORH_FILE_POLICY','typo')
+    assert c.get('/api/files/list',params={'root':key}).status_code==503

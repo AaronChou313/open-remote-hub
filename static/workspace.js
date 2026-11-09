@@ -118,7 +118,7 @@ window.RemoteHubWorkspace=(()=>{
   showFilePreview();
   $('#fileEditor')?.addEventListener('input',()=>{state.dirty=true;$('#fileDirty').textContent='未保存'});
   bind('#fileClose',closeFilePreview);
-  bind('#fileSave',async()=>{if(!state.dirty)return;if(!await confirmAction('保存 '+path,'用当前编辑内容覆盖此文件。文件已在其他地方修改时将阻止覆盖。'))return;await withBusy($('#fileSave'),'file:save','保存中…',async()=>{const editor=$('#fileEditor'),submitted=editor.value;const result=await api('/files/text',{root:state.root,path,text:submitted,revision:state.text.revision,confirm:path});if(state.selected?.path===path&&$('#fileEditor')===editor){state.text.revision=result.revision;state.selected.revision=result.revision;state.dirty=editor.value!==submitted;$('#fileDirty').textContent=state.dirty?'仍有未保存修改':'已保存'}notify('文件已保存')})});
+  bind('#fileSave',async()=>{if(!state.dirty)return;if(!await confirmAction('保存 '+path,'用当前编辑内容覆盖此文件。文件已在其他地方修改时将阻止覆盖。'))return;await withBusy($('#fileSave'),'file:save','保存中…',async()=>{const editor=$('#fileEditor'),submitted=editor.value;const result=await api('/files/text',{root:state.root,path,text:submitted,revision:state.text.revision,confirm:path});if(state.selected?.path===path&&$('#fileEditor')===editor){state.text.revision=result.revision;state.selected.revision=result.entry_revision||result.revision;state.dirty=editor.value!==submitted;$('#fileDirty').textContent=state.dirty?'仍有未保存修改':'已保存'}notify('文件已保存')})});
   document.querySelectorAll('[data-file-op]').forEach(b=>b.onclick=guarded(()=>fileOperation(b.dataset.fileOp,b)));
  }
  async function fileOperation(action,button){

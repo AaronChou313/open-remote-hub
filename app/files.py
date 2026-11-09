@@ -136,18 +136,29 @@ def edit(body:Edit):
     if body.confirm!=body.path:raise HTTPException(400,'需要确认覆盖目标')
     data=body.text.encode('utf-8')
     if len(data)>TEXT_LIMIT:raise HTTPException(413,'文本上限为 1 MiB')
-    with fs.mutex,fs.parent(body.root,body.path,write=True) as (fd,name):
-        fs.check(fd,name,body.revision)
-        with fs.opened(body.root,body.path) as existing:mode=stat.S_IMODE(os.fstat(existing).st_mode)&0o777
-        temp='.orh-'+secrets.token_hex(16)
-        child=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
-        try:
-            with os.fdopen(child,'wb') as f:f.write(data);f.flush();os.fsync(f.fileno());os.fchmod(f.fileno(),mode)
+    with fs.mutex,fs.parent(body.root,body.path) as (source_fd,source_name):
+        source=fs.entry(source_fd,source_name)
+        target_root,target_path=fs.file_target(body.root,body.path)
+        with fs.parent(target_root,target_path,write=True) as (fd,name):
             fs.check(fd,name,body.revision)
-            os.replace(temp,name,src_dir_fd=fd,dst_dir_fd=fd)
-            result=fs.entry(fd,name)
-        finally:
-            with contextlib.suppress(FileNotFoundError):os.unlink(temp,dir_fd=fd)
+            with fs.opened(target_root,target_path) as existing:
+                mode=stat.S_IMODE(os.fstat(existing).st_mode)&0o777
+            temp='.orh-'+secrets.token_hex(16)
+            child=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=fd)
+            try:
+                with os.fdopen(child,'wb') as f:
+                    f.write(data)
+                    f.flush()
+                    os.fsync(f.fileno())
+                    os.fchmod(f.fileno(),mode)
+                fs.check(fd,name,body.revision)
+                if source['symlink']:
+                    fs.check(source_fd,source_name,source['revision'])
+                os.replace(temp,name,src_dir_fd=fd,dst_dir_fd=fd)
+                result=fs.entry(fd,name)
+                result['entry_revision']=source['revision'] if source['symlink'] else result['revision']
+            finally:
+                with contextlib.suppress(FileNotFoundError):os.unlink(temp,dir_fd=fd)
     audit(body.root,body.path,'edit');return result
 
 
@@ -225,7 +236,7 @@ def operate(body:Operation):
         if body.action=='mkdir':
             os.mkdir(src,mode=0o700,dir_fd=srcfd);audit(body.root,body.path,'mkdir');return {'ok':True}
         item=fs.check(srcfd,src,body.revision)
-        if item['kind']=='directory':
+        if item['kind']=='directory' and not item['symlink']:
             child=os.open(src,fs.DIR,dir_fd=srcfd)
             try:tree=list(fs.scan_tree(child,base=Path(fs.root(body.root)['path'])/body.path))
             finally:os.close(child)
@@ -250,7 +261,9 @@ def operate(body:Operation):
             else:
                 temp='.orh-'+secrets.token_hex(16)
                 try:
-                    if item['kind']=='directory':
+                    if item['symlink']:
+                        os.symlink(os.readlink(src,dir_fd=srcfd),temp,dir_fd=dstfd)
+                    elif item['kind']=='directory':
                         os.mkdir(temp,0o700,dir_fd=dstfd)
                         # Copy using pinned source/target descriptors without client path re-resolution.
                         source=os.open(src,fs.DIR,dir_fd=srcfd);target=os.open(temp,fs.DIR,dir_fd=dstfd)
@@ -262,7 +275,9 @@ def operate(body:Operation):
                                 if row['protected'] or fs.sensitive_absolute(base/name):fs.denied()
                                 budget[0]+=1;budget[1]+=row['size'] if row['kind']=='file' else 0
                                 if budget[0]>10000 or budget[1]>1024**3:raise HTTPException(413,'目录复制超过上限')
-                                if row['kind']=='directory':
+                                if row['symlink']:
+                                    os.symlink(os.readlink(name,dir_fd=a),name,dir_fd=b)
+                                elif row['kind']=='directory':
                                     os.mkdir(name,0o700,dir_fd=b);x=os.open(name,fs.DIR,dir_fd=a);y=os.open(name,fs.DIR,dir_fd=b)
                                     try:recurse(x,y,base/name,depth+1)
                                     finally:os.close(x);os.close(y)
