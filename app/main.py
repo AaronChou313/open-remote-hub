@@ -30,6 +30,8 @@ for line in (ROOT / '.env').read_text().splitlines() if (ROOT / '.env').exists()
         os.environ.setdefault(k.strip(), v.strip())
 PORT = int(os.environ.get('ORH_PORT', '8765'))
 ZPORT = int(os.environ.get('ORH_ZELLIJ_PORT', '8082'))
+from app.network import Network
+NETWORK = Network.load()
 DB = DATA / 'metrics.sqlite3'
 sessions = {}
 attempts = {}
@@ -126,14 +128,15 @@ app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=Non
 
 @app.middleware('http')
 async def security(request:Request, call_next):
-    allowed={f'127.0.0.1:{PORT}',f'localhost:{PORT}'}
-    if request.headers.get('host') not in allowed:
+    authority=request.headers.get('host', '')
+    scheme=request.url.scheme
+    if not NETWORK.allows(authority,PORT,scheme):
         return JSONResponse({'detail':'Invalid host'},400)
     origin=request.headers.get('origin')
-    if origin and origin not in {f'http://{h}' for h in allowed}:
+    if origin and not NETWORK.same_origin(authority,origin,PORT,scheme):
         return JSONResponse({'detail':'Cross-origin request denied'},403)
     native=request.url.path.startswith('/terminal/')
-    if native and request.method not in ('GET','HEAD') and origin!=f'http://{request.headers.get("host")}':
+    if native and request.method not in ('GET','HEAD') and not NETWORK.same_origin(authority,origin,PORT,scheme):
         return JSONResponse({'detail':'Terminal origin required'},403)
     if not native and request.method not in ('GET','HEAD','OPTIONS') and request.headers.get('x-orh-request')!='1':
         return JSONResponse({'detail':'Missing CSRF header'},403)
@@ -145,7 +148,7 @@ async def security(request:Request, call_next):
         if request.method!='GET' and request.url.path!='/api/logout' and s['role']!='admin':
             return JSONResponse({'detail':'只读账户无操作权限'},403)
     response=await call_next(request)
-    response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src http://127.0.0.1:{ZPORT} http://localhost:{ZPORT}; connect-src 'self' ws://127.0.0.1:{PORT} ws://localhost:{PORT}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+    response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
     if native:
         response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     return response
@@ -166,10 +169,10 @@ def throttle(request):
         attempts[ip].append(now)
 
 
-def login_response():
+def login_response(request):
     token=secrets.token_urlsafe(32);access.create(token,'admin',time.time()+43200)
     result=JSONResponse({'role':'admin'})
-    result.set_cookie('orh',token,httponly=True,samesite='strict',max_age=43200)
+    result.set_cookie('orh',token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=43200)
     return result
 
 @app.get('/api/auth/status')
@@ -179,17 +182,17 @@ def auth_status():
 @app.post('/api/auth/setup')
 def setup(body:Login,request:Request):
     # First-use setup is restricted to an actual loopback connection and exact origin.
-    if request.client.host not in ('127.0.0.1','::1') or request.headers.get('origin')!=f'http://{request.headers.get("host")}':
+    if request.url.hostname not in ('localhost','127.0.0.1','::1') or request.client.host not in ('127.0.0.1','::1') or not NETWORK.same_origin(request.headers.get('host',''),request.headers.get('origin'),PORT,request.url.scheme):
         raise HTTPException(403,'请在本机浏览器设置密码，或使用本机 password.py 脚本')
     throttle(request)
     passwords.save(body.password,initial=True)
-    return login_response()
+    return login_response(request)
 
 @app.post('/api/login')
 def login(body:Login,request:Request):
     throttle(request)
     if not passwords.verify(body.password):raise HTTPException(401,'密码错误')
-    return login_response()
+    return login_response(request)
 
 @app.post('/api/auth/password')
 def change_password(body:ChangePassword,request:Request):
@@ -197,7 +200,7 @@ def change_password(body:ChangePassword,request:Request):
     with passwords.lock:
         if not passwords.verify(body.current_password):raise HTTPException(400,'当前密码错误')
         passwords.save(body.password)
-    return login_response()
+    return login_response(request)
 
 @app.post('/api/logout')
 def logout(request:Request):

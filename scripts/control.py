@@ -6,10 +6,13 @@ import subprocess
 import sys
 import time
 import urllib.request
+from urllib.parse import urlsplit
 import psutil
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT))
-from app.main import PORT
+from app.main import PORT, NETWORK
+LOCAL_URL=NETWORK.local_url(PORT)
+local_http=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 state=ROOT/'.runtime/server.json'
 def process():
     try:
@@ -35,29 +38,31 @@ if sys.platform=='darwin':
                 if not loaded:subprocess.run(['launchctl','bootstrap',target,str(job)],check=True)
                 for _ in range(100):
                     try:
-                        with urllib.request.urlopen(f'http://127.0.0.1:{PORT}',timeout=1) as r:
+                        with local_http.open(LOCAL_URL,timeout=1) as r:
                             if r.status==200:break
                     except OSError:time.sleep(.1)
                 else:raise SystemExit('LaunchAgent readiness timed out; inspect .runtime/launchd.log')
-                print(f'OpenRemoteHub (launchd): http://127.0.0.1:{PORT}')
+                print(f'OpenRemoteHub (launchd): {LOCAL_URL}')
             else:print('LaunchAgent loaded' if loaded else 'LaunchAgent stopped')
             raise SystemExit(0)
 p=process()
 if cmd=='start':
     if p:
-        print(f'Already running: http://127.0.0.1:{PORT}');sys.exit()
+        print(f'Already running: {LOCAL_URL}');sys.exit()
     import socket
-    with socket.socket() as sock:
-        if sock.connect_ex(('127.0.0.1',PORT))==0:raise SystemExit(f'Port {PORT} already occupied; no process changed')
+    try:
+        with socket.create_connection((urlsplit(LOCAL_URL).hostname,PORT),timeout=.5):
+            raise SystemExit(f'Port {PORT} already occupied; no process changed')
+    except OSError:pass
     with (ROOT/'.runtime/server.log').open('ab') as log:
         child=subprocess.Popen([str(ROOT/'.venv/bin/python'),str(ROOT/'scripts/server.py')],cwd=ROOT,stdout=log,stderr=log,stdin=subprocess.DEVNULL,start_new_session=True)
     state.write_text(json.dumps(dict(pid=child.pid,created=psutil.Process(child.pid).create_time())))
     for _ in range(50):
         if child.poll() is not None:raise SystemExit('Start failed. See .runtime/server.log')
         try:
-            with urllib.request.urlopen(f'http://127.0.0.1:{PORT}',timeout=1) as response:
+            with local_http.open(LOCAL_URL,timeout=1) as response:
                 if response.status==200:
-                    print(f'OpenRemoteHub: http://127.0.0.1:{PORT}');break
+                    print(f'OpenRemoteHub: {LOCAL_URL}');break
         except OSError:time.sleep(.1)
     else:raise SystemExit('Readiness timed out. See .runtime/server.log')
 elif cmd=='stop':

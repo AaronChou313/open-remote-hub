@@ -23,3 +23,5 @@ Zellij 有可能在 socket 已消失、所有子任务均结束后留下继续�
 
 
 网关保持浏览器到 Zellij 的原生消息转发，不注入键盘处理器、布局命令或自建终端层。网关到 Zellij 不发送库默认的定时 Ping，避免 0.45.1 对不支持帧的报错；这项兼容处理不被视为旧会话所有黑屏情况的根因修复。
+
+网络入口由 `app/network.py` 统一校验，`ORH_HOST` 配置监听、`ORH_ALLOWED_HOSTS` 配置目标 IP/主机名，HTTP 与原生终端 WebSocket 共用规则。默认 loopback，不接受通配目标地址；严格同源，不信任转发头。Zellij 上游保持 loopback，启动探针跟随绑定地址，便于迁移 macOS/Ubuntu。

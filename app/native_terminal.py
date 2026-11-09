@@ -153,7 +153,8 @@ async def native_socket(ws: WebSocket, path: str):
     from app import main
     token = ws.cookies.get('orh', '')
     authority = f'{ws.headers.get("host")}'
-    if authority not in {f'127.0.0.1:{main.PORT}', f'localhost:{main.PORT}'} or ws.headers.get('origin') != 'http://' + authority or not admin(token):
+    scheme='https' if ws.url.scheme=='wss' else 'http'
+    if not main.NETWORK.same_origin(authority,ws.headers.get('origin'),main.PORT,scheme) or not admin(token):
         await ws.close(code=1008)
         return
     if path != 'control' and not path.startswith('terminal/'):
