@@ -122,6 +122,8 @@ async def lifespan(app):
     yield
     from app.native_terminal import upstream
     await upstream.close()
+    from app.dsh_gateway import close as close_dsh
+    await close_dsh()
     stop_sampling.set();thread.join(5)
 
 app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
@@ -149,6 +151,11 @@ async def security(request:Request, call_next):
             return JSONResponse({'detail':'只读账户无操作权限'},403)
     response=await call_next(request)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+    if request.url.path=='/' and os.environ.get('ORH_DSH_ENABLED')=='1':
+        from app.dsh import settings
+        hostname=request.url.hostname
+        gateway=f"{request.url.scheme}://{f'[{hostname}]' if ':' in hostname else hostname}:{settings()['gateway_port']}"
+        response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("frame-src 'none'","frame-src "+gateway)
     if native:
         response.headers['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     return response
@@ -419,6 +426,8 @@ def task_logs(key:str):
 
 @app.get('/')
 def index():return FileResponse(ROOT/'static/index.html')
+from app.dsh import router as dsh_router
+app.include_router(dsh_router)
 from app.environments import router as environments_router
 app.include_router(environments_router)
 from app.projects import router as projects_router

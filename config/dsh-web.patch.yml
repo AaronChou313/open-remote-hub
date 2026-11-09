@@ -1,0 +1,10 @@
+# RemoteHub's additive overlay: the host is unattended even on loopback.
+# Keep user profiles, model credentials, permissions and plugins unchanged.
+- id: directory-picker
+  name: '@deepseek-ai/dsh-host-directory-picker-auto'
+  disabled: true
+- insert:
+    - id: remotehub-directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+    - id: remotehub-directory-picker-browse-ui
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'

@@ -5,7 +5,7 @@ const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor
 let renderVersion=0;
 let view=localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
+const titles={overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?(path.startsWith('/environments')?30000:10000):60000)});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));return d}
 async function withBusy(button,key,label,work){
@@ -79,7 +79,7 @@ async function refresh(){
  if($('#shell').hidden)return;
  if(busy){refreshQueued=true;return}
  const version=++renderVersion,target=view;busy=true;$('#refresh').disabled=true;
- try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,docker:dockerView,zellij:zellijView,tasks:tasksView,files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
+ try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,docker:dockerView,zellij:zellijView,tasks:tasksView,dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
  catch(e){if(version===renderVersion){if($('#content').textContent==='正在读取本机数据…')$('#content').innerHTML=empty('暂时无法读取，请点击刷新重试。');showError(e.name==='TimeoutError'?Error('读取超时，请稍后刷新。现有任务不会因此停止。'):e,false)}}
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
@@ -90,7 +90,7 @@ $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubm
 $('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError').textContent='';$('#passwordDialog').showModal()};$('#cancelPassword').onclick=()=>$('#passwordDialog').close();$('#passwordForm').onsubmit=async e=>{e.preventDefault();try{if($('#newPassword').value!==$('#newPasswordConfirm').value)throw Error('两次输入的新密码不一致');await api('/auth/password',{current_password:$('#currentPassword').value,password:$('#newPassword').value});$('#passwordForm').reset();$('#passwordDialog').close();notify('密码已更新，其他登录已失效')}catch(e){$('#passwordError').textContent=e.message}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});
 $('#content').onclick=e=>{const b=e.target.closest('button[data-kind]');if(b)act(b.dataset.kind,b.dataset.id,b.dataset.action,b)};
-$('#refresh').onclick=refresh;$('#theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('orh-theme',document.body.classList.contains('dark')?'dark':'light')};$('#logout').onclick=async()=>{try{await api('/logout',{});showLogin()}catch(e){showError(e)}};$('#closeOutput').onclick=()=>$('#outputDialog').close();$('#outputDialog').onclose=()=>{if(stream){stream.close();stream=null}};$('#cancelTask').onclick=()=>$('#taskDialog').close();$('#taskForm').onsubmit=async e=>{
+$('#refresh').onclick=refresh;$('#theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('orh-theme',document.body.classList.contains('dark')?'dark':'light');updateThemeControl()};$('#logout').onclick=async()=>{try{await api('/logout',{});showLogin()}catch(e){showError(e)}};$('#closeOutput').onclick=()=>$('#outputDialog').close();$('#outputDialog').onclose=()=>{if(stream){stream.close();stream=null}};$('#cancelTask').onclick=()=>$('#taskDialog').close();$('#taskForm').onsubmit=async e=>{
  e.preventDefault();const start=e.submitter?.value==='run',button=e.submitter;
  await withBusy(button,'task:new',start?'保存并启动中…':'保存中…',async()=>{
   try{
@@ -103,11 +103,13 @@ $('#refresh').onclick=refresh;$('#theme').onclick=()=>{document.body.classList.t
   }catch(e){$('#taskError').textContent=e.message}
  });
 };
-setInterval(()=>{if(!['files','projects','environments'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!$('#taskDialog').open&&!$('#confirmDialog').open)refresh()},5000);
+setInterval(()=>{if(!['files','projects','environments','dsh'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!$('#taskDialog').open&&!$('#confirmDialog').open)refresh()},5000);
 
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments'].includes(view)&&!$('#workspaceDialog').open)refresh()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh'].includes(view)&&!$('#workspaceDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');
 $('#cancelSession').onclick=()=>$('#sessionDialog').close();$('#sessionForm').onsubmit=e=>{e.preventDefault();const name=$('#sessionName').value.trim();if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)){$('#sessionError').textContent='名称仅支持字母、数字、点、下划线、短横线';return}if(mountTerminal(name))$('#sessionDialog').close()};
 
+function updateThemeControl(){const dark=document.body.classList.contains('dark'),label=dark?'切换为浅色模式':'切换为暗色模式';$('#theme').setAttribute('aria-label',label);$('#theme').setAttribute('title',label);$('#themeMoon').hidden=dark;$('#themeSun').hidden=!dark}
+updateThemeControl();
 window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubWorkspace?.isDirty()){e.preventDefault();e.returnValue=''}});
 enter();

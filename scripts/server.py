@@ -7,6 +7,25 @@ sys.path.insert(0,str(root))
 os.chdir(root)
 from app.main import PORT, NETWORK
 import uvicorn
-# Do not trust client-supplied forwarding headers. TLS termination needs an
-# explicitly trusted proxy design rather than implicit X-Forwarded-* support.
-uvicorn.run('app.main:app',host=NETWORK.bind,port=PORT,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False)
+# Both listeners share one lifecycle; DSH's native host remains an independent
+# loopback process so closing the console never ends its current agent work.
+from app.main import app
+from app.dsh import settings
+cfg=settings()
+if cfg['enabled']:
+    import socket
+    from app.dsh_gateway import Dispatch
+    sockets=[]
+    try:
+        for port in (PORT,cfg['gateway_port']):
+            address=NETWORK.bind
+            family=socket.AF_INET6 if ':' in address else socket.AF_INET
+            sock=socket.socket(family,socket.SOCK_STREAM)
+            sockets.append(sock);sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+            sock.bind((address,port));sock.set_inheritable(True)
+        config=uvicorn.Config(Dispatch(app,cfg['gateway_port']),log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False)
+        uvicorn.Server(config).run(sockets=sockets)
+    finally:
+        for sock in sockets:sock.close()
+else:
+    uvicorn.run(app,host=NETWORK.bind,port=PORT,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False)

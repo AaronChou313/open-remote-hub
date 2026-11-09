@@ -31,3 +31,5 @@ Zellij 有可能在 socket 已消失、所有子任务均结束后留下继续�
 网关保持浏览器到 Zellij 的原生消息转发，不注入键盘处理器、布局命令或自建终端层。网关到 Zellij 不发送库默认的定时 Ping，避免 0.45.1 对不支持帧的报错；这项兼容处理不被视为旧会话所有黑屏情况的根因修复。
 
 网络入口由 `app/network.py` 统一校验，`ORH_HOST` 配置监听、`ORH_ALLOWED_HOSTS` 配置目标 IP/主机名，HTTP 与原生终端 WebSocket 共用规则。默认 loopback，不接受通配目标地址；严格同源，不信任转发头。Zellij 上游保持 loopback，启动探针跟随绑定地址，便于迁移 macOS/Ubuntu。
+
+DSH 由 `app/dsh.py` 管理已安装官方 CLI，`scripts/dsh_host.py` 作为独立 supervisor 捕获启动认证、遮盖日志并保留后台 Host。`app/dsh_auth.py` 只调用官方 Token 交换，不解析/伪造其签名秘密。`app/dsh_gateway.py` 转发原生 HTTP/流和 typed Remote mux；`scripts/server.py` 在启用时通过两个监听 socket 的实际本地端口分发到控制台/DSH 网关，同一生命周期、不同 Origin。Host/Origin 不参与应用选择。DSH 只接受管理员 Cookie，网关认证与上游凭据分离。桌面 Host 与受管 Web Host 不混同。

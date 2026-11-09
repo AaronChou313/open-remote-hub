@@ -19,8 +19,8 @@ from fastapi import HTTPException
 
 mutex=threading.RLock()
 DIR=os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC
-BLOCKED={'.git','.ssh','.aws','.gnupg','.codex','.kube','.docker','.config','.runtime','.remotehub-trash','node_modules'}
-SENSITIVE={'.npmrc','.pypirc','.netrc','.git-credentials','credentials.json','auth.json','id_rsa','id_ed25519'}
+BLOCKED={'.git','.ssh','.aws','.gnupg','.codex','.dsh','.kube','.docker','.config','.runtime','.remotehub-trash','node_modules'}
+SENSITIVE={'.npmrc','.pypirc','.netrc','.git-credentials','.credentials.yaml','credentials.json','auth.json','id_rsa','id_ed25519'}
 SYSTEM=('/System','/Library','/private','/etc','/usr','/bin','/sbin','/dev','/proc','/sys','/root','/opt','/Applications','/cores','/.vol','/.nofollow','/.resolve')
 
 
@@ -43,8 +43,9 @@ def roots():
 
 
 def sensitive_absolute(path):
-    homes=[Path.home()/'Library'/x for x in ('Keychains','Cookies','Safari','Accounts','Mail','Messages','Application Support/Google/Chrome','Application Support/Microsoft Edge','Application Support/Firefox','Application Support/com.apple.TCC')]
-    return any(path==p or p in path.parents for p in homes) or any(path==Path(x) or Path(x) in path.parents for x in ('/dev','/proc','/sys','/private/var/db','/private/var/root'))
+    homes=[Path.home()/'Library'/x for x in ('Keychains','Cookies','Safari','Accounts','Mail','Messages','Application Support/Google/Chrome','Application Support/Microsoft Edge','Application Support/Firefox','Application Support/com.apple.TCC','Application Support/@deepseek-ai/dsh-desktop')]
+    custom_dsh=Path(os.environ.get('ORH_DSH_HOME',str(Path.home()/'.dsh'))).expanduser().resolve()
+    return path==custom_dsh or custom_dsh in path.parents or any(path==p or p in path.parents for p in homes) or any(path==Path(x) or Path(x) in path.parents for x in ('/dev','/proc','/sys','/private/var/db','/private/var/root'))
 
 
 def readonly(path):

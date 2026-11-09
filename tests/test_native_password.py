@@ -93,22 +93,29 @@ def test_live_official_client_and_ws(c,monkeypatch):
     # Reuse the real private gateway token without copying it into test reports.
     if not (REAL_DATA/'zellij-gateway.json').exists():pytest.skip('Start the local console and native gateway before this live test')
     (main.DATA/'zellij-gateway.json').write_bytes((REAL_DATA/'zellij-gateway.json').read_bytes())
-    assert c.get('/terminal/codex-agent').status_code==200
-    asset=c.get('/terminal/assets/app.js')
-    assert asset.status_code==200 and b'import.meta.url' in asset.content
-    assert 'set-cookie' not in asset.headers
-    bootstrap=c.post('/terminal/session?session=codex-agent')
-    assert bootstrap.status_code==200,bootstrap.text
-    boot=bootstrap.json()
-    assert boot['session_name']=='codex-agent'
-    with c.websocket_connect(ORIGIN.replace('http:','ws:')+'/terminal/ws/terminal/codex-agent?web_client_id='+boot['web_client_id']+'&rows=30&cols=102',headers={'Origin':ORIGIN,'Host':f'127.0.0.1:{main.PORT}'}) as term:
-        with c.websocket_connect(ORIGIN.replace('http:','ws:')+'/terminal/ws/control?web_client_id='+boot['web_client_id'],headers={'Origin':ORIGIN,'Host':f'127.0.0.1:{main.PORT}'}) as control:
-            data=term.receive()
-            assert data['type']=='websocket.send'
-            assert control is not None
-    assert c.get('/api/zellij').status_code==200
-    c.post('/api/logout',json={})
-    assert c.get('/terminal/codex-agent').status_code==403
+    name='orh-gateway-'+secrets.token_hex(3)
+    from app.zellij_manage import mutate
+    mutate(name,'create')
+    try:
+        assert c.get('/terminal/'+name).status_code==200
+        asset=c.get('/terminal/assets/app.js')
+        assert asset.status_code==200 and b'import.meta.url' in asset.content
+        assert 'set-cookie' not in asset.headers
+        bootstrap=c.post('/terminal/session?session='+name)
+        assert bootstrap.status_code==200,bootstrap.text
+        boot=bootstrap.json()
+        assert boot['session_name']==name
+        url=ORIGIN.replace('http:','ws:')+'/terminal/ws/'
+        headers={'Origin':ORIGIN,'Host':f'127.0.0.1:{main.PORT}'}
+        with c.websocket_connect(url+'terminal/'+name+'?web_client_id='+boot['web_client_id']+'&rows=30&cols=102',headers=headers) as term:
+            with c.websocket_connect(url+'control?web_client_id='+boot['web_client_id'],headers=headers) as control:
+                assert term.receive()['type']=='websocket.send'
+                assert control is not None
+        assert c.get('/api/zellij').status_code==200
+        c.post('/api/logout',json={})
+        assert c.get('/terminal/'+name).status_code==403
+    finally:
+        mutate(name,'purge')
 
 
 @pytest.mark.live
