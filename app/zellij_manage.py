@@ -1,19 +1,14 @@
-"""Scoped Zellij operations: session -> tab ID -> terminal pane ID."""
-import json
+"""Session lifecycle only; native Zellij owns tabs and panes."""
 import os
 from pathlib import Path
-import re
 import shutil
 import threading
 import time
 import secrets
 import psutil
-from fastapi import APIRouter,Depends,HTTPException
-from pydantic import BaseModel,Field
-from app.access import admin
+from fastapi import HTTPException
 from app.zellij_sessions import host_sessions
 
-router=APIRouter()
 mutex=threading.RLock()
 
 
@@ -98,97 +93,3 @@ def mutate(name,action,new_name=''):
             if not current(name):return {'output':output,'backup':saved}
             time.sleep(.1)
         raise HTTPException(409,'Zellij 尚未移除会话记录，请稍后重试；备份已保留')
-
-
-def panes(name):
-    m=main();m.zname(name)
-    row=current(name)
-    if not row or row['status']!='running':raise HTTPException(409,'会话已退出')
-    return json.loads(m.cli(['zellij','--session',name,'action','list-panes','--all','--json'],3))
-
-
-def tab_rows(name):
-    m=main();m.zname(name)
-    row=current(name)
-    if not row or row['status']!='running':raise HTTPException(409,'会话已退出')
-    return json.loads(m.cli(['zellij','--session',name,'action','list-tabs','--all','--json'],3))
-
-
-@router.get('/api/zellij/{name}/structure',dependencies=[Depends(admin)])
-def structure(name:str):
-    m=main();m.zname(name);row=current(name)
-    if not row:raise HTTPException(404,'会话已删除')
-    if row['status']!='running':return {'name':name,'status':'exited','tabs':[]}
-    rows=panes(name);tabs={t['tab_id']:dict(id=t['tab_id'],position=t['position'],name=t['name'],panes=[],plugins=[],pending=t.get('viewport_rows',0)==0) for t in tab_rows(name)}
-    for p in rows:
-        key=p['tab_id']
-        tab=tabs.setdefault(key,dict(id=key,position=p.get('tab_position',0),name=p.get('tab_name') or '未命名标签页',panes=[],plugins=[]))
-        if p.get('is_plugin'):
-            tab['plugins'].append({'id':'plugin_'+str(p['id']),'title':p.get('title'),'plugin':p.get('plugin_url')})
-        else:
-            tab['panes'].append(dict(id='terminal_'+str(p['id']),title=p.get('title') or '终端',command=p.get('pane_command') or p.get('terminal_command') or '',cwd=p.get('pane_cwd') or '',focused=p.get('is_focused',False),floating=p.get('is_floating',False),held=p.get('is_held',False),exited=p.get('exited',False)))
-    return {'name':name,'status':'running','pid':row['pid'],'tabs':sorted(tabs.values(),key=lambda x:x['position'])}
-
-
-def settle(name,predicate,tabs=False):
-    deadline=time.monotonic()+3
-    while time.monotonic()<deadline:
-        try:rows=tab_rows(name) if tabs else panes(name)
-        except HTTPException as e:
-            if e.status_code==409:rows=[]
-            else:raise
-        if predicate(rows):return True
-        time.sleep(.08)
-    return False
-
-
-class Change(BaseModel):
-    action:str
-    confirm:str=''
-    name:str=Field(default='',max_length=80)
-
-
-def check(body,name):
-    if body.confirm!=name:raise HTTPException(400,'确认目标不匹配')
-    if '\x00' in body.name or '\n' in body.name:raise HTTPException(400,'名称无效')
-
-
-@router.post('/api/zellij/{name}/tabs',dependencies=[Depends(admin)])
-def new_tab(name:str,body:Change):
-    m=main();m.zname(name);check(body,name);panes(name)
-    if body.action!='create':raise HTTPException(400,'Unsupported action')
-    args=['zellij','--session',name,'action','new-tab','--no-focus']
-    if body.name:args+=['--name='+body.name]
-    result=m.cli(args,5)
-    identifier=int(result.strip()) if result.strip().isdigit() else None
-    settled=settle(name,lambda rows:any(p.get('tab_id')==identifier if identifier is not None else p.get('name')==body.name for p in rows),tabs=True)
-    m.audit('zellij-tab',name,'create');return {'output':result,'pending':not settled}
-
-
-@router.post('/api/zellij/{name}/tabs/{tab_id}',dependencies=[Depends(admin)])
-def tab_action(name:str,tab_id:int,body:Change):
-    m=main();check(body,name)
-    before=panes(name)
-    if not any(p.get('tab_id')==tab_id for p in tab_rows(name)):raise HTTPException(404,'标签页已关闭')
-    if body.action=='close':args=['close-tab','--tab-id',str(tab_id)]
-    elif body.action=='rename' and body.name:args=['rename-tab','--tab-id',str(tab_id),'--',body.name]
-    elif body.action=='pane':args=['new-pane','--tab-id',str(tab_id),'--no-focus']
-    else:raise HTTPException(400,'Unsupported action')
-    result=m.cli(['zellij','--session',name,'action',*args],5)
-    old_ids={p['id'] for p in before if not p.get('is_plugin')}
-    if body.action=='close':check_result=lambda rows:not any(p.get('tab_id')==tab_id for p in rows)
-    elif body.action=='rename':check_result=lambda rows:any(p.get('tab_id')==tab_id and p.get('name')==body.name for p in rows)
-    else:check_result=lambda rows:any(p.get('tab_id')==tab_id and not p.get('is_plugin') and p['id'] not in old_ids for p in rows)
-    settled=settle(name,check_result,tabs=body.action in ('close','rename'))
-    m.audit('zellij-tab',name+'/'+str(tab_id),body.action);return {'output':result,'pending':not settled}
-
-
-@router.post('/api/zellij/{name}/panes/{pane_id}',dependencies=[Depends(admin)])
-def pane_action(name:str,pane_id:str,body:Change):
-    m=main();check(body,name)
-    if not re.fullmatch(r'terminal_\d{1,6}',pane_id):raise HTTPException(400,'Pane ID 无效')
-    if not any(not p.get('is_plugin') and pane_id=='terminal_'+str(p['id']) for p in panes(name)):raise HTTPException(404,'终端窗格已关闭')
-    if body.action!='close':raise HTTPException(400,'Unsupported action')
-    result=m.cli(['zellij','--session',name,'action','close-pane','--pane-id',pane_id],5)
-    settled=settle(name,lambda rows:not any(not p.get('is_plugin') and pane_id=='terminal_'+str(p['id']) for p in rows))
-    m.audit('zellij-pane',name+'/'+pane_id,'close');return {'output':result,'pending':not settled}

@@ -138,6 +138,13 @@ async def native(request: Request, path: str):
                     headers={'Content-Type': r.headers.get('content-type', 'application/octet-stream')})
 
 
+def native_connection(url,cookie):
+    # Zellij 0.45.1 logs protocol Ping as unsupported. Match native browser
+    # behavior instead of injecting automatic upstream heartbeat frames.
+    return websockets.connect(url,origin=upstream.base(),additional_headers={'Cookie':cookie},
+                              max_size=4*1024*1024,proxy=None,ping_interval=None,close_timeout=2)
+
+
 connections = {}
 
 
@@ -185,7 +192,7 @@ async def native_socket(ws: WebSocket, path: str):
                 await ws.close(code=1008)
                 return
         url += '?' + urlencode(query)
-        async with websockets.connect(url, origin=upstream.base(), additional_headers={'Cookie': cookie}, max_size=4*1024*1024, proxy=None) as backend:
+        async with native_connection(url,cookie) as backend:
             await ws.accept()
             accepted = True
             async def browser_to_native():

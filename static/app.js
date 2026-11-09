@@ -5,7 +5,7 @@ const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor
 let renderVersion=0;
 let view=localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','会话 / Session → 标签页 / Tab → 终端窗格 / Pane'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
+const titles={overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?10000:60000)});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));return d}
 async function withBusy(button,key,label,work){

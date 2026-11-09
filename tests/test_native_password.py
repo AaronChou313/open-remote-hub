@@ -106,7 +106,7 @@ def test_live_official_client_and_ws(c,monkeypatch):
             data=term.receive()
             assert data['type']=='websocket.send'
             assert control is not None
-    assert c.get('/api/zellij/codex-agent/panes').status_code==200
+    assert c.get('/api/zellij').status_code==200
     c.post('/api/logout',json={})
     assert c.get('/terminal/codex-agent').status_code==403
 

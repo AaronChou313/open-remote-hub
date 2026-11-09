@@ -35,43 +35,43 @@ def test_unknown_delete_is_idempotent(c):
     assert c.post('/api/zellij/orh-nonexistent',json={'action':'delete'}).status_code==400
 
 
+
+def test_console_has_no_tab_or_pane_endpoints(c):
+    for path in ['/structure','/panes','/output']:
+        assert c.get('/api/zellij/ordinary'+path).status_code==404
+    for path in ['/tabs','/tabs/0','/panes/terminal_0']:
+        assert c.post('/api/zellij/ordinary'+path,json={'action':'close','confirm':'ordinary'}).status_code==404
+
+
+def test_native_gateway_does_not_send_unsupported_heartbeat(monkeypatch):
+    from app import native_terminal as native
+    captured={}
+    monkeypatch.setattr(native.websockets,'connect',lambda *a,**kw:captured.update(kw))
+    native.native_connection('ws://127.0.0.1:8082/ws/terminal/test','private')
+    assert captured['ping_interval'] is None
+    assert captured['close_timeout']==2
+
+
 @pytest.mark.live
-def test_real_session_tab_pane_lifecycle(c):
-    name='orh-tree-'+secrets.token_hex(3)
+def test_real_session_lifecycle_only(c):
+    name='orh-session-'+secrets.token_hex(3)
     baseline={s['name'] for s in host_sessions()}
-    assert c.post('/api/zellij/'+name+'/enter',json={}).status_code==200
     path='/api/zellij/'+name
-    def change(url,action,**kw):
-        r=c.post(url,json={'action':action,'confirm':name,**kw})
+    def change(action):
+        r=c.post(path,json={'action':action,'confirm':name})
         assert r.status_code==200,r.text
         return r.json()
-    def structure():
-        r=c.get(path+'/structure');assert r.status_code==200,r.text;return r.json()
     try:
-        first=structure()['tabs'][0]
-        assert first['panes'] and first['plugins']
-        change(path+'/tabs','create',name='work')
-        tab=next(t for t in structure()['tabs'] if t['name']=='work')
-        change(path+'/tabs/'+str(tab['id']),'rename',name='renamed')
-        assert next(t for t in structure()['tabs'] if t['id']==tab['id'])['name']=='renamed'
-        original={p['id'] for p in first['panes']}
-        change(path+'/tabs/'+str(first['id']),'pane')
-        for _ in range(15):
-            now=next(t for t in structure()['tabs'] if t['id']==first['id'])
-            added=[p for p in now['panes'] if p['id'] not in original]
-            if added:break
-            time.sleep(.1)
-        assert added
-        change(path+'/panes/'+added[0]['id'],'close')
-        assert c.post(path+'/panes/plugin_1',json={'action':'close','confirm':name}).status_code==400
-        change(path+'/tabs/'+str(tab['id']),'close')
-        assert len(structure()['tabs'])==1
-        # Active deletion requires explicit end-and-delete, not an ambiguous history delete.
-        assert c.post(path,json={'action':'delete','confirm':name}).status_code==409
-        result=change(path,'purge')
+        assert c.post(path+'/enter',json={}).status_code==200
+        r=c.post(path,json={'action':'delete','confirm':name})
+        assert r.status_code==409
+        change('kill')
+        assert next(s for s in host_sessions() if s['name']==name)['status']=='exited'
+        result=change('delete')
         assert result.get('backup')
-        assert not any(s['name']==name for s in host_sessions())
-        assert change(path,'delete')['already_deleted']
+        assert change('delete')['already_deleted']
+        assert c.post(path+'/enter',json={}).status_code==200
+        change('purge')
     finally:
-        if any(s['name']==name for s in host_sessions()):change(path,'purge')
+        if any(s['name']==name for s in host_sessions()):change('purge')
     assert {s['name'] for s in host_sessions()}==baseline

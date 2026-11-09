@@ -418,8 +418,4 @@ def task_logs(key:str):
 def index():return FileResponse(ROOT/'static/index.html')
 from app.native_terminal import router as native_router
 app.include_router(native_router)
-from app.terminal import router as terminal_router
-app.include_router(terminal_router)
-from app.zellij_manage import router as zellij_router
-app.include_router(zellij_router)
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
