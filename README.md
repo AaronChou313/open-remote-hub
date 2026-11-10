@@ -141,6 +141,24 @@ ORH_MAX_UPLOAD_MB=2048
 
 文件路径采用目录 FD 与 `O_NOFOLLOW` 逐级访问，`unrestricted` 模式先解析链接、核验目标范围再打开目录 FD；递归复制保留链接而不递归进入链接目标。上传/复制先私有暂存再原子无覆盖发布。macOS/Linux 使用原子无覆盖重命名；其他平台失败关闭。版本检查和进程锁保护控制台内并发操作；这不是 OS 沙箱，不能阻止拥有相同系统账户权限的本机进程移动已打开目录，也不提供对外部编辑器写入的文件系统级事务快照。
 
+## Clash 代理与网络
+
+侧栏“代理与网络”通过已有 Clash / Mihomo 控制接口显示内核版本、出站模式、TUN 状态、策略组当前节点、内存、累计流量和连接数量。macOS 额外通过平台适配器读取当前 HTTP / HTTPS / SOCKS 系统代理和 Clash VPN 状态。TUN / VPN 已连接时，HTTP / SOCKS 系统代理仍可显示关闭。点击“活跃连接”在详情窗口查看前 50 条连接及其策略链、规则和传输量；页面使用顶部“刷新”读取最新状态。
+
+管理员可切换规则 / 全局 / 直连模式、切换手动 Selector 策略组节点，并测试所选节点延迟。模式和节点变更显示具体目标及影响，确认一次后执行，操作前核验当前状态、操作后重新读取确认结果。延迟测试使用固定 HTTPS 204 地址，保持当前选择。自动策略组由 Clash 自己选择；控制台仅显示其当前结果。内核变更在当前运行实例生效，切换原客户端配置或重启后可能恢复配置中的值。
+
+本机 Clash for macOS 1.0.16 的 HTTP 外部控制器当前关闭，RemoteHub 自动使用已存在的 `~/Library/Group Containers/group.com.hako.network/clash.sock`。控制台密码登录后即可管理，无需额外安装面板。HTTP 控制器地址及密钥可在目标主机 `.env` 设置，支持 Ubuntu 上的 Mihomo。HTTP(S) 控制地址限制为本机回环地址，浏览器只访问 RemoteHub 的明确 API。
+
+```dotenv
+# Unix Socket 优先；未配置时自动检测 macOS Clash 的 Socket
+# ORH_CLASH_SOCKET=/path/to/clash.sock
+# 使用已经启动的本机 HTTP 控制器
+# ORH_CLASH_URL=http://127.0.0.1:9090
+# ORH_CLASH_SECRET=your-secret
+```
+
+控制器密钥只在后端使用。API 返回明确筛选的状态字段，过滤配置中的认证、订阅和其他凭据。仅管理员可执行变更和测速，沿用现有身份认证、同源检查和审计日志。VPN 启停、系统代理写入、订阅导入 / 切换和配置编辑目前由 Clash 原客户端处理。官方 App 自带 `clash-cli` 支持状态、模式、策略组和其他诊断操作；RemoteHub 当前接入既有本机 Socket 的兼容 API。[Clash CLI 文档](https://clash.md/guide/clash-cli) · [Mihomo API 文档](https://wiki.metacubex.one/api/)
+
 ## Web 终端复制、粘贴与手机输入
 
 终端右上角“剪贴板”提供快捷键说明、图片上传和最近选中文字。Web Client 原先直接调用 `navigator.clipboard` 写入选区，局域网 / 组网 HTTP 地址通常缺少该接口；控制台现在提供浏览器旧式复制回退，并区分“已复制”与“已发送复制请求”。旧式接口无法可靠核验系统剪贴板是否更新，浏览器限制下可点“复制”，再按 `Ctrl+C` / `⌘C`，或在手机上长按选中文字复制。受信任 HTTPS / 本机安全上下文可使用标准剪贴板接口。[浏览器剪贴板要求](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText)

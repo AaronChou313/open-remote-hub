@@ -6,6 +6,7 @@ FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入
 | --- | --- |
 | app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
 | app/projects.py | 项目记录、只读 Git、预设任务与文件/终端/环境关联 |
+| app/proxy.py / static/proxy.js | 固定本机 Clash / Mihomo 控制接口、状态筛选、确认后的模式 / 节点选择与连接详情 |
 | app/environments.py | 主机工具、环境元数据、绑定与明确确认的 venv 创建 |
 | app/workspace_store.py | 与系统指标分离的私有 SQLite 元数据和版本比较更新 |
 | app/workspace_commands.py | 有界 argv 工具查询，固定环境与 FD 工作目录 |

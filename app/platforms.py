@@ -21,8 +21,25 @@ class Host:
     def services(self):
         raise NotImplementedError
 
+    def proxy_status(self):
+        return dict(platform='Linux',proxies=[],vpn=None,note='Linux 系统代理由桌面环境或服务配置管理')
+
 
 class MacHost(Host):
+    def proxy_status(self):
+        import re
+        values=command(['/usr/sbin/scutil','--proxy'],timeout=4)
+        def value(key):
+            match=re.search(r'^\s*'+key+r'\s*:\s*(.+)$',values,re.M)
+            return match[1].strip() if match else None
+        proxies=[dict(name=name,enabled=value(prefix+'Enable')=='1',server=value(prefix+'Proxy'),port=value(prefix+'Port')) for name,prefix in [('HTTP','HTTP'),('HTTPS','HTTPS'),('SOCKS','SOCKS')]]
+        vpn=None
+        for line in command(['/usr/sbin/scutil','--nc','list'],timeout=4).splitlines():
+            if '[VPN:com.hako.network]' not in line:continue
+            match=re.search(r'\(([^)]+)\).*?"([^"]+)"',line)
+            if match:vpn=dict(state=match[1],name=match[2])
+        return dict(platform='macOS',proxies=proxies,vpn=vpn)
+
     def services(self):
         rows = command(['launchctl', 'list']).splitlines()[1:]
         return [dict(pid=None if a == '-' else int(a), exit=b, name=c, source='launchd', managed=False) for a,b,c in (x.split(None,2) for x in rows) if not c.startswith(('com.apple.', 'application.'))]

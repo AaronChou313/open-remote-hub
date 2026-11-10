@@ -438,4 +438,6 @@ from app.native_terminal import router as native_router
 app.include_router(native_router)
 from app.terminal_browser import router as terminal_browser_router
 app.include_router(terminal_browser_router)
+from app.proxy import router as proxy_router
+app.include_router(proxy_router)
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
