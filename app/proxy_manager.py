@@ -237,7 +237,11 @@ async def operate(body:Operation):
             data=library();row=find(data,body.id,body.revision)
             if body.action in ('delete','save','activate') and body.confirm!=row['name']:raise HTTPException(400,'请确认配置名称')
             if body.action=='delete':
-                if data['active']==row['id']:raise HTTPException(409,'当前配置正在使用，请先切换到其他配置')
+                if data['active']==row['id']:
+                    state=await call('GET','/orh/state')
+                    if state['enabled']:raise HTTPException(409,'请先停止代理，再移除当前配置')
+                    await call('POST','/orh/control',{'action':'apply','source':{},'revision':state['revision']})
+                    data['active']=None
                 # Recoverable private copy, never silently destroy credentials.
                 trash=root()/'trash';trash.mkdir(mode=0o700,exist_ok=True);atomic(trash/(row['id']+'.json'),row)
                 data['profiles'].remove(row)

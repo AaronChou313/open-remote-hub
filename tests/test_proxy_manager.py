@@ -51,7 +51,9 @@ def test_profile_lifecycle_validation_conflict_and_recovery(profiles):
     assert c.post('/api/proxy/manager/profile',json=args).status_code==200
     assert len(mutations)==1 and state['config_revision']==engine.digest(SOURCE)
     assert c.get('/api/proxy/manager').json()['consistent']
+    state['enabled']=True
     assert c.post('/api/proxy/manager/profile',json={**args,'action':'delete'}).status_code==409
+    state['enabled']=False
     detail=c.get('/api/proxy/manager/profile/'+row['id']).json()
     assert 'fixture' in detail['text']
     assert c.post('/api/proxy/manager/profile',json={**args,'action':'save','text':'bad'}).status_code==422
@@ -63,6 +65,10 @@ def test_profile_lifecycle_validation_conflict_and_recovery(profiles):
     assert c.post('/api/proxy/manager/profile',json=remove).status_code==200
     assert (manager.root()/'trash'/(other['id']+'.json')).exists()
     assert (manager.root()/'profiles.json').stat().st_mode&0o777==0o600
+    current=c.get('/api/proxy/manager').json()['profiles'][0]
+    assert c.post('/api/proxy/manager/profile',json=dict(action='delete',id=current['id'],revision=current['revision'],confirm=current['name'])).status_code==200
+    assert not c.get('/api/proxy/manager').json()['profiles']
+    assert mutations[-1]['source']=={},'Stopped current profile can be removed without importing a replacement'
 
 
 def test_subscription_credentials_not_returned_and_failed_update_keeps_old(profiles,monkeypatch):
