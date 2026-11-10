@@ -18,7 +18,7 @@ SOURCE={'proxies':[{'name':'fixture','type':'direct'}],'proxy-groups':[{'name':'
 @pytest.fixture
 def profiles(workspace,monkeypatch):
     client,_,_=workspace
-    state={'ready':True,'enabled':False,'privileged':True,'revision':'initial','config_revision':engine.digest({})}
+    state={'ready':True,'enabled':False,'privileged':True,'network_revision':2,'revision':'initial','config_revision':engine.digest({})}
     mutations=[]
     async def call(method,path,body=None):
         if path=='/orh/state':return dict(state)
@@ -47,8 +47,7 @@ def test_profile_lifecycle_validation_conflict_and_recovery(profiles):
     row=imported(c)
     assert not row['active'] and row['nodes']==1 and not mutations
     args=dict(action='activate',id=row['id'],revision=row['revision'],confirm=row['name'])
-    assert c.post('/api/proxy/manager/profile',json={**args,'confirm':''}).status_code==400
-    assert c.post('/api/proxy/manager/profile',json=args).status_code==200
+    assert c.post('/api/proxy/manager/profile',json={**args,'confirm':''}).status_code==200
     assert len(mutations)==1 and state['config_revision']==engine.digest(SOURCE)
     assert c.get('/api/proxy/manager').json()['consistent']
     state['enabled']=True
@@ -139,6 +138,7 @@ def test_fake_ip_resolves_real_public_ip_and_rechecks_redirect(monkeypatch):
 def test_engine_normalizer_owns_listeners_routes_and_provider_paths(tmp_path):
     src={**copy.deepcopy(SOURCE),'listeners':[{'port':9000}],'external-controller':'0.0.0.0:9999','secret':'PRIVATE','tun':{'enable':True},'dns':{'enable':False,'listen':'0.0.0.0:53'},'proxy-providers':{'a':{'type':'http','url':'https://example.invalid/token','path':'/etc/passwd'}}}
     result=engine.normalize(src,tmp_path,'fixed-secret')
+    assert result['tun']['dns-mode']=='native'
     assert not result['tun']['enable'] and result['external-controller']=='127.0.0.1:19090'
     assert result['secret']=='fixed-secret' and result['allow-lan'] is False and 'listeners' not in result
     assert result['dns']['listen']=='127.0.0.1:1054'

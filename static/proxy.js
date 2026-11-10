@@ -1,7 +1,6 @@
 'use strict';
 window.RemoteHubProxy=(()=>{
- let searchText='',tab='profiles';
- const modeName=value=>({rule:'规则',global:'全局',direct:'直连'}[value]||value||'—');
+ let tab='profiles';
  async function render(check){
   const [data,manager]=await Promise.all([api('/proxy'),api('/proxy/manager')]);if(!check())return;
   const admin=me.role==='admin';
@@ -12,34 +11,9 @@ window.RemoteHubProxy=(()=>{
   const managerPanel=manager.managed?RemoteHubProxyManager.markup(manager,admin):'';
   const bindManager=()=>manager.managed?RemoteHubProxyManager.bind(manager,check,()=>render(check),()=>tab,value=>{tab=value}):undefined;
   if(!data.available){$('#content').innerHTML=managerPanel+'<div id="proxyRuntime">'+systemPanel+empty(esc(data.error))+'</div>';await bindManager();return}
-  $('#content').innerHTML=managerPanel+`<div id="proxyRuntime"><div class="proxy-heading"><div><strong>${manager.managed?'Mihomo':'Clash / Mihomo'} ${esc(data.version||'')}</strong><p class="muted">${modeName(data.mode)}模式 · TUN ${data.tun_enabled?'已启用':'未启用'} · 更新于 ${new Date(data.time*1000).toLocaleTimeString()}</p></div><button id="proxyConnections">活跃连接 ${data.connection_count}</button></div><div class="proxy-totals"><span>内存 <strong>${bytes(data.memory)}</strong></span><span>累计上传 <strong>${bytes(data.upload_total)}</strong></span><span>累计下载 <strong>${bytes(data.download_total)}</strong></span></div>${systemPanel}<div class="work-toolbar"><label for="proxyMode">出站模式</label><select id="proxyMode" ${!admin?'disabled':''}>${['rule','global','direct'].map(mode=>`<option value="${mode}" ${mode===data.mode?'selected':''}>${modeName(mode)}</option>`).join('')}</select>${admin?'<button id="proxyApplyMode">应用模式</button>':''}<label class="sr-only" for="proxySearch">搜索策略组或节点</label><input id="proxySearch" placeholder="搜索策略组或节点"></div><div id="proxyGroups"></div></div>`;
+  $('#content').innerHTML=managerPanel+`<div id="proxyRuntime"><div class="proxy-heading"><div><strong>${manager.managed?'Mihomo':'Clash / Mihomo'} ${esc(data.version||'')}</strong><span class="proxy-runtime-state">TUN ${data.tun_enabled?'已启用':'未启用'}</span></div><button id="proxyConnections">活跃连接 ${data.connection_count}</button></div><details class="proxy-network-details"><summary>网络与资源${system.vpn?' · '+systemText:''}</summary><div class="proxy-totals"><span>内存 <strong>${bytes(data.memory)}</strong></span><span>累计上传 <strong>${bytes(data.upload_total)}</strong></span><span>累计下载 <strong>${bytes(data.download_total)}</strong></span></div>${systemPanel}</details><div id="proxyNodeControls"></div><div id="proxyGroups"></div></div>`;
   const guarded=fn=>async()=>{try{await fn()}catch(error){if(check())showError(error)}};
-  async function apply(button,body,title,message){
-   if(!await confirmAction(title,message))return;
-   if(!check())return;
-   await withBusy(button,'proxy:control','应用中…',()=>api('/proxy/control',body));
-   notify('Clash 状态已更新');if(check())await render(check);
-  }
-  if(admin)$('#proxyApplyMode').onclick=guarded(async()=>{
-   const value=$('#proxyMode').value;if(value===data.mode)return;
-   await apply($('#proxyApplyMode'),{action:'mode',value,revision:data.revision,confirm:'mode'},'切换 Clash 出站模式',`从${modeName(data.mode)}改为${modeName(value)}。这会改变主机后续连接的路由方式。`);
-  });
-  function draw(){
-   const q=searchText.toLowerCase();
-   const groups=data.groups.filter(group=>(group.name+' '+group.members.join(' ')).toLowerCase().includes(q));
-   $('#proxyGroups').innerHTML=groups.length?`<div class="proxy-groups">${groups.map((group,i)=>`<article class="proxy-group"><div class="proxy-group-title"><h2>${esc(group.name)}</h2><span class="badge">${esc(group.type)}</span></div><p class="proxy-current">当前 <strong>${esc(group.current||'—')}</strong></p><label class="sr-only" for="proxyGroup${i}">${esc(group.name)} 节点</label><select id="proxyGroup${i}" ${!admin||!group.selectable?'disabled':''}>${group.members.map(name=>`<option value="${esc(name)}" ${name===group.current?'selected':''}>${esc(name)}</option>`).join('')}</select><div class="toolbar">${admin&&group.selectable?`<button data-proxy-select="${i}">切换节点</button>`:''}${admin?`<button data-proxy-delay="${i}">测试延迟</button>`:''}<span id="proxyDelay${i}" class="muted" role="status"></span></div></article>`).join('')}</div>`:empty('没有匹配的策略组或节点。');
-   document.querySelectorAll('[data-proxy-select]').forEach(button=>button.onclick=guarded(async()=>{
-    const i=Number(button.dataset.proxySelect),group=groups[i],value=$('#proxyGroup'+i).value;
-    if(value===group.current)return;
-    await apply(button,{action:'select',target:group.name,value,revision:group.revision,confirm:group.name},'切换 '+group.name,`从「${group.current}」改为「${value}」。使用该策略组的新连接将采用此选择。`);
-   }));
-   document.querySelectorAll('[data-proxy-delay]').forEach(button=>button.onclick=guarded(async()=>{
-    const i=Number(button.dataset.proxyDelay),name=$('#proxyGroup'+i).value||groups[i].current,target=$('#proxyDelay'+i);
-    const result=await withBusy(button,'proxy:delay:'+name,'测速中…',()=>api('/proxy/delay',{name}));
-    if(result&&check()&&$('#proxyDelay'+i)===target)target.textContent=Number.isFinite(result.delay)?result.delay+' ms':'未返回延迟';
-   }));
-  }
-  $('#proxySearch').value=searchText;$('#proxySearch').oninput=event=>{searchText=event.target.value;draw()};draw();
+  await RemoteHubProxyNodes.mount(data,check,{scope:manager.managed?manager.engine.config_revision:undefined,concurrency:manager.managed&&!(manager.engine.network_revision>=2)?1:4});
   async function showConnections(){
    const result=await withBusy($('#proxyConnections'),'proxy:connections','读取中…',()=>api('/proxy/connections'));if(!check())return;
    $('#workspaceDetailTitle').textContent='活跃连接 · '+result.total+' 条';

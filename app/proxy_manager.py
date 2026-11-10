@@ -171,7 +171,7 @@ async def status():
     consistent=not active or not engine.get('ready') or engine.get('config_revision')==hashlib.sha256(json.dumps(active['source'],sort_keys=True).encode()).hexdigest()
     from app.main import ROOT
     managed=bool(settings()) and not os.environ.get('ORH_CLASH_SOCKET','').strip() and not os.environ.get('ORH_CLASH_URL','').strip()
-    return dict(managed=managed,engine=engine,profiles=[public(x,data['active']) for x in sorted(data['profiles'],key=lambda x:x['name'].casefold())],consistent=consistent,install_command='sudo '+('/usr/bin/python3' if __import__('sys').platform=='darwin' else 'python3')+' '+shlex.quote(str(ROOT/'scripts/proxy_setup.py'))+' install')
+    return dict(managed=managed,network_update_required=bool(engine.get('ready') and engine.get('privileged') and engine.get('network_revision',0)<2),engine=engine,profiles=[public(x,data['active']) for x in sorted(data['profiles'],key=lambda x:x['name'].casefold())],consistent=consistent,install_command='sudo '+('/usr/bin/python3' if __import__('sys').platform=='darwin' else 'python3')+' '+shlex.quote(str(ROOT/'scripts/proxy_setup.py'))+' install')
 
 
 class Import(BaseModel):
@@ -235,7 +235,7 @@ async def operate(body:Operation):
     async with lock:
         with disk_lock():
             data=library();row=find(data,body.id,body.revision)
-            if body.action in ('delete','save','activate') and body.confirm!=row['name']:raise HTTPException(400,'请确认配置名称')
+            if body.action=='delete' and body.confirm!=row['name']:raise HTTPException(400,'请确认配置名称')
             if body.action=='delete':
                 if data['active']==row['id']:
                     state=await call('GET','/orh/state')
@@ -287,6 +287,7 @@ async def service(body:Service):
             if body.action=='enable' and not data['active']:raise HTTPException(409,'请先导入并选择机场配置')
             if body.action=='enable':
                 active=find(data,data['active']);state=await call('GET','/orh/state')
+                if state.get('network_revision',0)<2:raise HTTPException(409,'请先更新主机代理服务，以修复 macOS 系统 DNS 接管')
                 expected=hashlib.sha256(json.dumps(active['source'],sort_keys=True).encode()).hexdigest()
                 if state.get('config_revision')!=expected:raise HTTPException(409,'后台配置已变化，请重新使用所需配置再启动')
             result=await call('POST','/orh/control',{'action':body.action,'revision':body.revision})

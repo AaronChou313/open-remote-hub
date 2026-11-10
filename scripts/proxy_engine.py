@@ -6,6 +6,7 @@ Never controls another proxy client. No host routing is changed during staging.
 """
 import argparse
 import copy
+from contextlib import nullcontext
 import hashlib
 import http.client
 import json
@@ -76,7 +77,7 @@ def normalize(source, home, secret, enabled=False, mode=None):
     if not isinstance(dns, dict): raise ValueError('DNS 配置无效')
     dns['enable'] = True
     dns['listen'] = '127.0.0.1:1054'
-    cfg['tun'] = {'enable':enabled, 'stack':'mixed', 'auto-route':True, 'auto-detect-interface':True,
+    cfg['tun'] = {'enable':enabled, 'stack':'mixed', 'dns-mode':'native', 'auto-route':True, 'auto-detect-interface':True,
                   'dns-hijack':['any:53'], 'route-exclude-address':EXCLUDES, 'strict-route':False}
     return cfg
 
@@ -148,7 +149,7 @@ class Engine:
         return dict(ready=self.process.poll() is None, enabled=self.state['enabled'], privileged=os.geteuid()==0,
                     configured=bool(self.state['source'].get('proxies') or self.state['source'].get('proxy-providers')),
                     revision=digest(self.state), config_revision=digest(self.state['source']),
-                    exclusions=EXCLUDES, mixed_port=7891, pid=self.process.pid)
+                    exclusions=EXCLUDES, mixed_port=7891, pid=self.process.pid,network_revision=2)
 
     def validate(self, source):
         if not isinstance(source,dict): raise ValueError('配置格式无效')
@@ -223,17 +224,20 @@ class Engine:
             except subprocess.TimeoutExpired: self.process.kill(); self.process.wait()
 
 
-class Server(socketserver.UnixStreamServer):
+class Server(socketserver.ThreadingMixIn,socketserver.UnixStreamServer):
     allow_reuse_address=True
+    daemon_threads=True
     last_retry=0
 
     def service_actions(self):
         if self.engine.process.poll() is None or time.monotonic()-self.last_retry<30:return
+        if not self.engine.lock.acquire(blocking=False):return
         self.last_retry=time.monotonic()
         try:
             if self.engine.state['enabled'] and clash_connected():self.engine.state['enabled']=False
             self.engine.write_config();self.engine.launch()
         except (ValueError,OSError,subprocess.SubprocessError):pass
+        finally:self.engine.lock.release()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -252,7 +256,8 @@ class Handler(BaseHTTPRequestHandler):
             size=int(self.headers.get('Content-Length','0'))
             if size<0 or size>LIMIT: raise ValueError('请求过大')
             body=json.loads(self.rfile.read(size)) if size else None
-            with engine.lock:
+            readonly_core=self.command=='GET' and (self.path in ('/version','/configs','/proxies','/connections','/rules','/providers/proxies','/providers/rules') or re.fullmatch(r'/proxies/[^/]+(?:/delay\?[^\r\n]+)?',self.path))
+            with nullcontext() if readonly_core else engine.lock:
                 if self.path=='/orh/state' and self.command=='GET': result=engine.status()
                 elif self.path=='/orh/control' and self.command=='POST': result=engine.change(body or {})
                 elif self.path=='/orh/validate' and self.command=='POST': result=engine.validate((body or {}).get('source'))
@@ -269,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
                     result=engine.core('PATCH','/configs',body); engine.state['mode']=body['mode']; engine.write_config()
                 elif self.command=='PUT' and re.fullmatch(r'/proxies/[^/]+',self.path) and isinstance(body,dict) and set(body)=={'name'}:
                     result=engine.core('PUT',self.path,body)
-                elif self.command=='DELETE' and re.fullmatch(r'/connections(?:/[A-Za-z0-9-]+)?',self.path): result=engine.core('DELETE',self.path)
+                elif self.command=='DELETE' and (re.fullmatch(r'/connections(?:/[A-Za-z0-9-]+)?',self.path) or re.fullmatch(r'/proxies/[^/]+',self.path)): result=engine.core('DELETE',self.path)
                 else: raise ValueError('此接口未开放')
         except (ValueError, OSError, subprocess.SubprocessError):
             status=409

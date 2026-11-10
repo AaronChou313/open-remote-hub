@@ -6,7 +6,7 @@ window.RemoteHubProxyManager=(()=>{
  function markup(data,admin){
   const engine=data.engine,active=data.profiles.find(row=>row.active);
   const status=!engine.ready?'后台离线':engine.enabled?'代理运行中':engine.privileged?'代理已停止':'预备完成 · 等待主机授权';
-  return `<section class="proxy-service"><div><div class="proxy-service-title"><h2>Mihomo</h2><span class="badge ${engine.enabled?'running':''}">${esc(status)}</span></div><p class="muted">${active?esc(active.name):'尚未选择机场配置'}${engine.ready?' · 本机端口 '+engine.mixed_port:''}</p>${engine.error?`<p class="proxy-error">${esc(engine.error)}</p>`:''}${!data.consistent?'<p class="proxy-error">后台配置与列表不一致，请重新使用所需配置。</p>':''}</div><div class="toolbar">${admin?`${!engine.privileged?'<button id="proxyInstall">完成主机授权</button>':''}${engine.enabled?'<button id="proxyStop" class="danger">停止代理</button>':`<button id="proxyStart" class="primary" ${!engine.ready||!engine.privileged||!active||!data.consistent?'disabled':''}>启动代理</button>`}<button id="proxyRestart" ${!engine.revision?'disabled':''}>重启内核</button>`:''}</div></section><div class="proxy-tabs" role="tablist" aria-label="代理管理"><button data-proxy-tab="profiles" role="tab">机场配置</button><button data-proxy-tab="nodes" role="tab">策略与节点</button><button data-proxy-tab="rules" role="tab">路由规则</button><button data-proxy-tab="logs" role="tab">内核日志</button></div><div id="proxyManagedContent"></div>`;
+  return `<section class="proxy-service"><div><div class="proxy-service-title"><h2>Mihomo</h2><span class="badge ${engine.enabled?'running':''}">${esc(status)}</span></div>${data.network_update_required?'<p class="proxy-error">请更新主机服务以修复 macOS DNS 接管。</p>':''}<p class="muted">${active?esc(active.name):'尚未选择机场配置'}${engine.ready?' · 本机端口 '+engine.mixed_port:''}</p>${engine.error?`<p class="proxy-error">${esc(engine.error)}</p>`:''}${!data.consistent?'<p class="proxy-error">后台配置与列表不一致，请重新使用所需配置。</p>':''}</div><div class="toolbar">${admin?`${!engine.privileged||data.network_update_required?'<button id="proxyInstall">'+(data.network_update_required?'更新网络接管':'完成主机授权')+'</button>':''}${engine.enabled?'<button id="proxyStop" class="danger">停止代理</button>':`<button id="proxyStart" class="primary" ${!engine.ready||!engine.privileged||!active||!data.consistent||data.network_update_required?'disabled':''}>启动代理</button>`}<button id="proxyRestart" ${!engine.revision?'disabled':''}>重启内核</button>`:''}</div></section><div class="proxy-tabs" role="tablist" aria-label="代理管理"><button data-proxy-tab="profiles" role="tab">机场配置</button><button data-proxy-tab="nodes" role="tab">策略与节点</button><button data-proxy-tab="rules" role="tab">路由规则</button><button data-proxy-tab="logs" role="tab">内核日志</button></div><div id="proxyManagedContent"></div>`;
  }
  function modal(title,html){
   if(modalBusy)throw Error('当前配置操作仍在执行，请等待完成。');
@@ -30,7 +30,7 @@ window.RemoteHubProxyManager=(()=>{
   const admin=me.role==='admin',engine=data.engine;
   async function service(button,action){
    if(action!=='enable'&&!await confirmAction(action==='disable'?'停止主机代理':'重启 Mihomo 内核',action==='disable'?'使用此代理的连接会中断，主机恢复原有网络路径。':'代理连接会中断并重新建立。'))return;
-   await runBusy(button,'proxy:service',action==='enable'?'启动中…':'处理中…',()=>api('/proxy/manager/service',{action,revision:engine.revision,confirm:action}));
+   await runBusy(button,'proxy:service',action==='enable'?'启动中…':'处理中…',async()=>{const latest=await api('/proxy/manager');return api('/proxy/manager/service',{action,revision:latest.engine.revision,confirm:action})});
    notify(action==='enable'?'代理已启动':action==='disable'?'代理已停止':'内核已重启');if(check())await reload();
   }
   if(admin){
@@ -71,7 +71,6 @@ window.RemoteHubProxyManager=(()=>{
     $('#proxyConfigText').value=result.text;$('#proxyConfigText').oninput=()=>{dirty=$('#proxyConfigText').value!==result.text};
     $('#proxyEditForm').onsubmit=async event=>{
      event.preventDefault();if(!dirty)return;
-     if(!await confirmAction('保存 '+row.name,row.active?'保存后立即应用，现有连接可能重新建立。':'检查并替换此配置的 YAML。'))return;
      try{await runBusy($('#proxySaveConfig'),'proxy:profile','检查并保存中…',()=>api('/proxy/manager/profile',{action:'save',id:row.id,revision:result.revision,confirm:row.name,text:$('#proxyConfigText').value}));dirty=false;dialog.close();notify('配置已保存');if(check())await reload()}catch(error){$('#proxyFormError').textContent=error.message}
     };return;
    }
@@ -83,7 +82,7 @@ window.RemoteHubProxyManager=(()=>{
     $('#proxySubscriptionForm').onsubmit=async event=>{event.preventDefault();try{await runBusy($('#proxySubscriptionSave'),'proxy:profile','保存中…',()=>api('/proxy/manager/profile',{action:'subscription',id:row.id,revision:row.revision,url:$('#proxyNewSubscription').value.trim()}));dirty=false;dialog.close();notify('订阅地址已保存');if(check())await reload()}catch(error){$('#proxyFormError').textContent=error.message}};
     $('#proxyDelete').onclick=guarded(async()=>{if(await operate($('#proxyDelete'),row,'delete')){dirty=false;if(dialog.open)dialog.close()}});return;
    }
-   if((action==='delete'||(action==='activate'&&engine.enabled)||(action==='update'&&row.active&&engine.enabled))&&!await confirmAction(action==='delete'?'移除 '+row.name:'应用 '+row.name,action==='delete'?'从配置列表移除，主机保留恢复副本。':'这会更新当前代理配置，现有连接可能重新建立。'))return;
+   if(action==='delete'&&!await confirmAction('移除 '+row.name,'从配置列表移除，主机保留恢复副本。'))return;
    await runBusy(button,'proxy:profile','处理中…',()=>api('/proxy/manager/profile',{action,id:row.id,revision:row.revision,confirm:row.name}));notify(action==='activate'?'已使用此配置':action==='update'?'订阅已更新':'配置已移除');if(check())await reload();return true;
   }
   async function selectTab(tab){

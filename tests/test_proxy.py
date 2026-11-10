@@ -18,14 +18,19 @@ def proxy_client(workspace,monkeypatch):
         calls.append((request.method,request.url.raw_path))
         path=request.url.path
         if path=='/version':return httpx.Response(200,json={'version':'fixture-core'})
+        if path=='/orh/state':return httpx.Response(200,json={'config_revision':'profile-a'})
         if path=='/configs':
             if request.method=='PATCH':state['mode']=json.loads(request.content)['mode']
             return httpx.Response(200,json={'mode':state['mode'],'secret':'MUST_NOT_LEAK','authentication':['SECRET_AUTH'],'tun':{'enable':True}})
+        if path=='/rules':return httpx.Response(200,json={'rules':[{'type':'Match','proxy':'策略 / #中文'}]})
         if path=='/proxies':return httpx.Response(200,json={'proxies':copy.deepcopy(state['groups'])})
         if path.endswith('/delay'):return httpx.Response(200,json={'delay':42})
         if path.startswith('/proxies/'):
             name=path[len('/proxies/'):]
-            if request.method=='PUT':state['groups'][name]['now']=json.loads(request.content)['name']
+            if request.method=='PUT':
+                state['groups'][name]['now']=json.loads(request.content)['name']
+                if state['groups'][name]['type']!='Selector':state['groups'][name]['fixed']=json.loads(request.content)['name']
+            if request.method=='DELETE':state['groups'][name]['fixed']=''
             return httpx.Response(200,json=copy.deepcopy(state['groups'][name]))
         if path=='/connections':return httpx.Response(200,json={'uploadTotal':20,'downloadTotal':30,'memory':40,'connections':[{'metadata':{'host':'example.invalid','destinationPort':'443','network':'tcp','process':'fixture','inboundUser':'MUST_NOT_LEAK'},'chains':['first'],'rule':'MATCH','upload':10,'download':20}]})
         raise AssertionError('Unexpected controller request '+str(request.url))
@@ -46,24 +51,49 @@ def test_proxy_snapshot_sanitizes_private_controller_fields(proxy_client):
     assert 'MUST_NOT_LEAK' not in result.text
 
 
-def test_proxy_changes_require_confirmation_membership_and_current_revision(proxy_client):
+def test_proxy_changes_are_direct_and_keep_membership_and_revision_guards(proxy_client):
     c,state,calls=proxy_client
     snapshot=c.get('/api/proxy').json()
-    mode=dict(action='mode',value='global',revision=snapshot['revision'],confirm='mode')
-    assert c.post('/api/proxy/control',json={**mode,'confirm':''}).status_code==400
+    mode=dict(action='mode',value='global',revision=snapshot['revision'])
     assert c.post('/api/proxy/control',json={**mode,'value':'invalid'}).status_code==400
     assert state['mode']=='rule'
     assert c.post('/api/proxy/control',json=mode).status_code==200 and state['mode']=='global'
     assert c.post('/api/proxy/control',json=mode).status_code==409
     group=next(g for g in snapshot['groups'] if g['type']=='Selector')
-    select=dict(action='select',target=group['name'],value='second',revision=group['revision'],confirm=group['name'])
+    select=dict(action='select',target=group['name'],value='second',revision=group['revision'])
     assert c.post('/api/proxy/control',json={**select,'value':'unknown'}).status_code==400
     assert c.post('/api/proxy/control',json=select).status_code==200
     assert state['groups'][group['name']]['now']=='second'
     assert c.post('/api/proxy/control',json=select).status_code==409
     automatic=next(g for g in snapshot['groups'] if g['type']=='URLTest')
-    assert c.post('/api/proxy/control',json={**select,'target':automatic['name'],'confirm':automatic['name'],'revision':automatic['revision']}).status_code==400
+    fixed=c.post('/api/proxy/control',json={**select,'target':automatic['name'],'revision':automatic['revision']})
+    assert fixed.status_code==200 and fixed.json()['fixed']=='second'
+    reset=c.post('/api/proxy/control',json={'action':'unfix','target':automatic['name'],'revision':fixed.json()['revision']})
+    assert reset.status_code==200 and reset.json()['fixed']==''
     assert any(b'%2F' in path and method=='PUT' for method,path in calls)
+
+
+def test_profile_change_rejects_stale_node_click_without_writing(proxy_client,monkeypatch):
+    c,state,calls=proxy_client
+    monkeypatch.setattr(proxy,'managed_controller',lambda:True)
+    snapshot=c.get('/api/proxy').json();assert snapshot['config_revision']=='profile-a'
+    group=next(g for g in snapshot['groups'] if g['type']=='Selector')
+    body=dict(action='select',target=group['name'],value='second',revision=group['revision'])
+    assert c.post('/api/proxy/control',json=body).status_code==409
+    assert c.post('/api/proxy/control',json={**body,'profile_revision':'old-profile'}).status_code==409
+    assert not any(method=='PUT' for method,_ in calls)
+    assert c.post('/api/proxy/control',json={**body,'profile_revision':'profile-a'}).status_code==200
+
+
+def test_delay_failure_is_not_a_fabricated_zero_latency(proxy_client,monkeypatch):
+    c,_,_=proxy_client
+    def backend(request):
+        if request.url.path=='/proxies':return httpx.Response(200,json={'proxies':{'node':{'type':'Vless'}}})
+        return httpx.Response(504,text='PRIVATE_UPSTREAM_ERROR')
+    monkeypatch.setattr(proxy,'controller',lambda:httpx.AsyncClient(base_url='http://local',transport=httpx.MockTransport(backend)))
+    result=c.post('/api/proxy/delay',json={'name':'node'})
+    assert result.status_code==200 and result.json()['delay'] is None
+    assert 'PRIVATE_UPSTREAM_ERROR' not in result.text
 
 
 def test_proxy_delay_does_not_switch_nodes_and_auth_guards(proxy_client):

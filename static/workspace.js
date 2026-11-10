@@ -118,7 +118,7 @@ window.RemoteHubWorkspace=(()=>{
   showFilePreview();
   $('#fileEditor')?.addEventListener('input',()=>{state.dirty=true;$('#fileDirty').textContent='未保存'});
   bind('#fileClose',closeFilePreview);
-  bind('#fileSave',async()=>{if(!state.dirty)return;if(!await confirmAction('保存 '+path,'用当前编辑内容覆盖此文件。文件已在其他地方修改时将阻止覆盖。'))return;await withBusy($('#fileSave'),'file:save','保存中…',async()=>{const editor=$('#fileEditor'),submitted=editor.value;const result=await api('/files/text',{root:state.root,path,text:submitted,revision:state.text.revision,confirm:path});if(state.selected?.path===path&&$('#fileEditor')===editor){state.text.revision=result.revision;state.selected.revision=result.entry_revision||result.revision;state.dirty=editor.value!==submitted;$('#fileDirty').textContent=state.dirty?'仍有未保存修改':'已保存'}notify('文件已保存')})});
+  bind('#fileSave',async()=>{if(!state.dirty)return;await withBusy($('#fileSave'),'file:save','保存中…',async()=>{const editor=$('#fileEditor'),submitted=editor.value;const result=await api('/files/text',{root:state.root,path,text:submitted,revision:state.text.revision,confirm:path});if(state.selected?.path===path&&$('#fileEditor')===editor){state.text.revision=result.revision;state.selected.revision=result.entry_revision||result.revision;state.dirty=editor.value!==submitted;$('#fileDirty').textContent=state.dirty?'仍有未保存修改':'已保存'}notify('文件已保存')})});
   document.querySelectorAll('[data-file-op]').forEach(b=>b.onclick=guarded(()=>fileOperation(b.dataset.fileOp,b)));
  }
  async function fileOperation(action,button){
@@ -128,7 +128,7 @@ window.RemoteHubWorkspace=(()=>{
    const n=await requestName({copy:'复制到（授权根目录内相对路径）',move:'移动到（授权根目录内相对路径）',rename:'重命名'}[action],action==='rename'?f.name:join(state.path,f.name+'-copy'),'继续',4096);if(!n)return;
    destination=action==='rename'?join(f.path.split('/').slice(0,-1).join('/'),n):n;
   }
-  if(action!=='copy'&&!await confirmAction({delete:'删除',move:'移动',rename:'重命名'}[action]+' '+f.path,action==='delete'?'移入所在目录的私有回收目录。目录内含受保护文件时会拒绝。':`目标：${destination}\n现有目标不会被覆盖。`))return;
+  if(action==='delete'&&!await confirmAction('删除 '+f.path,'移入所在目录的私有回收目录。目录内含受保护文件时会拒绝。'))return;
   await withBusy(button,'file:operation','处理中…',()=>api('/files/operation',{root:state.root,path:f.path,revision:f.revision,action,destination,confirm:f.path}));state.dirty=false;state.selected=null;$('#filePreviewDialog').close();await rerender();notify('操作完成');
  }
  async function terminal(root,path,preferred=''){
@@ -177,7 +177,6 @@ window.RemoteHubWorkspace=(()=>{
   bind('#projectBind',async()=>{
    const envs=(await api('/environments')).environments;
    const v=await form('绑定项目环境',[{name:'environment',label:'环境',options:[['','解除绑定'],...envs.map(e=>[e.id,e.name+' · '+e.path])]}],'保存绑定');if(!v)return;
-   if(p.environment&&!await confirmAction('更改 '+p.name+' 的环境绑定','只更新项目记录，不删除、重建或停止环境；已有任务保持原状态。'))return;
    await api('/projects/'+p.id,{action:'environment',revision:p.revision,environment:v.environment,confirm:p.id});await showProject(p.id,check);
   });
   document.querySelectorAll('[data-git]').forEach(b=>b.onclick=guarded(async()=>{await withBusy(b,'git:'+p.id,'读取中…',async()=>{const r=await api('/projects/'+p.id+'/git?'+query({kind:b.dataset.git}));if(check()&&state.project===p.id)$('#projectGit').textContent=(r.output||'无变更')+(r.truncated?'\n[输出已截断]':'')})}));
