@@ -189,7 +189,7 @@ window.RemoteHubTerminal=(()=>{
    if(!terminalEvent(event)||event.isComposing)return;
    const key=event.key.toLowerCase();
    if(key==='c'&&((event.ctrlKey&&event.shiftKey&&!event.altKey)||(event.metaKey&&mac()))){
-    const selected=terminal().getSelection();
+    const selected=terminal().getSelection()||copiedText;
     if(selected){event.preventDefault();event.stopImmediatePropagation();copy(selected)}
    }
    // Let the browser emit a paste event instead of sending Ctrl+V to the host
