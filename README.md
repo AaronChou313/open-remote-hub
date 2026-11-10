@@ -141,6 +141,27 @@ ORH_MAX_UPLOAD_MB=2048
 
 文件路径采用目录 FD 与 `O_NOFOLLOW` 逐级访问，`unrestricted` 模式先解析链接、核验目标范围再打开目录 FD；递归复制保留链接而不递归进入链接目标。上传/复制先私有暂存再原子无覆盖发布。macOS/Linux 使用原子无覆盖重命名；其他平台失败关闭。版本检查和进程锁保护控制台内并发操作；这不是 OS 沙箱，不能阻止拥有相同系统账户权限的本机进程移动已打开目录，也不提供对外部编辑器写入的文件系统级事务快照。
 
+## Web 终端复制、粘贴与手机输入
+
+终端右上角“剪贴板”提供快捷键说明、图片上传和最近选中文字。Web Client 原先直接调用 `navigator.clipboard` 写入选区，局域网 / 组网 HTTP 地址通常缺少该接口；控制台现在提供浏览器旧式复制回退，并区分“已复制”与“已发送复制请求”。旧式接口无法可靠核验系统剪贴板是否更新，浏览器限制下可点“复制”，再按 `Ctrl+C` / `⌘C`，或在手机上长按选中文字复制。受信任 HTTPS / 本机安全上下文可使用标准剪贴板接口。[浏览器剪贴板要求](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText)
+
+| 操作 | Windows / Linux 浏览器 | Mac 浏览器 |
+| --- | --- | --- |
+| 复制终端选区 | 鼠标拖选自动尝试复制，或 `Ctrl+Shift+C` | 鼠标拖选自动尝试复制，或 `⌘C` |
+| 粘贴文字 | `Ctrl+V` / `Ctrl+Shift+V` | `⌘V` |
+| 中断程序 | `Ctrl+C` | `Ctrl+C` |
+| Zellij 锁定 / 解锁（默认配置） | `Ctrl+G` | `Ctrl+G` |
+
+`Ctrl+C` 在终端内仍用于中断，需在复制回退窗口的文字选区中使用它复制。按住 Shift 拖选可以使用 xterm 本地选区。Zellij 的 `copy_command "pbcopy"` 会写到服务端 Mac 的剪贴板，远程复制应通过浏览器剪贴板通道。
+
+浏览器真实粘贴事件带有图片时，控制台将 PNG / JPEG / WebP 图片上传到 Mac 的 `.runtime/terminal-attachments/`（单张 20 MiB），并通过原生终端的 paste 接口插入带引号的绝对路径；不会附带回车。可在 Codex 输入区继续输入问题，检查图片附件后再提交。也可通过“剪贴板 → 上传图片”选择图片。图片文件保留供任务继续读取，可在文件管理器中手动清理。容器中的程序需要容器可访问的路径。
+
+Codex 的原生图片快捷键读取运行 Codex 的主机剪贴板。远程设备的系统剪贴板需要浏览器上传通道，普通终端按键不会自动传输图片；也可显式使用 `codex -i /path/to/image.png`。[Codex 图片输入说明](https://learn.chatgpt.com/docs/image-inputs?surface=cli)
+
+Zellij 0.45.1 官方移动端输入使用 password 控件，并在每次触摸后重新聚焦，影响 iPhone 中文输入和滑动查看。网关针对已识别的实现替换为支持 composition 的隐藏 textarea，默认关闭软键盘，通过右上角“键盘”按钮或原生键盘按钮显式切换。拼音候选阶段不发送内容，确认后一次发送最终中文，避免重复提交或丢掉重复字符。滑动继续使用原生 Zellij 手势。升级后若无法识别代码结构则保留新版实现，并在说明窗口标记尚未匹配。
+
+网关只修改移动输入适配段并更新对应 app.js 的 SRI，其余终端库保持原字节。剪贴板兼容层通过独立 JS/CSS 加载。手机宽度布局、中文 composition 事件和真实桌面浏览器图片粘贴已测试；实体 iPhone 键盘语言切换、Safari 触摸手势及系统剪贴板仍需实体设备验收。
+
 ## 远程开发与 ROS 2 工作区
 
 文件页和项目详情页提供“用 VS Code 打开”，点击后由浏览器调用访问设备上安装的 VS Code，通过 Remote - SSH 打开 Mac / Linux 主机的目录。默认使用当前浏览器访问的主机地址与服务账户用户名，支持在局域网和私有组网地址之间切换。访问设备需安装 VS Code、OpenSSH 客户端及 Microsoft Remote - SSH 扩展，第一次连接由 VS Code 完成 SSH 主机确认和账户 / 密钥认证。主机需要已启用 SSH 服务。[VS Code 官方说明](https://code.visualstudio.com/docs/remote/ssh)

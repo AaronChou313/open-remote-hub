@@ -1,4 +1,4 @@
-"""Authenticated gateway to the unmodified, loopback-only Zellij Web Client.
+"""Authenticated gateway to the loopback-only Zellij Web Client.
 
 The upstream token and session cookie never leave this process. Browser cookies
 are scoped to RemoteHub; upstream Set-Cookie and request credentials are stripped.
@@ -133,8 +133,15 @@ async def native(request: Request, path: str):
         raise HTTPException(503, 'Zellij Web 服务不可用，请在控制台启动本地 Web 服务后重试')
     if r.status_code == 401:
         raise HTTPException(503, 'Zellij 内部认证失效，请检查本机服务')
-    # Bytes unchanged: preserve native assets and SRI, never forward Set-Cookie.
-    return Response(r.content, status_code=r.status_code,
+    content=r.content
+    if r.status_code==200:
+        from app.terminal_browser import client_asset,client_page
+        if path=='assets/app.js':content=client_asset(content)[0]
+        elif 'text/html' in r.headers.get('content-type',''):
+            script=await upstream.request('GET','/assets/app.js',[])
+            if script.status_code!=200:raise HTTPException(503,'Zellij 客户端资源不可用')
+            content=client_page(content,script.content)
+    return Response(content, status_code=r.status_code,
                     headers={'Content-Type': r.headers.get('content-type', 'application/octet-stream')})
 
 
