@@ -440,4 +440,6 @@ from app.terminal_browser import router as terminal_browser_router
 app.include_router(terminal_browser_router)
 from app.proxy import router as proxy_router
 app.include_router(proxy_router)
+from app.proxy_manager import router as proxy_manager_router
+app.include_router(proxy_manager_router)
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')

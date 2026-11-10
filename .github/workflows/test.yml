@@ -20,4 +20,5 @@ jobs:
       - run: node tests/uploads-ui.mjs
       - run: node tests/terminal-browser-ui.mjs
       - run: node tests/proxy-ui.mjs
+      - run: node tests/proxy-manager-ui.mjs
       - run: node --check static/app.js && node --check static/sessions.js && node --check static/terminal-entry.js && node --check static/workspace.js && node --check static/dsh.js && node --check static/dsh-compat.js && node --check static/icons.js

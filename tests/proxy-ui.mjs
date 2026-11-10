@@ -9,6 +9,7 @@ const snapshot={available:true,system:{proxies:[{name:'HTTP',enabled:false}],vpn
 const context=vm.createContext({window:{},document:{querySelectorAll:selector=>selector==='[data-proxy-select]'?selectButtons:selector==='[data-proxy-delay]'?delayButtons:[]},Date,Number,JSON,me:{role:'admin'},$:node,esc:s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;'),bytes:n=>String(n),panel:(title,body)=>title+body,empty:text=>text,table:(heads,rows)=>rows.join(''),notify(){},showError:e=>{throw e},confirmAction:async(title,message)=>{confirms.push({title,message});return approved},withBusy:async(button,key,label,work)=>work(),api:async(path,body)=>{
  calls.push({path,body});
  if(path==='/proxy')return snapshot;
+ if(path==='/proxy/manager')return {managed:false};
  if(path==='/proxy/control')return {ok:true};
  if(path==='/proxy/delay')return {delay:42};
  if(path==='/proxy/connections')return {total:1,entries:[{host:'<bad>.invalid',port:'443',chains:['DIRECT'],upload:1,download:2}]};

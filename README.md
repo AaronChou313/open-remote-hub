@@ -141,23 +141,53 @@ ORH_MAX_UPLOAD_MB=2048
 
 文件路径采用目录 FD 与 `O_NOFOLLOW` 逐级访问，`unrestricted` 模式先解析链接、核验目标范围再打开目录 FD；递归复制保留链接而不递归进入链接目标。上传/复制先私有暂存再原子无覆盖发布。macOS/Linux 使用原子无覆盖重命名；其他平台失败关闭。版本检查和进程锁保护控制台内并发操作；这不是 OS 沙箱，不能阻止拥有相同系统账户权限的本机进程移动已打开目录，也不提供对外部编辑器写入的文件系统级事务快照。
 
-## Clash 代理与网络
+## 代理与网络
 
-侧栏“代理与网络”通过已有 Clash / Mihomo 控制接口显示内核版本、出站模式、TUN 状态、策略组当前节点、内存、累计流量和连接数量。macOS 额外通过平台适配器读取当前 HTTP / HTTPS / SOCKS 系统代理和 Clash VPN 状态。TUN / VPN 已连接时，HTTP / SOCKS 系统代理仍可显示关闭。点击“活跃连接”在详情窗口查看前 50 条连接及其策略链、规则和传输量；页面使用顶部“刷新”读取最新状态。
+支持两种连接方式。未安装独立服务时可连接已有 Clash / Mihomo 控制器。安装独立服务后，RemoteHub 通过仅当前 OS 用户可访问的 Unix Socket 管理自己的 Mihomo，不向局域网公开内核管理接口。
 
-管理员可切换规则 / 全局 / 直连模式、切换手动 Selector 策略组节点，并测试所选节点延迟。模式和节点变更显示具体目标及影响，确认一次后执行，操作前核验当前状态、操作后重新读取确认结果。延迟测试使用固定 HTTPS 204 地址，保持当前选择。自动策略组由 Clash 自己选择；控制台仅显示其当前结果。内核变更在当前运行实例生效，切换原客户端配置或重启后可能恢复配置中的值。
+### 安装与迁移
 
-本机 Clash for macOS 1.0.16 的 HTTP 外部控制器当前关闭，RemoteHub 自动使用已存在的 `~/Library/Group Containers/group.com.hako.network/clash.sock`。控制台密码登录后即可管理，无需额外安装面板。HTTP 控制器地址及密钥可在目标主机 `.env` 设置，支持 Ubuntu 上的 Mihomo。HTTP(S) 控制地址限制为本机回环地址，浏览器只访问 RemoteHub 的明确 API。
-
-```dotenv
-# Unix Socket 优先；未配置时自动检测 macOS Clash 的 Socket
-# ORH_CLASH_SOCKET=/path/to/clash.sock
-# 使用已经启动的本机 HTTP 控制器
-# ORH_CLASH_URL=http://127.0.0.1:9090
-# ORH_CLASH_SECRET=your-secret
+```bash
+# 首次下载，核对官方 GitHub release asset SHA-256，不修改现有代理
+python3 scripts/proxy_setup.py download
+# macOS 预备测试。仅回环端口，TUN 关闭，不修改系统代理或 DNS
+python3 scripts/proxy_setup.py stage
+# 验证后安装一次专用系统服务。sudo 密码由用户在主机终端输入
+sudo /usr/bin/python3 scripts/proxy_setup.py install
 ```
 
-控制器密钥只在后端使用。API 返回明确筛选的状态字段，过滤配置中的认证、订阅和其他凭据。仅管理员可执行变更和测速，沿用现有身份认证、同源检查和审计日志。VPN 启停、系统代理写入、订阅导入 / 切换和配置编辑目前由 Clash 原客户端处理。官方 App 自带 `clash-cli` 支持状态、模式、策略组和其他诊断操作；RemoteHub 当前接入既有本机 Socket 的兼容 API。[Clash CLI 文档](https://clash.md/guide/clash-cli) · [Mihomo API 文档](https://wiki.metacubex.one/api/)
+安装服务不关闭 Clash，首次安装是空配置且代理停止。Mac 使用独立 launchd LaunchDaemon，登录前也可运行；安装的程序和内核数据由 root 持有。浏览器和 RemoteHub 自身重启不影响内核。Linux 提供同一 broker 的 systemd 安装路径，命令为 `sudo python3 scripts/proxy_setup.py install`，尚未完成真实 Linux / TUN 验收。不要把用户目录中的 Python 代码直接作为 root 的长期服务执行。
+
+切换步骤只需一次：在“代理与网络”导入机场提供的 **Clash / Mihomo YAML 订阅 URL** 或配置文件，点击“使用配置”；手动关闭 Clash 的 VPN 连接；点击“启动代理”。没有配置或 Clash VPN 仍连接时拒绝启用。不要同时运行多个 TUN 客户端。原 Clash 的配置和开机设置不会被更改，切换后需自行关闭其自动连接。
+
+回退时先在 RemoteHub 点击“停止代理”，再启动原 Clash。若网页不可达，可在主机执行 `python3 scripts/proxyctl.py stop`。这只关闭 RemoteHub 的 TUN，保留配置与后台内核。`status` 检查状态，`start` 启用，`open` 打开本机网页。所有 CLI 控制均凭当前 OS 用户的 Socket 权限，不需要在命令行保存控制台密码。
+
+### 日常操作
+
+- 机场配置卡片按名称排序，可搜索、导入 URL / YAML 文件 / 粘贴 YAML、使用配置、更新订阅、重命名、更换订阅地址、移除及导出。
+- 内置 YAML 编辑器可修改节点、策略组、规则、DNS 等内容，保存前调用实际内核检查。当前配置的更新和编辑会同步应用，失败回退到上一份运行配置；并发修改需刷新。订阅 URL、YAML 和恢复副本保存在 `.runtime/proxy/` 的私有文件中，不提交 Git。导出的 YAML 含节点凭据，只有管理员可读。
+- 策略与节点页可切换规则 / 全局 / 直连模式、选择 Selector 节点、测试延迟、查看资源与连接。节点选择由 Mihomo cache 持久化。规则可筛选；内核日志以有界文本显示并隐藏 URL / UUID。
+- 停止代理只关闭 TUN，HTTP / SOCKS 回环入口仍就绪。重启内核会中断它自己的连接。启用状态、选中配置和模式跨服务重启保留；重启时发现 Clash VPN 活跃，会保持新 TUN 关闭。内核异常退出后 broker 会尝试恢复。
+- Mac 本机与远程设备使用同一个网页。无需菜单栏常驻进程，界面和配置管理可沿用于 Linux。
+
+订阅下载逐跳校验目的地址并固定解析后的公网 IP，保留 TLS 主机校验，禁止访问回环 / 内网服务。遇到 Clash / Mihomo Fake-IP DNS 时用固定 DoH 解析器 `1.1.1.1` 查询真实公网 IP，只提交订阅主机名，不提交 URL 路径或令牌。限制 3 MiB、重定向次数与超时；不接受纯节点 URI / Base64，需要机场的 Clash 格式订阅。定时订阅更新暂未实现，使用“更新订阅”。
+
+### 网络与权限边界
+
+独立内核固定 mixed port `127.0.0.1:7891`、DNS listener `127.0.0.1:1054`、带私有密钥的 controller `127.0.0.1:19090`，控制台使用用户私有 Socket；导入配置不能覆盖这些入口或创建额外 listeners。服务以 TUN 接管主机流量，不写入 macOS HTTP/HTTPS/SOCKS 系统代理设置。TUN 与“全局”出站模式是不同概念。
+
+默认从 TUN 路由排除 `127/8`、`10/8`、`172.16/12`、`192.168/16`、`100.64/10`，保护局域网、容器私网和异地组网的直接可达性；具体网络仍需切换后现场验收。Provider 支持 HTTP / inline，缓存路径由服务管理，不支持读取任意本地 Provider 文件。其他高级设置可通过 YAML 编辑；不等同于复刻所有 Clash 客户端的特有功能。
+
+已有控制器兼容配置仍可使用（显式设置优先于独立服务）：
+
+```dotenv
+# Unix Socket 或带端口的本机回环 HTTP(S) URL，二选一
+# ORH_CLASH_SOCKET=/absolute/path/to/clash.sock
+# ORH_CLASH_URL=http://127.0.0.1:9090
+# ORH_CLASH_SECRET=your-controller-secret
+```
+
+模式 / 节点变更只作用于已有客户端的运行实例，持久化由原客户端管理。只读账号不能写入、导出敏感配置或执行测速；所有写操作沿用认证、同源校验、角色检查与审计。[Mihomo API 文档](https://wiki.metacubex.one/api/)
 
 ## Web 终端复制、粘贴与手机输入
 

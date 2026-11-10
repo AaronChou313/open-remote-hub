@@ -3,11 +3,11 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let view=typeof location!=='undefined'&&location.hash==='#proxy'?'proxy':localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={proxy:['代理与网络','管理本机 Clash 的策略组、出站模式与连接。'],overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
+const titles={proxy:['代理与网络','管理机场配置、主机代理与网络连接。'],overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?(path.startsWith('/environments')?30000:10000):60000)});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));return d}
+async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?(path.startsWith('/environments')?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));return d}
 async function withBusy(button,key,label,work){
  if(pendingOperations.has(key))return;pendingOperations.add(key);
  const text=button?.textContent,markup=button?.innerHTML;
@@ -15,6 +15,7 @@ async function withBusy(button,key,label,work){
  try{return await work()}finally{pendingOperations.delete(key);if(button?.isConnected){button.disabled=false;if(markup!==undefined)button.innerHTML=markup;else button.textContent=text;button.removeAttribute('aria-busy')}}
 }
 async function switchView(target){
+ if(view!==target&&window.RemoteHubProxyManager&&!await RemoteHubProxyManager.canLeave())return;
  if(view!==target&&window.RemoteHubWorkspace&&!await RemoteHubWorkspace.canLeave())return;
  if(!titles[target])target='overview';
  if(target!==view)window.scrollTo?.(0,0);
@@ -111,5 +112,5 @@ $('#cancelSession').onclick=()=>$('#sessionDialog').close();$('#sessionForm').on
 
 function updateThemeControl(){const dark=document.body.classList.contains('dark'),label=dark?'切换为浅色模式':'切换为暗色模式';$('#theme').setAttribute('aria-label',label);$('#theme').setAttribute('title',label);$('#themeMoon').hidden=dark;$('#themeSun').hidden=!dark}
 updateThemeControl();
-window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubWorkspace?.isDirty()){e.preventDefault();e.returnValue=''}});
+window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubWorkspace?.isDirty()||window.RemoteHubProxyManager?.isDirty()){e.preventDefault();e.returnValue=''}});
 enter();

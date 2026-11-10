@@ -17,6 +17,8 @@ control_lock=asyncio.Lock()
 
 
 def controller():
+    from app import proxy_manager
+    if not os.environ.get('ORH_CLASH_SOCKET','').strip() and not os.environ.get('ORH_CLASH_URL','').strip() and proxy_manager.settings():return proxy_manager.client()
     socket=os.environ.get('ORH_CLASH_SOCKET','').strip()
     url=os.environ.get('ORH_CLASH_URL','').strip()
     default=Path.home()/'Library/Group Containers/group.com.hako.network/clash.sock'
@@ -85,7 +87,7 @@ async def connections():
     result=[]
     for row in rows[:50]:
         meta=row.get('metadata') or {}
-        result.append(dict(host=meta.get('host') or meta.get('destinationIP'),port=meta.get('destinationPort'),network=meta.get('network'),process=meta.get('process'),chains=row.get('chains') or [],rule=row.get('rule'),upload=row.get('upload'),download=row.get('download')))
+        result.append(dict(id=row.get('id'),host=meta.get('host') or meta.get('destinationIP'),port=meta.get('destinationPort'),network=meta.get('network'),process=meta.get('process'),chains=row.get('chains') or [],rule=row.get('rule'),upload=row.get('upload'),download=row.get('download')))
     return dict(entries=result,total=len(rows))
 
 
