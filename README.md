@@ -149,6 +149,7 @@ ORH_MAX_UPLOAD_MB=2048
 | --- | --- | --- |
 | 复制终端选区 | 鼠标拖选自动尝试复制，或 `Ctrl+Shift+C` | 鼠标拖选自动尝试复制，或 `⌘C` |
 | 粘贴文字 | `Ctrl+V` / `Ctrl+Shift+V` | `⌘V` |
+| 粘贴剪贴板图片 | `Ctrl+V` | `⌘V` |
 | 中断程序 | `Ctrl+C` | `Ctrl+C` |
 | Zellij 锁定 / 解锁（默认配置） | `Ctrl+G` | `Ctrl+G` |
 
