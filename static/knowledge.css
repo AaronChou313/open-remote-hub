@@ -1,0 +1,95 @@
+.kb-home, .kb-workspace { min-width: 0; }
+.kb-toolbar, .kb-workspace-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.kb-actions, .kb-library-actions, .kb-note-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kb-actions button, .kb-library-actions button, .kb-note-toolbar button, .kb-note-toolbar a, .kb-note-modes button, .kb-back { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; }
+.kb-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; color: var(--muted); min-width: 0; }
+.kb-toolbar > .kb-search { flex: 1; max-width: 400px; }
+.kb-search input { width: 100%; min-width: 0; border: 0; background: transparent; margin: 0; padding: 11px 0; color: var(--text); }
+.kb-search .orh-icon { width: 16px; height: 16px; flex-shrink: 0; }
+.kb-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 20px; }
+.kb-library { display: flex; flex-direction: column; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
+.kb-library-heading { display: flex; align-items: center; gap: 10px; }
+.kb-library-heading > .orh-icon { width: 21px; height: 21px; color: var(--accent); flex-shrink: 0; }
+.kb-library-heading h2 { font-size: 17px; overflow-wrap: anywhere; }
+.kb-library-path { font-size: 12px; color: var(--muted); margin: 18px 0 24px; overflow-wrap: anywhere; }
+.kb-library-actions { margin-top: auto; }
+.kb-library-actions button { padding: 8px 10px; font-size: 12px; }
+.kb-library-actions .orh-icon { width: 14px; height: 14px; }
+.kb-workspace-heading > div:first-child { min-width: 0; }
+.kb-back { border: 0; padding: 0; min-height: 30px; background: transparent; color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+.kb-workspace-heading h2 { font-size: 21px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.kb-workspace-heading p { font-size: 11px; margin: 0; overflow-wrap: anywhere; }
+.kb-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); border: 1px solid var(--line); background: var(--surface); border-radius: 14px; overflow: hidden; min-height: 580px; align-items: stretch; }
+.kb-browser { padding: 18px 12px; background: var(--surface); border-right: 1px solid var(--line); min-width: 0; }
+.kb-browser > summary { display: flex; align-items: center; gap: 8px; list-style: none; font-size: 13px; font-weight: 600; padding: 0 6px 16px; cursor: pointer; }
+.kb-browser > summary::-webkit-details-marker { display: none; }
+.kb-browser > summary span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.kb-browser > summary .orh-icon { margin-left: auto; width: 14px; height: 14px; }
+.kb-browser > .kb-search { margin-bottom: 14px; padding: 0 8px; background: var(--bg); }
+.kb-browser > .kb-search input { font-size: 12px; padding: 10px 0; }
+#kbTree { max-height: 65dvh; overflow: auto; }
+.kb-tree-folder > summary { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; padding: 9px 7px; overflow-wrap: anywhere; }
+.kb-tree-folder > summary .orh-icon { flex-shrink: 0; width: 15px; height: 15px; color: var(--muted); }
+.kb-tree-folder > div { padding-left: 12px; }
+.kb-note-link { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 9px 8px; background: transparent; border: 0; text-align: left; font-size: 12px; }
+.kb-note-link span { min-width: 0; overflow-wrap: anywhere; }
+.kb-note-link .orh-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+.kb-note-link[aria-current="page"] { background: var(--soft); color: var(--accent); }
+.kb-note-link[aria-current="page"] .orh-icon { color: var(--accent); }
+.kb-tree-status { margin: 12px 6px; font-size: 12px; }
+.kb-document { min-width: 0; padding: 24px; }
+.kb-note-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.kb-note-header > div:first-child { min-width: 0; }
+.kb-note-header h3 { font-size: 16px; margin: 0 0 7px; overflow-wrap: anywhere; }
+.kb-note-state { font-size: 11px; }
+.kb-note-modes { display: flex; padding: 3px; background: var(--bg); border-radius: 8px; gap: 3px; flex-shrink: 0; }
+.kb-note-modes button { min-height: 32px; padding: 6px 10px; border: 0; font-size: 12px; background: transparent; color: var(--muted); }
+.kb-note-modes button[aria-pressed="true"] { color: var(--accent); background: var(--soft); }
+.kb-note-toolbar { padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+.kb-note-toolbar button, .kb-note-toolbar a { padding: 7px 10px; font-size: 12px; min-height: 34px; }
+.kb-note-toolbar .orh-icon { width: 14px; height: 14px; }
+.kb-editor { display: block; width: 100%; min-height: 470px; resize: vertical; padding: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: 13px/1.9 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 4; }
+.kb-markdown { max-width: 72ch; margin: 0 auto; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
+.kb-markdown > :first-child { margin-top: 0; }
+.kb-markdown h1, .kb-markdown h2, .kb-markdown h3, .kb-markdown h4 { margin: 1.6em 0 .65em; line-height: 1.45; letter-spacing: 0; }
+.kb-markdown h1 { font-size: 26px; }
+.kb-markdown h2 { font-size: 21px; }
+.kb-markdown h3 { font-size: 17px; }
+.kb-markdown p { margin-bottom: 1em; line-height: inherit; }
+.kb-markdown ul, .kb-markdown ol { padding-left: 1.7em; }
+.kb-markdown li { margin: .3em 0; }
+.kb-markdown blockquote { padding: 8px 16px; margin: 18px 0; border-left: 1px solid var(--line); color: var(--muted); }
+.kb-markdown blockquote > :last-child { margin-bottom: 0; }
+.kb-markdown pre { padding: 16px; background: var(--bg); border-radius: 8px; overflow: auto; font-size: 12px; line-height: 1.7; }
+.kb-markdown code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
+.kb-markdown :not(pre) > code { padding: .15em .35em; background: var(--bg); border-radius: 4px; }
+.kb-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+.kb-markdown th, .kb-markdown td { border: 1px solid var(--line); padding: 9px 12px; }
+.kb-markdown img { max-width: 100%; height: auto; border-radius: 6px; }
+.kb-markdown hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+.kb-markdown input[type="checkbox"] { width: auto; margin-right: 6px; }
+.kb-dialog { width: min(500px, calc(100vw - 28px)); padding: 24px; border-radius: 14px; max-height: 90dvh; overflow: auto; }
+.kb-dialog .detail-dialog-bar { align-items: center; gap: 12px; margin-bottom: 24px; }
+.kb-dialog .detail-dialog-bar h2 { font-size: 19px; }
+.kb-dialog .detail-dialog-bar button { display: inline-flex; align-items: center; gap: 6px; }
+.kb-dialog label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; font-size: 13px; }
+.kb-dialog input { margin: 0; min-height: 42px; }
+.kb-form-error { font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .kb-toolbar { gap: 12px; }
+  .kb-toolbar > .kb-search { max-width: none; flex-basis: 100%; }
+  .kb-layout { display: block; min-height: 420px; }
+  .kb-browser { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
+  .kb-browser > summary { padding-bottom: 0; cursor: pointer; }
+  .kb-browser[open] > summary { padding-bottom: 16px; }
+  .kb-browser[open] > summary .orh-icon { transform: rotate(180deg); }
+  #kbTree { max-height: 40dvh; }
+  .kb-document { padding: 20px 16px; }
+  .kb-note-header { flex-wrap: wrap; }
+  .kb-note-toolbar { gap: 6px; }
+  .kb-note-toolbar button, .kb-note-toolbar a, .kb-note-link, .kb-actions button, .kb-library-actions button { min-height: 44px; }
+  .kb-editor { min-height: 50dvh; font-size: 16px; }
+  .kb-markdown h1 { font-size: 23px; }
+  .kb-markdown h2 { font-size: 19px; }
+  .kb-dialog { padding: 20px; }
+}

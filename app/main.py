@@ -431,6 +431,8 @@ from app.projects import router as projects_router
 app.include_router(projects_router)
 from app.files import router as files_router
 app.include_router(files_router)
+from app.knowledge import router as knowledge_router
+app.include_router(knowledge_router)
 from app.native_terminal import router as native_router
 app.include_router(native_router)
 from app.terminal_browser import router as terminal_browser_router

@@ -132,6 +132,27 @@ class Edit(BaseModel):
     confirm:str
 
 
+def create_text(root, path, text):
+    data = text.encode('utf-8')
+    if len(data) > TEXT_LIMIT:
+        raise HTTPException(413, '文本上限为 1 MiB')
+    with fs.mutex, fs.parent(root, path, write=True) as (fd, name):
+        temp = '.orh-' + secrets.token_hex(16)
+        child = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        try:
+            with os.fdopen(child, 'wb') as target:
+                target.write(data)
+                target.flush()
+                os.fsync(target.fileno())
+            fs.rename_exclusive(fd, temp, fd, name)
+            result = fs.entry(fd, name)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temp, dir_fd=fd)
+    audit(root, path, 'create-text')
+    return result
+
+
 @router.post('/text')
 def edit(body:Edit):
     if body.confirm!=body.path:raise HTTPException(400,'需要确认覆盖目标')
