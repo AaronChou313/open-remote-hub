@@ -42,13 +42,12 @@ def test_password_storage_and_token_retirement(c):
     assert c.get('/api/me').status_code==200
 
 
-def test_setup_origin_atomic_and_policy(tmp_path,monkeypatch):
+def test_setup_origin_and_atomic_creation(tmp_path,monkeypatch):
     monkeypatch.setattr(main,'DATA',tmp_path)
     main.attempts.clear()
     with TestClient(main.app,base_url=ORIGIN,client=('127.0.0.1',50001),headers={'X-ORH-Request':'1','Origin':ORIGIN}) as c:
-        assert c.post('/api/auth/setup',json={'password':'short'}).status_code==400
         assert c.post('/api/auth/setup',json={'password':PASSWORD},headers={'Origin':'http://evil.test'}).status_code==403
-        assert c.post('/api/auth/setup',json={'password':PASSWORD}).status_code==200
+        assert c.post('/api/auth/setup',json={'password':'1'}).status_code==200
         assert c.post('/api/auth/setup',json={'password':PASSWORD}).status_code==409
         assert c.get('/api/me').status_code==200
 
@@ -56,7 +55,7 @@ def test_setup_origin_atomic_and_policy(tmp_path,monkeypatch):
 def test_password_change_revokes_sessions(c):
     auth(c)
     old=c.cookies.get('orh')
-    assert c.post('/api/auth/password',json={'current_password':PASSWORD,'password':PASSWORD+'-new'}).status_code==200
+    assert c.post('/api/auth/password',json={'password':PASSWORD+'-new'}).status_code==200
     assert access.get(old) is None
     assert c.get('/api/me').status_code==200
     assert c.post('/api/logout',json={}).status_code==200
@@ -163,3 +162,12 @@ def test_live_utf8_two_clients_and_reconnect(c):
             result=c.post('/api/zellij/'+name,json={'action':'delete','confirm':name})
             if result.status_code==200:break
         assert result.status_code==200,result.text
+
+
+@pytest.mark.parametrize('value', ['', '1', 'abc', '!@#$%^&*()[]{}', '中文 空格🔑', 'x' * 1024])
+def test_password_has_no_length_or_character_restrictions(c, value):
+    auth(c)
+    assert c.post('/api/auth/password', json={'password': value}).status_code == 200
+    assert c.post('/api/logout', json={}).status_code == 200
+    assert c.post('/api/login', json={'password': value}).status_code == 200
+    assert c.get('/api/me').status_code == 200

@@ -120,16 +120,9 @@ window.RemoteHubSSH = (() => {
     }
   }
 
-  async function privileged(title, impact, operation, target, work, content = '') {
-    const epoch = await open(title, form(`<p>${esc(impact)}</p>${content}${field('password', '管理员登录密码', '', 'type="password" autocomplete="current-password" required maxlength="256"')}`, title));
-    if (!epoch) return;
-    attachForm(async (values, targetForm) => {
-      const response = await request('/ssh/reauth', { operation, target, password: values.password });
-      targetForm.elements.password.value = '';
-      values.password = '';
-      if (epoch !== dialogEpoch || !current()) return;
-      await work(response.grant, values);
-    }, false);
+  async function actionDialog(title, impact, work, content = '') {
+    if (!await open(title, form(`<p>${esc(impact)}</p>${content}`, title))) return;
+    attachForm(async values => { await work(values); }, false);
   }
 
   async function reload() {
@@ -382,8 +375,8 @@ window.RemoteHubSSH = (() => {
     dialog.querySelector('[data-ssh="scan"]').onclick = () => diagnose(host, 'scan').catch(showDialogError);
     const remove = dialog.querySelector('[data-ssh="remove"]');
     if (remove) remove.onclick = async () => {
-      await privileged('移除主机指纹', `移除 ${result.label} 的已知指纹。下次连接需要重新核验身份。`, 'host-remove', host, async grant => {
-        await request(`/ssh/hosts/${encode(host)}/remove`, {confirm:host, revision:result.revision, grant});
+      await actionDialog('移除主机指纹', `移除 ${result.label} 的已知指纹。下次连接需要重新核验身份。`, async () => {
+        await request(`/ssh/hosts/${encode(host)}/remove`, {confirm:host, revision:result.revision});
         submitting = false;
         await fingerprints(host);
       });
@@ -396,21 +389,11 @@ window.RemoteHubSSH = (() => {
     attachForm(async (values, target) => {
       const fingerprints = [...target.querySelectorAll('[name="fingerprints"]:checked')].map(input => input.value);
       const payload = {scan_id:result.scan_id, confirm:result.label, replace:result.known.length > 0, fingerprints};
-      if (result.known.length) {
-        submitting = false;
-        await privileged('更新主机指纹', `更新 ${result.label} 的信任记录。请先通过独立渠道核验新指纹。`, 'host-update', host, async grant => {
-          await request('/ssh/hosts/trust', {...payload, grant});
-          submitting = false;
-          notify('主机指纹已更新');
-          await fingerprintsView();
-        }, `<pre>${esc(fingerprints.join('\n'))}</pre>`);
-      } else {
-        await request('/ssh/hosts/trust', payload);
-        dirty = false;
-        submitting = false;
-        notify('主机指纹已保存');
-        await fingerprintsView();
-      }
+      await request('/ssh/hosts/trust', payload);
+      dirty = false;
+      submitting = false;
+      notify('主机指纹已保存');
+      await fingerprintsView();
     }, false);
     async function fingerprintsView() { await fingerprints(host); }
   }
@@ -432,8 +415,8 @@ window.RemoteHubSSH = (() => {
     $('#sshPanel').querySelectorAll('[data-ssh="key-restore"]').forEach(control => {
       control.onclick = () => {
         const backup = data.backups.find(item => item.id === control.dataset.backup);
-        privileged('恢复密钥备份', `恢复 ${backup.file} 的选定备份。当前文件将另存备份。`, 'backup-restore', backup.file, async grant => {
-          await request('/ssh/backups/restore', {grant, backup:backup.id, revision:data.revisions[backup.file], confirm:backup.file});
+        actionDialog('恢复密钥备份', `恢复 ${backup.file} 的选定备份。当前文件将另存备份。`, async () => {
+          await request('/ssh/backups/restore', {backup:backup.id, revision:data.revisions[backup.file], confirm:backup.file});
           submitting = false; dialog.close();
           await reload();
         }).catch(showError);
@@ -477,15 +460,13 @@ window.RemoteHubSSH = (() => {
   }
 
   async function importKey() {
-    if (!await open('导入 SSH 密钥', form(`${field('name', '保存名称', '', 'required maxlength="96"')}<label>私钥文件（可选）<input type="file" name="privateFile"></label><label>公钥文件（可选）<input type="file" name="publicFile" accept=".pub,text/plain"></label>${field('passphrase', '私钥口令（如已加密）', '', 'type="password" autocomplete="off"')}${field('password', '管理员登录密码', '', 'type="password" autocomplete="current-password" required')}`, '导入密钥'))) return;
+    if (!await open('导入 SSH 密钥', form(`${field('name', '保存名称', '', 'required maxlength="96"')}<label>私钥文件（可选）<input type="file" name="privateFile"></label><label>公钥文件（可选）<input type="file" name="publicFile" accept=".pub,text/plain"></label>${field('passphrase', '私钥口令（如已加密）', '', 'type="password" autocomplete="off"')}`, '导入密钥'))) return;
     attachForm(async (values, target) => {
       const privateFile = target.elements.privateFile.files[0];
       const publicFile = target.elements.publicFile.files[0];
       if (!privateFile && !publicFile) throw Error('请选择私钥或公钥文件');
       if ((privateFile?.size || 0) > 65536 || (publicFile?.size || 0) > 16384) throw Error('密钥文件过大');
-      const auth = await request('/ssh/reauth', {operation: 'key-import', target: values.name, password: values.password});
-      target.elements.password.value = '';
-      await request('/ssh/keys/import', {name: values.name, passphrase: values.passphrase, private: privateFile ? await privateFile.text() : '', public: publicFile ? await publicFile.text() : '', grant: auth.grant});
+      await request('/ssh/keys/import', {name: values.name, passphrase: values.passphrase, private: privateFile ? await privateFile.text() : '', public: publicFile ? await publicFile.text() : ''});
       dirty = false;
       submitting = false; dialog.close();
       notify('密钥已导入');
@@ -550,9 +531,9 @@ window.RemoteHubSSH = (() => {
             });
           }
           if (action === 'copy') { await copyPublic(key.public); notify('公钥已复制'); }
-          if (action === 'export') await privileged('导出私钥', `将 ${key.name} 下载到当前设备，请妥善保存。`, 'key-export', key.name, async grant => {
+          if (action === 'export') {
             const exportEpoch = dialogEpoch;
-            const response = await fetch(`/api/ssh/keys/${encode(key.name)}/export`, {method: 'POST', headers: {'Content-Type':'application/json', 'X-ORH-Request':'1'}, body: JSON.stringify({grant}), signal: AbortSignal.timeout(10000)});
+            const response = await fetch(`/api/ssh/keys/${encode(key.name)}/export`, {method: 'POST', headers: {'Content-Type':'application/json', 'X-ORH-Request':'1'}, body: JSON.stringify({}), signal: AbortSignal.timeout(10000)});
             if (!response.ok) throw Error((await response.json()).detail || '私钥导出失败');
             const blob = await response.blob();
             if (exportEpoch !== dialogEpoch || !current()) return;
@@ -563,15 +544,15 @@ window.RemoteHubSSH = (() => {
             anchor.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
             submitting = false; dialog.close();
-          });
-          if (action === 'passphrase') await privileged('修改密钥口令', `更新 ${key.name} 的加密口令。原文件将保留私有备份。`, 'key-passphrase', key.name, async (grant, values) => {
+          }
+          if (action === 'passphrase') await actionDialog('修改密钥口令', `更新 ${key.name} 的加密口令。原文件将保留私有备份。`, async values => {
             if (values.passphrase !== values.again) throw Error('两次新口令不一致');
-            await request(`/ssh/keys/${encode(key.name)}/passphrase`, {...values, password: undefined, grant, revision:key.revision});
+            await request(`/ssh/keys/${encode(key.name)}/passphrase`, {...values, revision:key.revision});
             submitting = false; dialog.close();
             await reload();
           }, `${key.encrypted !== false ? field('old_passphrase', '当前密钥口令', '', 'type="password" autocomplete="off"') : ''}${field('passphrase', '新密钥口令（留空则移除）', '', 'type="password" autocomplete="new-password"')}${field('again', '再次输入新口令', '', 'type="password" autocomplete="new-password"')}`);
-          if (action === 'delete') await privileged('删除密钥', `删除 ${key.name} 及其公钥。被连接引用的密钥会被阻止删除，文件保留私有备份。`, 'key-delete', key.name, async grant => {
-            await request(`/ssh/keys/${encode(key.name)}/delete`, {grant, confirm:key.name, revision:key.revision, public_revision:key.public_revision});
+          if (action === 'delete') await actionDialog('删除密钥', `删除 ${key.name} 及其公钥。被连接引用的密钥会被阻止删除，文件保留私有备份。`, async () => {
+            await request(`/ssh/keys/${encode(key.name)}/delete`, {confirm:key.name, revision:key.revision, public_revision:key.public_revision});
             submitting = false; dialog.close();
             await reload();
           });
@@ -589,24 +570,18 @@ window.RemoteHubSSH = (() => {
     const data = await request('/ssh/config');
     data.files.sort((a, b) => Number(b.relative === 'config') - Number(a.relative === 'config') || a.name.localeCompare(b.name));
     if (!current() || version !== renderEpoch || tab !== 'config') return;
-    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div>${data.requires_trust ? '<div class="ssh-attention"><p>配置包含可执行命令规则，使用前需核验当前版本。</p><button id="sshTrustConfig">核验并授权命令规则</button></div>' : ''}<div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '查看 / 高级编辑' : '查看', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}${data.backups.length ? '<details class="ssh-backup-section"><summary>配置备份与恢复 <span>' + data.backups.length + '</span></summary><div class="ssh-backups">' : ''}${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('')}${data.backups.length ? '</div></details>' : ''}`;
+    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div><div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '查看 / 高级编辑' : '查看', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}${data.backups.length ? '<details class="ssh-backup-section"><summary>配置备份与恢复 <span>' + data.backups.length + '</span></summary><div class="ssh-backups">' : ''}${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('')}${data.backups.length ? '</div></details>' : ''}`;
     const linkControl = $('#sshLink');
     if (linkControl) linkControl.onclick = async () => {
       try { const plan = await request('/ssh/config/plan', {action:'include'}); await applyPlan(plan); }
       catch (error) { showError(error); }
     };
-    const trustControl = $('#sshTrustConfig');
-    if (trustControl) trustControl.onclick = () => privileged('授权原生命令规则', `授权当前配置中的 Match exec、ProxyCommand 等指令以宿主机用户权限运行。请先查看并核验配置内容。`, 'config-trust', data.signature, async grant => {
-      await request('/ssh/config/trust', {grant, signature:data.signature, confirm:data.signature});
-      submitting = false; dialog.close();
-      await reload();
-    });
     $('#sshPanel').querySelectorAll('[data-ssh="config-file"]').forEach(control => { control.onclick = () => editConfig(control.dataset.file).catch(showError); });
     $('#sshPanel').querySelectorAll('[data-ssh="restore"]').forEach(control => { control.onclick = async () => {
       const backup = data.backups.find(item => item.id === control.dataset.backup);
       const file = data.files.find(item => item.relative === backup.file);
-      await privileged('恢复配置备份', `将 ${backup.file} 恢复为 ${new Date(backup.created * 1000).toLocaleString()} 的版本。当前版本将另存备份。`, 'backup-restore', backup.file, async grant => {
-        await request('/ssh/backups/restore', {grant, backup:backup.id, revision:file?.revision, confirm:backup.file});
+      await actionDialog('恢复配置备份', `将 ${backup.file} 恢复为 ${new Date(backup.created * 1000).toLocaleString()} 的版本。当前版本将另存备份。`, async () => {
+        await request('/ssh/backups/restore', {backup:backup.id, revision:file?.revision, confirm:backup.file});
         submitting = false; dialog.close();
         await reload();
       });
@@ -627,8 +602,8 @@ window.RemoteHubSSH = (() => {
 
   async function applyPlan(plan) {
     if (!plan.diff) { notify('配置没有变化'); return; }
-    await privileged('确认配置修改', `修改 ${plan.file}。保存前会备份当前版本，并检查外部修改冲突。`, 'config-apply', plan.file, async grant => {
-      await request('/ssh/config/apply', {plan:plan.plan, grant, confirm:plan.file});
+    await actionDialog('确认配置修改', `修改 ${plan.file}。保存前会备份当前版本，并检查外部修改冲突。`, async () => {
+      await request('/ssh/config/apply', {plan:plan.plan, confirm:plan.file});
       submitting = false; dialog.close();
       notify('SSH 配置已保存');
       await reload();

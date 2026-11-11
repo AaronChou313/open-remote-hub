@@ -30,12 +30,6 @@ def ssh_home(tmp_path, monkeypatch):
     return client, directory, data
 
 
-def grant(client, operation, target):
-    response = client.post('/api/ssh/reauth', json=dict(operation=operation, target=target, password=PASSWORD))
-    assert response.status_code == 200, response.text
-    return response.json()['grant']
-
-
 def post(client, path, body):
     response = client.post('/api/ssh' + path, json=body)
     assert response.status_code == 200, response.text
@@ -50,8 +44,7 @@ def add(client, alias='test', **fields):
 
 def link(client):
     plan = post(client, '/config/plan', {'action': 'include'})
-    return post(client, '/config/apply', dict(plan=plan['plan'], confirm='config',
-                grant=grant(client, 'config-apply', 'config')))
+    return post(client, '/config/apply', dict(plan=plan['plan'], confirm='config'))
 
 
 def test_include_priority_duplicates_and_conflicts(ssh_home):
@@ -86,14 +79,13 @@ def test_generate_import_export_and_passphrase(ssh_home, passphrase):
     assert (directory / 'testkey').stat().st_mode & 0o777 == 0o600
     listing = client.get('/api/ssh/keys').json()['keys'][0]
     assert listing['encrypted'] == bool(passphrase)
-    exported = client.post('/api/ssh/keys/testkey/export', json=dict(grant=grant(client, 'key-export', 'testkey')))
+    exported = client.post('/api/ssh/keys/testkey/export', json={})
     assert exported.status_code == 200
     assert b'PRIVATE KEY' in exported.content
-    assert client.post('/api/ssh/keys/testkey/export', json={}).status_code == 403
-    post(client, '/keys/import', dict(name='imported', private=exported.text, public=row['public'], passphrase=passphrase,
-                                    grant=grant(client, 'key-import', 'imported')))
+    assert client.post('/api/ssh/keys/testkey/export', json={}).status_code == 200
+    post(client, '/keys/import', dict(name='imported', private=exported.text, public=row['public'], passphrase=passphrase))
     post(client, '/keys/testkey/passphrase', dict(old_passphrase=passphrase, passphrase='changed secret',
-              revision=listing['revision'], grant=grant(client, 'key-passphrase', 'testkey')))
+              revision=listing['revision']))
     assert keys.encrypted((directory / 'testkey').read_bytes())
     assert client.post('/api/ssh/keys/generate', json=dict(name='testkey')).status_code == 409
     for file in data.rglob('*'):
@@ -121,30 +113,30 @@ def test_path_input_permissions_and_dynamic_rules(ssh_home, tmp_path):
     marker = tmp_path / 'must-not-execute'
     (directory / 'config').write_text(f'Host external\n HostName localhost\nMatch exec "touch {marker}"\n User root\n')
     overview = client.get('/api/ssh/overview').json()
-    assert overview['requires_trust']
-    assert client.get('/api/ssh/connections/external/effective').status_code == 409
-    assert not marker.exists()
+    assert overview['has_command_rules']
+    assert client.get('/api/ssh/connections/external/effective').status_code == 200
+    assert marker.exists()
     public = post(client, '/keys/generate', dict(name='key'))
     os.chmod(directory / 'key', 0o644)
-    response = client.post('/api/ssh/keys/key/export', json=dict(grant=grant(client, 'key-export', 'key')))
+    response = client.post('/api/ssh/keys/key/export', json={})
     assert response.status_code == 403
     assert 'PRIVATE KEY' not in response.text
 
 
-def test_auth_secure_transport_and_reauth_binding(ssh_home):
+def test_admin_session_authorizes_operations_without_reauthentication(ssh_home):
     client, directory, _ = ssh_home
     post(client, '/keys/generate', dict(name='key'))
-    token = grant(client, 'key-export', 'key')
-    assert client.post('/api/ssh/keys/key/delete', json=dict(grant=token, confirm='key')).status_code == 403
-    token = grant(client, 'key-export', 'key')
-    assert client.post('/api/ssh/keys/key/export', json=dict(grant=token)).status_code == 200
-    assert client.post('/api/ssh/keys/key/export', json=dict(grant=token)).status_code == 403
+    for _ in range(2):
+        response = client.post('/api/ssh/keys/key/export', json={})
+        assert response.status_code == 200 and b'PRIVATE KEY' in response.content
+    assert client.post('/api/ssh/reauth', json={}).status_code == 404
     remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('8.8.8.8', 50000), headers={'X-ORH-Request': '1'})
     remote.cookies.set('orh', client.cookies.get('orh'))
-    assert remote.post('/api/ssh/reauth', json=dict(operation='key-export', target='key', password=PASSWORD)).status_code == 403
+    assert remote.post('/api/ssh/keys/key/export', json={}).status_code == 403
     assert remote.post('/api/ssh/keys/generate', json=dict(name='unsafe')).status_code == 403
     client.post('/api/logout', json={})
     assert client.get('/api/ssh/overview').status_code == 401
+    assert client.post('/api/ssh/keys/key/export', json={}).status_code == 401
 
 
 def test_advanced_diff_backups_and_version_conflict(ssh_home):
@@ -154,12 +146,11 @@ def test_advanced_diff_backups_and_version_conflict(ssh_home):
     opened = post(client, '/config/read', dict(file=info['id']))
     plan = post(client, '/config/plan', dict(file=info['id'], revision=opened['revision'], text=opened['text'] + '\nHost added\n HostName localhost\n'))
     assert '+Host added' in plan['diff']
-    post(client, '/config/apply', dict(plan=plan['plan'], confirm='config', grant=grant(client, 'config-apply', 'config')))
+    post(client, '/config/apply', dict(plan=plan['plan'], confirm='config'))
     assert 'Host added' in (directory / 'config').read_text()
     assert client.post('/api/ssh/config/plan', json=dict(file=info['id'], revision=opened['revision'], text='stale')).status_code == 409
     backup = store.rows('backup')[0]
-    post(client, '/backups/restore', dict(backup=backup['id'], revision=store.revision('config'), confirm='config',
-                grant=grant(client, 'backup-restore', 'config')))
+    post(client, '/backups/restore', dict(backup=backup['id'], revision=store.revision('config'), confirm='config'))
     assert (directory / 'config').read_text() == opened['text']
 
 
@@ -199,18 +190,18 @@ def test_key_reference_delete_restore_and_recover_public(ssh_home):
     add(client, identityfile=str(directory / 'key'))
     row = client.get('/api/ssh/keys').json()['keys'][0]
     # A managed connection protects its key even before the Include is installed.
-    response = client.post('/api/ssh/keys/key/delete', json=dict(confirm='key', revision=row['revision'], public_revision=row['public_revision'], grant=grant(client, 'key-delete', 'key')))
+    response = client.post('/api/ssh/keys/key/delete', json=dict(confirm='key', revision=row['revision'], public_revision=row['public_revision']))
     assert response.status_code == 409
     connection = store.rows('connection')[0]
     cfg.delete_connection('test', store.revision(cfg.MANAGED), connection['revision'])
     (directory / 'config').write_text('Host *\n IdentityFile "' + str(directory / 'key') + '"\n')
     assert keys.references('key')['rules']
     (directory / 'config').unlink()
-    removed = post(client, '/keys/key/delete', dict(confirm='key', revision=row['revision'], public_revision=row['public_revision'], grant=grant(client, 'key-delete', 'key')))
+    removed = post(client, '/keys/key/delete', dict(confirm='key', revision=row['revision'], public_revision=row['public_revision']))
     assert not (directory / 'key').exists()
     for token in removed['backups']:
         backup = store.get('backup', token)
-        post(client, '/backups/restore', dict(backup=token, revision=store.revision(backup['file']), confirm=backup['file'], grant=grant(client, 'backup-restore', backup['file'])))
+        post(client, '/backups/restore', dict(backup=token, revision=store.revision(backup['file']), confirm=backup['file']))
     assert (directory / 'key').exists() and (directory / 'key.pub').exists()
 
 
@@ -219,8 +210,7 @@ def test_managed_backup_restore_and_crash_reconciliation(ssh_home):
     first = add(client, 'first')
     second = add(client, 'second')
     backup = store.rows('backup')[-1]
-    post(client, '/backups/restore', dict(backup=backup['id'], revision=store.revision(cfg.MANAGED), confirm=cfg.MANAGED,
-             grant=grant(client, 'backup-restore', cfg.MANAGED)))
+    post(client, '/backups/restore', dict(backup=backup['id'], revision=store.revision(cfg.MANAGED), confirm=cfg.MANAGED))
     assert [r['alias'] for r in store.rows('connection')] == ['first']
     before = store.revision(cfg.MANAGED)
     entries = [dict(alias='recovered', hostname='localhost', revision='fixture')]
@@ -246,10 +236,10 @@ def test_invalid_config_no_exec_and_nested_complex_paths(ssh_home, tmp_path):
     marker = tmp_path / 'exec-must-not-run'
     text = read['text'] + f'\nMatch exec "touch {marker}"\n User alternate\n'
     plan = post(client, '/config/plan', dict(file=info['id'], text=text, revision=info['revision']))
-    post(client, '/config/apply', dict(plan=plan['plan'], confirm='includes/complex name.conf', grant=grant(client, 'config-apply', 'includes/complex name.conf')))
+    post(client, '/config/apply', dict(plan=plan['plan'], confirm='includes/complex name.conf'))
     assert not marker.exists()
-    assert cfg.discover()['requires_trust']
-    assert client.get('/api/ssh/connections/fixture/effective').status_code == 409
+    assert cfg.discover()['has_command_rules']
+    assert client.get('/api/ssh/connections/fixture/effective').status_code == 200
     info = next(f for f in cfg.discover()['files'] if f['path'] == str(included))
     invalid = client.post('/api/ssh/config/plan', json=dict(file=info['id'], text='DefinitelyNotSSHOption value\n', revision=info['revision']))
     assert invalid.status_code == 400
@@ -261,7 +251,7 @@ def test_import_mismatch_and_config_cannot_export_private_material(ssh_home):
     first = post(client, '/keys/generate', dict(name='one'))
     other = post(client, '/keys/generate', dict(name='two'))
     private = (directory / 'one').read_text()
-    mismatch = client.post('/api/ssh/keys/import', json=dict(name='mismatch', private=private, public=other['public'], grant=grant(client, 'key-import', 'mismatch')))
+    mismatch = client.post('/api/ssh/keys/import', json=dict(name='mismatch', private=private, public=other['public']))
     assert mismatch.status_code == 400
     assert not (directory / 'mismatch').exists()
     (directory / 'config').write_text('Include "' + str(directory / 'one') + '"\n')
@@ -272,16 +262,15 @@ def test_import_mismatch_and_config_cannot_export_private_material(ssh_home):
     assert not list(directory.glob('.orh-key-*'))
 
 
-def test_parallel_generation_never_overwrites_and_grants_are_single_use(ssh_home):
+def test_parallel_generation_never_overwrites_and_authenticated_exports_work(ssh_home):
     from concurrent.futures import ThreadPoolExecutor
     client, directory, _ = ssh_home
     with ThreadPoolExecutor(2) as pool:
         responses = list(pool.map(lambda _: client.post('/api/ssh/keys/generate', json=dict(name='race')), range(2)))
     assert sorted(r.status_code for r in responses) == [200, 409]
-    token = grant(client, 'key-export', 'race')
     with ThreadPoolExecutor(2) as pool:
-        responses = list(pool.map(lambda _: client.post('/api/ssh/keys/race/export', json=dict(grant=token)), range(2)))
-    assert sorted(r.status_code for r in responses) == [200, 403]
+        responses = list(pool.map(lambda _: client.post('/api/ssh/keys/race/export', json={}), range(2)))
+    assert [r.status_code for r in responses] == [200, 200]
 
 
 def test_config_include_loop_duplicate_hosts_and_host_match_precedence(ssh_home):
@@ -405,7 +394,7 @@ def test_interrupted_key_pair_deletion_rolls_back(ssh_home, monkeypatch):
             raise PermissionError('isolated test interruption')
         return unlink(path, *args, **kwargs)
     monkeypatch.setattr(Path, 'unlink', interrupted)
-    response = client.post('/api/ssh/keys/rollback/delete', json=dict(confirm='rollback', revision=row['revision'], public_revision=row['public_revision'], grant=grant(client, 'key-delete', 'rollback')))
+    response = client.post('/api/ssh/keys/rollback/delete', json=dict(confirm='rollback', revision=row['revision'], public_revision=row['public_revision']))
     assert response.status_code == 409
     assert (directory / 'rollback').read_bytes() == original
     assert (directory / 'rollback.pub').exists()
@@ -417,12 +406,10 @@ def test_import_and_change_rsa_pem_passphrase(ssh_home, password):
     client, directory, _ = ssh_home
     source = directory / 'rsa-source'
     keygen(['ssh-keygen', '-q', '-m', 'PEM', '-t', 'rsa', '-b', '2048', '-f', str(source)], [password, password])
-    imported = post(client, '/keys/import', dict(name='pem-import', private=source.read_text(), passphrase=password,
-                   grant=grant(client, 'key-import', 'pem-import')))
+    imported = post(client, '/keys/import', dict(name='pem-import', private=source.read_text(), passphrase=password))
     row = next(key for key in client.get('/api/ssh/keys').json()['keys'] if key['name'] == 'pem-import')
     assert row['encrypted'] == bool(password)
-    post(client, '/keys/pem-import/passphrase', dict(revision=row['revision'], old_passphrase=password, passphrase='replacement-phrase',
-                   grant=grant(client, 'key-passphrase', 'pem-import')))
+    post(client, '/keys/pem-import/passphrase', dict(revision=row['revision'], old_passphrase=password, passphrase='replacement-phrase'))
     derived = keygen(['ssh-keygen', '-y', '-f', str(directory / 'pem-import')], ['replacement-phrase'])
     assert keys.public_line(derived)['fingerprint'] == imported['fingerprint']
 
@@ -461,7 +448,7 @@ def test_bounded_process_timeout_and_cancel():
     assert error.value.status_code == 409
 
 
-def test_linked_include_is_inspected_and_requires_dynamic_authorization(ssh_home, tmp_path):
+def test_linked_include_native_rules_use_admin_login(ssh_home, tmp_path):
     client, directory, _ = ssh_home
     source = tmp_path / 'native-tool.conf'
     marker = tmp_path / 'must-not-execute-linked-rule'
@@ -470,11 +457,11 @@ def test_linked_include_is_inspected_and_requires_dynamic_authorization(ssh_home
     include.symlink_to(source)
     (directory / 'config').write_text('Include "' + str(include) + '"\n')
     found = client.get('/api/ssh/config').json()
-    assert found['requires_trust']
+    assert found['has_command_rules']
     linked = next(row for row in found['files'] if row['path'] == str(include))
     assert linked['read_path'] == str(source) and not linked['editable']
-    assert client.get('/api/ssh/connections/linked/effective').status_code == 409
-    assert not marker.exists()
+    assert client.get('/api/ssh/connections/linked/effective').status_code == 200
+    assert marker.exists()
     raw = post(client, '/config/read', dict(file=linked['id']))
     assert 'Match exec' in raw['text']
     before = found['signature']
@@ -491,7 +478,7 @@ def test_bad_config_can_be_opened_for_repair_without_executing_it(ssh_home):
     info = found['files'][0]
     post(client, '/config/read', dict(file=info['id']))
     plan = post(client, '/config/plan', dict(file=info['id'], revision=info['revision'], text='Host repair\n HostName localhost\n'))
-    post(client, '/config/apply', dict(plan=plan['plan'], confirm='config', grant=grant(client, 'config-apply', 'config')))
+    post(client, '/config/apply', dict(plan=plan['plan'], confirm='config'))
     assert client.get('/api/ssh/connections/repair/effective').json()['hostname'] == 'localhost'
 
 
@@ -504,8 +491,7 @@ def test_private_network_http_supports_key_and_terminal_operations(ssh_home, mon
                         headers={'X-ORH-Request':'1', 'Origin':f'http://127.0.0.1:{main.PORT}'})
     remote.cookies.set('orh', client.cookies.get('orh'))
     post(remote, '/keys/generate', dict(name='private-http-key'))
-    token = grant(remote, 'key-export', 'private-http-key')
-    exported = remote.post('/api/ssh/keys/private-http-key/export', json={'grant':token})
+    exported = remote.post('/api/ssh/keys/private-http-key/export', json={})
     assert exported.status_code == 200 and 'PRIVATE KEY' in exported.text
     status = remote.get('/api/ssh/overview').json()
     assert status['transport_allowed'] and not status['secure_transport']

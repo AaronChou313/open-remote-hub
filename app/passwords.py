@@ -37,8 +37,6 @@ def verify(password):
 
 
 def save(password, initial=False):
-    if len(password) < 10 or len(password) > 256:
-        raise HTTPException(400, '密码需要 10–256 个字符，可使用中文或空格')
     salt = secrets.token_bytes(32)
     r = dict(salt=salt.hex(), iterations=ITERATIONS,
              digest=hashlib.pbkdf2_hmac('sha256', password.encode(), salt, ITERATIONS).hex())

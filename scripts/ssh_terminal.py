@@ -57,7 +57,7 @@ def execute(launch, data, ssh_dir):
         store.put('terminal', launch, row)
         print('SSH 配置已经改变，请回控制台重新连接。')
         return 2
-    config.assert_trusted()
+    config.checked_sources()
     row.update(state='running', pid=os.getpid(), process_created=psutil.Process().create_time())
     store.put('terminal', launch, row)
     code = 1

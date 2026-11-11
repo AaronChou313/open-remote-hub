@@ -164,10 +164,7 @@ async def security(request:Request, call_next):
 
 
 class Login(BaseModel):
-    password:str=Field(max_length=256)
-
-class ChangePassword(Login):
-    current_password:str=Field(max_length=256)
+    password:str
 
 
 def throttle(request):
@@ -204,10 +201,8 @@ def login(body:Login,request:Request):
     return login_response(request)
 
 @app.post('/api/auth/password')
-def change_password(body:ChangePassword,request:Request):
-    throttle(request)
+def change_password(body:Login,request:Request):
     with passwords.lock:
-        if not passwords.verify(body.current_password):raise HTTPException(400,'当前密码错误')
         passwords.save(body.password)
     return login_response(request)
 

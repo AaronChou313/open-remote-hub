@@ -39,7 +39,7 @@ const context = {
 };
 let source = fs.readFileSync('static/ssh.js', 'utf8');
 source = source.replace('return {render, canLeave, reset, isDirty: () => dirty};',
-  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, copyPublic, setCurrent:fn=>{current=fn}}};');
+  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, copyPublic, actionDialog, setCurrent:fn=>{current=fn}}};');
 vm.createContext(context);
 vm.runInContext(source, context);
 const ssh = context.window.RemoteHubSSH;
@@ -65,4 +65,10 @@ assert.match(dialog.content, /fresh/);
 assert.equal(dialog.open, true);
 await ssh.test.copyPublic('ssh-ed25519 isolated-public-fixture');
 assert.equal(copiedText, 'ssh-ed25519 isolated-public-fixture');
-console.log('SSH dialogs, stale responses, and HTTP public-key copy passed');
+let actionCount = 0;
+await ssh.test.actionDialog('删除密钥', '确认删除选中的密钥', async () => { actionCount++; });
+assert.doesNotMatch(dialog.content, /管理员登录密码|current-password|name="password"/);
+await dialog.form.onsubmit({preventDefault(){}, submitter:{}});
+assert.equal(actionCount, 1, 'one confirmation directly completes an authorized action');
+assert.doesNotMatch(source, /\/ssh\/reauth|\/ssh\/config\/trust/);
+console.log('SSH dialogs, session-authorized actions, stale responses, and HTTP public-key copy passed');

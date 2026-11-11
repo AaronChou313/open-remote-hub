@@ -1,4 +1,4 @@
-"""Authenticated SSH management API. Secret operations are purpose-bound."""
+"""SSH management API authorized by the console administrator session."""
 import json
 from pathlib import Path
 import secrets
@@ -6,7 +6,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from app import access, passwords
+from app import access
 from app.ssh import configuration as config, hosts, jobs, keys, storage as store, terminals
 
 router = APIRouter(prefix='/api/ssh', tags=['ssh'], dependencies=[Depends(access.admin)])
@@ -37,19 +37,6 @@ async def body(request: Request):
         raise HTTPException(400, '请输入有效的 SSH 操作数据') from None
 
 
-def require_grant(request, value, operation, target):
-    secure(request)
-    token = value.get('grant', '')
-    with store.mutex:
-        row = store.get('grant', store.digest(str(token).encode()))
-        if row:
-            store.remove('grant', row['id'])
-    session = store.digest(request.cookies.get('orh', '').encode())
-    if not row or row['expires'] < time.time() or row['session'] != session or row['operation'] != operation or row['target'] != target:
-        raise HTTPException(403, '请重新验证管理员密码')
-    # One-use, and delete before any sensitive file is opened.
-
-
 @router.get('/overview')
 def overview(request: Request):
     data = config.inventory()
@@ -59,25 +46,6 @@ def overview(request: Request):
     except HTTPException:
         protected = False
     return dict(data, directory=str(store.root()), secure_transport=request.url.scheme == 'https', transport_allowed=protected, sessions=terminals.sessions())
-
-
-@router.post('/reauth')
-def reauth(request: Request, value=Depends(body)):
-    secure(request)
-    from app import main
-    main.throttle(request)
-    operation = value.get('operation')
-    target = str(value.get('target', ''))
-    if operation not in ('key-import', 'key-export', 'key-delete', 'key-passphrase',
-                         'config-apply', 'config-trust', 'backup-restore', 'host-update', 'host-remove') or len(target) > 512:
-        raise HTTPException(400, '管理员复验操作无效')
-    if not passwords.verify(str(value.get('password', ''))):
-        audit('administrator', 'reauth-failed')
-        raise HTTPException(403, '管理员密码错误')
-    token = secrets.token_urlsafe(32)
-    store.put('grant', store.digest(token.encode()), dict(operation=operation, target=target, expires=time.time() + 120,
-              session=store.digest(request.cookies.get('orh', '').encode())))
-    return dict(grant=token)
 
 
 @router.post('/connections/save')
@@ -163,9 +131,6 @@ def host_info(host: str):
 @router.post('/hosts/trust')
 def trust_host(request: Request, value=Depends(body)):
     secure(request)
-    scan = store.get('scan', value.get('scan_id'))
-    if scan and hosts.known(scan['host'])['entries']:
-        require_grant(request, value, 'host-update', scan['host'])
     result = hosts.trust(value)
     audit('known_hosts', 'fingerprint-trust')
     return result
@@ -173,7 +138,7 @@ def trust_host(request: Request, value=Depends(body)):
 
 @router.post('/hosts/{host}/remove')
 def remove_host(host: str, request: Request, value=Depends(body)):
-    require_grant(request, value, 'host-remove', host)
+    secure(request)
     if value.get('confirm') != host:
         raise HTTPException(400, '请确认移除的主机记录')
     result = hosts.remove(host, value.get('revision'))
@@ -205,7 +170,7 @@ def key_generate(request: Request, value=Depends(body)):
 @router.post('/keys/import')
 def key_import(request: Request, value=Depends(body)):
     name = keys.key_name(value.get('name'))
-    require_grant(request, value, 'key-import', name)
+    secure(request)
     result = keys.import_key(value)
     audit(name, 'key-import')
     return result
@@ -214,7 +179,7 @@ def key_import(request: Request, value=Depends(body)):
 @router.post('/keys/{name}/export')
 def key_export(name: str, request: Request, value=Depends(body)):
     keys.key_name(name)
-    require_grant(request, value, 'key-export', name)
+    secure(request)
     content = store.read(store.path(name), private=True)
     if not content:
         raise HTTPException(404, '私钥不存在')
@@ -234,7 +199,7 @@ def public_download(name: str):
 @router.post('/keys/{name}/passphrase')
 def passphrase(name: str, request: Request, value=Depends(body)):
     keys.key_name(name)
-    require_grant(request, value, 'key-passphrase', name)
+    secure(request)
     result = keys.change_passphrase(name, value)
     audit(name, 'key-passphrase-change')
     return result
@@ -253,7 +218,7 @@ def key_delete(name: str, request: Request, value=Depends(body)):
     keys.key_name(name)
     if value.get('confirm') != name:
         raise HTTPException(400, '请确认删除的密钥')
-    require_grant(request, value, 'key-delete', name)
+    secure(request)
     result = keys.delete(name, value)
     audit(name, 'key-delete')
     return result
@@ -294,7 +259,7 @@ def config_plan(request: Request, value=Depends(body)):
         if store.digest(old.encode()) != value.get('revision'):
             raise HTTPException(409, '配置已修改，请重新打开')
         # Syntax and effective rules are checked by OpenSSH at use time. Validation
-        # here deliberately avoids executing an unapproved Match exec command.
+        # here avoids executing Match exec while previewing configuration.
         for line in text.splitlines():
             config.tokens(line)
         result = dict(file=file['relative'], text=text, revision=value['revision'], diff=config.diff(old, text))
@@ -311,7 +276,7 @@ def config_apply(request: Request, value=Depends(body)):
     plan = store.get('plan', value.get('plan'))
     if not plan or plan['expires'] < time.time():
         raise HTTPException(409, '配置预览已过期，请重新预览')
-    require_grant(request, value, 'config-apply', plan['file'])
+    secure(request)
     if value.get('confirm') != plan['file']:
         raise HTTPException(400, '请确认配置文件名称')
     with store.locked():
@@ -323,24 +288,12 @@ def config_apply(request: Request, value=Depends(body)):
     audit(plan['file'], 'config-apply')
     return result
 
-
-@router.post('/config/trust')
-def config_trust(request: Request, value=Depends(body)):
-    result = config.discover()
-    require_grant(request, value, 'config-trust', result['signature'])
-    if value.get('signature') != result['signature'] or value.get('confirm') != result['signature']:
-        raise HTTPException(409, '配置版本改变，请重新核验')
-    store.put('trust-config', result['signature'], dict(created=time.time()))
-    audit('config', 'native-command-rules-authorized')
-    return dict(ok=True)
-
-
 @router.post('/backups/restore')
 def restore_backup(request: Request, value=Depends(body)):
     item = store.get('backup', value.get('backup'))
     if not item:
         raise HTTPException(404, '备份不存在')
-    require_grant(request, value, 'backup-restore', item['file'])
+    secure(request)
     if value.get('confirm') != item['file']:
         raise HTTPException(400, '请确认恢复目标')
     from app.main import DATA

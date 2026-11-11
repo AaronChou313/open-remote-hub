@@ -44,7 +44,7 @@ def start(host, kind='diagnose'):
         raise HTTPException(404, 'SSH 连接不存在')
     if found['managed'] and not inventory['linked']:
         raise HTTPException(409, '请先在 SSH 配置中接入原生 Config')
-    config.assert_trusted()
+    config.checked_sources()
     with lock:
         if len(active) >= 4:
             raise HTTPException(429, '已有四个 SSH 检查正在运行，请等待或取消')

@@ -119,17 +119,14 @@ def discover():
     if store.path(MANAGED).exists() and str(store.path(MANAGED)) not in visited:
         visit(store.path(MANAGED))
     signature = store.digest(json.dumps(sorted((f['path'], f['read_path'], f['revision']) for f in files)).encode())
-    trusted = store.get('trust-config', signature) is not None
     return dict(hosts=list(hosts.values()), files=files, rules=rules, warnings=sorted(set(warnings)),
-                signature=signature, unverified_sources=unverified, requires_trust=any(f['dynamic'] for f in files) and not trusted)
+                signature=signature, unverified_sources=unverified, has_command_rules=any(f['dynamic'] for f in files))
 
 
-def assert_trusted():
+def checked_sources():
     result = discover()
     if result['unverified_sources']:
         raise HTTPException(409, '部分 SSH Include 无法核验，请先在 SSH 配置中修复路径、语法或文件权限')
-    if result['requires_trust']:
-        raise HTTPException(409, '原生配置含 Match exec 或命令指令，请先在 SSH 配置中核验并授权当前版本')
     return result
 
 
@@ -253,7 +250,7 @@ def native_arguments(interactive=True):
 
 def effective(host, cancel=None):
     alias(host)
-    assert_trusted()
+    checked_sources()
     try:
         output = run(['ssh', '-G'] + native_arguments() + ['--', host], cancel=cancel)
     except CommandFailure:

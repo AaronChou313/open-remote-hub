@@ -7,7 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from app import passwords
 
 if __name__ == '__main__':
-    password = getpass.getpass('New RemoteHub password (at least 10 characters): ')
+    password = getpass.getpass('New RemoteHub password: ')
     if password != getpass.getpass('Repeat password: '):
         raise SystemExit('Passwords differ; nothing changed.')
     passwords.save(password)

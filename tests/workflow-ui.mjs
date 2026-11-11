@@ -42,3 +42,16 @@ node('#iconBusy').innerHTML=run("icon('start')")+'启动';
 await run("withBusy(document.querySelector('#iconBusy'),'icon:busy','启动中…',async()=>{})");
 assert.match(node('#iconBusy').innerHTML,/icons.svg#play/,'Busy state restores SVG markup');
 console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, save-and-start, duplicate protection passed.');
+
+node('#newPassword').value='1';node('#newPasswordConfirm').value='1';
+await node('#passwordForm').onsubmit({preventDefault(){}});
+assert.equal(run('calls.at(-1).p'),'/auth/password');
+assert.deepEqual(JSON.parse(run('JSON.stringify(calls.at(-1).b)')),{password:'1'});
+const passwordMarkup=fs.readFileSync('static/index.html','utf8');
+for(const id of ['password','passwordConfirm','newPassword','newPasswordConfirm']){
+  const input=passwordMarkup.match(new RegExp('<input[^>]*id="'+id+'"[^>]*>'))?.[0];
+  assert.ok(input);
+  assert.doesNotMatch(input,/minlength|maxlength|required/,'password input has no length constraint');
+}
+assert.doesNotMatch(passwordMarkup,/id="currentPassword"/);
+console.log('Password form uses current admin session and accepts unrestricted passwords.');

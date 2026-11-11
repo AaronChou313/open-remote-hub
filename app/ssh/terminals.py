@@ -20,7 +20,7 @@ def connection(host):
         raise HTTPException(409, '请先在 SSH 配置标签页接入原生 Config')
     if not found:
         raise HTTPException(404, 'SSH 连接不存在')
-    config.assert_trusted()
+    config.checked_sources()
     return config.effective(host)
 
 

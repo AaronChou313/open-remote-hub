@@ -14,7 +14,7 @@ import time
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from tests.test_ssh import ssh_home, add, link, post, grant
+from tests.test_ssh import ssh_home, add, link, post
 from app import main, native_terminal
 from app.ssh import hosts, jobs, keys, storage as store, terminals
 
@@ -67,7 +67,7 @@ def wait_job(token):
 def scan_and_trust(client):
     result = hosts.scan('isolated')
     post(client, '/hosts/trust', dict(scan_id=result['scan_id'], confirm=result['label'],
-         replace=bool(result['known']), grant=grant(client, 'host-update', 'isolated') if result['known'] else '', fingerprints=[key['fingerprint'] for key in result['keys']]))
+         replace=bool(result['known']), fingerprints=[key['fingerprint'] for key in result['keys']]))
     return result
 
 
@@ -271,6 +271,6 @@ def test_real_proxyjump_preserves_strict_host_verification(ssh_home, ssh_server)
     denied = wait_job(jobs.start('jumped')['id'])
     assert denied['result']['status'] == 'host_key_error', denied
     scan = hosts.scan('jump')
-    post(client, '/hosts/trust', dict(scan_id=scan['scan_id'], confirm=scan['label'], replace=True, grant=grant(client, 'host-update', 'jump'), fingerprints=[key['fingerprint'] for key in scan['keys']]))
+    post(client, '/hosts/trust', dict(scan_id=scan['scan_id'], confirm=scan['label'], replace=True, fingerprints=[key['fingerprint'] for key in scan['keys']]))
     result = wait_job(jobs.start('jumped')['id'])
     assert result['result']['status'] == 'authenticated', result
