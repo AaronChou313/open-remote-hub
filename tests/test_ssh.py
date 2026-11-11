@@ -61,6 +61,7 @@ def test_include_priority_duplicates_and_conflicts(ssh_home):
     original = (directory / 'config').read_text()
     row = add(client, user='chosen')
     assert (directory / 'config').read_text() == original
+    assert client.post('/api/ssh/connections/test/diagnose', json={}).status_code == 409
     link(client)
     effective = client.get('/api/ssh/connections/test/effective').json()
     assert effective['user'] == 'chosen'
@@ -202,6 +203,9 @@ def test_key_reference_delete_restore_and_recover_public(ssh_home):
     assert response.status_code == 409
     connection = store.rows('connection')[0]
     cfg.delete_connection('test', store.revision(cfg.MANAGED), connection['revision'])
+    (directory / 'config').write_text('Host *\n IdentityFile "' + str(directory / 'key') + '"\n')
+    assert keys.references('key')['rules']
+    (directory / 'config').unlink()
     removed = post(client, '/keys/key/delete', dict(confirm='key', revision=row['revision'], public_revision=row['public_revision'], grant=grant(client, 'key-delete', 'key')))
     assert not (directory / 'key').exists()
     for token in removed['backups']:

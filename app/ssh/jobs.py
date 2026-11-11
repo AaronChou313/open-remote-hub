@@ -39,8 +39,11 @@ def start(host, kind='diagnose'):
         raise HTTPException(400, '未知诊断类型')
     config.alias(host)
     inventory = config.inventory()
-    if not any(row['alias'].lower() == host.lower() for row in inventory['connections']):
+    found = next((row for row in inventory['connections'] if row['alias'].lower() == host.lower()), None)
+    if not found:
         raise HTTPException(404, 'SSH 连接不存在')
+    if found['managed'] and not inventory['linked']:
+        raise HTTPException(409, '请先在 SSH 配置中接入原生 Config')
     config.assert_trusted()
     with lock:
         if len(active) >= 4:

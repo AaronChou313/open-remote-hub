@@ -1,6 +1,7 @@
 """Bounded OpenSSH processes. No shell or secret-bearing argv."""
 import contextlib
 import os
+from pathlib import Path
 import pty
 import re
 import select
@@ -27,7 +28,7 @@ def environment():
 def run(argv, timeout=12, cancel=None, input_data=None):
     process = subprocess.Popen(argv, stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               env=environment(), start_new_session=True)
+                               env=environment(), cwd=Path.home(), start_new_session=True)
     end = time.monotonic() + timeout
     output = bytearray()
     try:
@@ -67,7 +68,7 @@ def keygen(argv, answers, timeout=20):
     attrs[3] &= ~termios.ECHO
     termios.tcsetattr(slave, termios.TCSANOW, attrs)
     process = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave,
-                               env=environment(), start_new_session=True)
+                               env=environment(), cwd=Path.home(), start_new_session=True)
     os.close(slave)
     pending = ''
     public = []

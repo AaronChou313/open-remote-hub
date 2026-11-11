@@ -309,7 +309,10 @@ window.RemoteHubSSH = (() => {
     try {
       job = await api(`/ssh/connections/${encode(host)}/diagnose`, {kind});
     } catch (error) {
-      if (epoch === dialogEpoch) showDialogError(error);
+      if (epoch === dialogEpoch) {
+        showDialogError(error);
+        dialog.querySelector('#sshJobStatus').textContent = '检查未启动';
+      }
       return;
     }
     if (epoch !== dialogEpoch || !current()) { await api(`/ssh/jobs/${job.id}/cancel`, {}); return; }
@@ -477,7 +480,7 @@ window.RemoteHubSSH = (() => {
     try {
       const references = await request(`/ssh/keys/${encode(key.name)}/references`);
       if (epoch !== dialogEpoch) return;
-      dialog.querySelector('#sshKeyReferences').textContent = references.connections.length ? references.connections.join('、') : references.unresolved.length ? '部分连接配置需要核验，暂时无法完成引用检查' : '无关联连接';
+      dialog.querySelector('#sshKeyReferences').textContent = references.connections.length || references.rules?.length ? [...references.connections, ...(references.rules || [])].join('、') : references.unresolved.length ? '部分连接配置需要核验，暂时无法完成引用检查' : '无关联连接';
     } catch (error) { if (epoch === dialogEpoch) showDialogError(error); }
   }
 

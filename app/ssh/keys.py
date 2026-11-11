@@ -71,11 +71,12 @@ def identity_path(value, config, host):
               'n': host, 'r': config.get('user', getpass.getuser()), 'p': str(config.get('port', '22')),
               'u': getpass.getuser(), 'i': str(os.getuid()), 'k': config.get('hostkeyalias', host)}
     expanded = re.sub(r'%([%dhnrpuik])', lambda match: values[match[1]], value)
-    return str(Path(os.path.expandvars(os.path.expanduser(expanded))).absolute())
+    path = Path(os.path.expandvars(os.path.expanduser(expanded)))
+    return str(path if path.is_absolute() else Path.home() / path)
 
 
 def references(key):
-    from app.ssh.configuration import inventory, effective
+    from app.ssh.configuration import inventory, effective, discover, read_source, tokens
     target = str(store.path(key))
     result, unresolved = [], []
     for row in store.rows('connection'):
@@ -93,7 +94,22 @@ def references(key):
                 if row['alias'] not in result:
                     result.append(row['alias'])
                 break
-    return dict(connections=result, unresolved=unresolved)
+    import fnmatch
+    source = discover()
+    unresolved.extend(source['unverified_sources'])
+    rules = []
+    for file in source['files']:
+        for number, line in enumerate(read_source(file['path'])[1].decode().splitlines(), 1):
+            try:
+                parts = tokens(line)
+            except HTTPException:
+                continue
+            if len(parts) > 1 and parts[0].lower() == 'identityfile' and parts[1].lower() != 'none':
+                pattern = identity_path(parts[1].replace('%d', str(Path.home())), {}, '*')
+                pattern = re.sub(r'%[A-Za-z]', '*', pattern)
+                if fnmatch.fnmatchcase(target, pattern) or fnmatch.fnmatchcase(target + '.pub', pattern):
+                    rules.append(file['name'] + ' · IdentityFile · ' + str(number))
+    return dict(connections=result, unresolved=unresolved, rules=rules)
 
 
 def inventory():
@@ -228,7 +244,7 @@ def change_passphrase(name, body):
 def delete(name, body):
     key_name(name)
     ref = references(name)
-    if ref['connections'] or ref['unresolved']:
+    if ref['connections'] or ref['unresolved'] or ref['rules']:
         raise HTTPException(409, '密钥仍被连接引用，或配置尚未完成核验，请先解除引用并核验配置')
     from app.ssh.terminals import sessions
     if any(row.get('key') == name and row['running'] for row in sessions()):
