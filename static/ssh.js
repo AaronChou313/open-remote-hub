@@ -432,6 +432,29 @@ window.RemoteHubSSH = (() => {
     });
   }
 
+  async function copyPublic(text) {
+    if (window.isSecureContext && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(text); return; }
+      catch { /* Continue with the user-initiated HTTP-compatible copy path. */ }
+    }
+    const input = dialog.querySelector('.ssh-public');
+    input.focus();
+    input.select();
+    let wrote = false;
+    const write = event => {
+      if (!event.clipboardData) return;
+      event.clipboardData.setData('text/plain', text);
+      event.preventDefault();
+      wrote = true;
+    };
+    document.addEventListener('copy', write, true);
+    try {
+      if (!document.execCommand('copy') || !wrote) throw Error('公钥已选中，请按 Ctrl+C、⌘C 或长按复制');
+    } finally {
+      document.removeEventListener('copy', write, true);
+    }
+  }
+
   async function keyDetails(key) {
     const epoch = await open(key.name, `${key.public ? `<textarea class="ssh-public" readonly aria-label="SSH 公钥">${esc(key.public)}</textarea><div class="ssh-row-actions">${button('copy', '复制公钥')}<a class="button" href="/api/ssh/keys/${encode(key.name)}/public" download>下载公钥</a></div>` : '<p class="muted">尚无公钥文件。</p>' + button('derive', '生成匹配公钥')}<h3>关联连接</h3><div id="sshKeyReferences">读取中…</div><div class="ssh-row-actions">${key.private ? button('passphrase', '修改密钥口令') + button('export', '导出私钥') : ''}${button('delete', '删除密钥', 'class="danger"')}</div>`);
     if (!epoch) return;
@@ -448,7 +471,7 @@ window.RemoteHubSSH = (() => {
               await reload();
             });
           }
-          if (action === 'copy') { await navigator.clipboard.writeText(key.public); notify('公钥已复制'); }
+          if (action === 'copy') { await copyPublic(key.public); notify('公钥已复制'); }
           if (action === 'export') await privileged('导出私钥', `将 ${key.name} 下载到当前设备，请妥善保存。`, 'key-export', key.name, async grant => {
             const exportEpoch = dialogEpoch;
             const response = await fetch(`/api/ssh/keys/${encode(key.name)}/export`, {method: 'POST', headers: {'Content-Type':'application/json', 'X-ORH-Request':'1'}, body: JSON.stringify({grant}), signal: AbortSignal.timeout(10000)});

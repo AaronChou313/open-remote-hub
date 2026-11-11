@@ -139,7 +139,7 @@ def test_auth_secure_transport_and_reauth_binding(ssh_home):
     token = grant(client, 'key-export', 'key')
     assert client.post('/api/ssh/keys/key/export', json=dict(grant=token)).status_code == 200
     assert client.post('/api/ssh/keys/key/export', json=dict(grant=token)).status_code == 403
-    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('192.168.1.10', 50000), headers={'X-ORH-Request': '1'})
+    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('8.8.8.8', 50000), headers={'X-ORH-Request': '1'})
     remote.cookies.set('orh', client.cookies.get('orh'))
     assert remote.post('/api/ssh/reauth', json=dict(operation='key-export', target='key', password=PASSWORD)).status_code == 403
     assert remote.post('/api/ssh/keys/generate', json=dict(name='unsafe')).status_code == 403
@@ -365,11 +365,11 @@ def test_wildcard_fingerprint_removal_excludes_only_target(ssh_home):
     assert hosts.matching('two.example.test', remaining)
 
 
-def test_remote_http_cannot_open_owned_ssh_terminal(ssh_home):
+def test_public_http_cannot_open_owned_ssh_terminal(ssh_home):
     from starlette.websockets import WebSocketDisconnect
     client, directory, _ = ssh_home
     store.put('terminal', 'fixture', dict(host='test', session='ssh-test-guard', state='completed', signature='fixture', created=0))
-    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('192.168.1.10', 50000), headers={'X-ORH-Request':'1'})
+    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('8.8.8.8', 50000), headers={'X-ORH-Request':'1'})
     remote.cookies.set('orh', client.cookies.get('orh'))
     assert remote.get('/terminal/ssh-test-guard').status_code == 403
     origin = f'http://127.0.0.1:{main.PORT}'
@@ -493,3 +493,56 @@ def test_bad_config_can_be_opened_for_repair_without_executing_it(ssh_home):
     plan = post(client, '/config/plan', dict(file=info['id'], revision=info['revision'], text='Host repair\n HostName localhost\n'))
     post(client, '/config/apply', dict(plan=plan['plan'], confirm='config', grant=grant(client, 'config-apply', 'config')))
     assert client.get('/api/ssh/connections/repair/effective').json()['hostname'] == 'localhost'
+
+
+@pytest.mark.parametrize('address', ['192.168.31.20', '10.2.3.4', '172.20.1.2', '100.66.1.3', 'fd12::3', '::ffff:192.168.31.20'])
+def test_private_network_http_supports_key_and_terminal_operations(ssh_home, monkeypatch, address):
+    from app import terminal_entry
+    from app.ssh import terminals
+    client, directory, _ = ssh_home
+    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=(address, 50000),
+                        headers={'X-ORH-Request':'1', 'Origin':f'http://127.0.0.1:{main.PORT}'})
+    remote.cookies.set('orh', client.cookies.get('orh'))
+    post(remote, '/keys/generate', dict(name='private-http-key'))
+    token = grant(remote, 'key-export', 'private-http-key')
+    exported = remote.post('/api/ssh/keys/private-http-key/export', json={'grant':token})
+    assert exported.status_code == 200 and 'PRIVATE KEY' in exported.text
+    status = remote.get('/api/ssh/overview').json()
+    assert status['transport_allowed'] and not status['secure_transport']
+    store.put('terminal', 'private-fixture', dict(host='private', session='ssh-private-http', state='completed', signature='fixture', created=0))
+    monkeypatch.setattr(terminal_entry, 'prepare', lambda name:dict(url='/terminal/' + name))
+    assert remote.post('/api/zellij/ssh-private-http/enter', json={}).status_code == 200
+    monkeypatch.setattr(terminals, 'launch', lambda host, new:dict(session='ssh-private-http', url='/terminal/ssh-private-http'))
+    assert remote.post('/api/ssh/connections/private/connect', json={}).status_code == 200
+
+    # Exercise the authenticated native WS gateway with a bounded upstream stub.
+    # The SSH protocol and real Zellij upstream are covered by the separate live suite.
+    import contextlib
+    from types import SimpleNamespace
+    from app import native_terminal
+    class UpstreamSocket:
+        async def send(self, data):
+            pass
+        async def __aiter__(self):
+            yield 'private-http-ws-accepted'
+    @contextlib.asynccontextmanager
+    async def connection(url, cookie):
+        yield UpstreamSocket()
+    async def authenticate():
+        return SimpleNamespace(cookies={})
+    monkeypatch.setattr(native_terminal, 'native_connection', connection)
+    monkeypatch.setattr(native_terminal, 'upstream', SimpleNamespace(authenticate=authenticate, base=lambda:'http://127.0.0.1:8082'))
+    origin = f'http://127.0.0.1:{main.PORT}'
+    with remote.websocket_connect(origin.replace('http:', 'ws:') + '/terminal/ws/terminal/ssh-private-http?web_client_id=fixture&rows=24&cols=80', headers={'Origin':origin}) as terminal:
+        assert terminal.receive_text() == 'private-http-ws-accepted'
+
+
+def test_http_network_configuration_and_forwarded_header_boundary(ssh_home, monkeypatch):
+    client, directory, _ = ssh_home
+    remote = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', client=('8.8.8.8', 50000), headers={'X-ORH-Request':'1'})
+    remote.cookies.set('orh', client.cookies.get('orh'))
+    assert remote.post('/api/ssh/keys/generate', json={'name':'blocked'}, headers={'X-Forwarded-For':'192.168.31.20'}).status_code == 403
+    monkeypatch.setenv('ORH_SSH_HTTP_NETWORKS', '8.8.8.8/32')
+    assert remote.post('/api/ssh/keys/generate', json={'name':'custom-network'}).status_code == 200
+    monkeypatch.setenv('ORH_SSH_HTTP_NETWORKS', 'invalid')
+    assert remote.post('/api/ssh/keys/generate', json={'name':'invalid-policy'}).status_code == 503

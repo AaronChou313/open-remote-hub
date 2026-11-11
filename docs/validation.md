@@ -107,4 +107,4 @@ DSH 的受管进程创建时间曾使用精确相等比较，独立 Python 进�
 
 未验收范围包括真实外部设备、Windows/iPhone 客户端、实际网络中断与整机重启、外部可信 HTTPS 证书及 Ubuntu 宿主机部署。Linux CI 覆盖单元与前端测试，Docker 中的 OpenSSH 服务覆盖真实 Linux SSH 协议交互。自动 keyscan 仅支持直连，跳板首次指纹核验由原生加密终端完成。授权 SSH 目录外或软链接 Include 保持只读，原生 Config 本身为软链接时需在其外部配置源接入 Include。
 
-控制台继续使用原有 HTTP 入口。远程 SSH 口令、私钥和受管 SSH 终端操作要求 HTTPS，原生 TLS 配置及证书部署流程见 `SSH.md`。本机 localhost 可直接使用。
+控制台继续使用原有 HTTP 入口。按用户后续要求，localhost、局域网及私有组网可通过 HTTP 使用全部 SSH 操作，默认包括 100.64.0.0/10。来源策略同时覆盖 HTTP API 和原生终端 WS，管理员登录、来源校验与危险操作复验保持。HTTPS 为可选部署方式，配置见 `SSH.md`。

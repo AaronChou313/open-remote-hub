@@ -11,8 +11,5 @@ def protect_session(request, name):
         from app.ssh.terminals import sessions
         records = sessions()
     if any(row['session'] == name for row in records):
-        from app.ssh.api import secure
-        # WebSocket URLs use wss instead of https.
-        if request.url.scheme == 'wss':
-            return
-        secure(request)
+        from app.ssh.transport import require_transport
+        require_transport(request)

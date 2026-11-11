@@ -27,9 +27,11 @@
 
 文件使用权限检查、无软链接路径、进程间锁、原子写入、内容修订检查及私有备份。连接配置跨文件与 SQLite 更新有恢复日志，服务中断后自动核对。密钥创建采用独占发布，已有文件不会被覆盖。软件安装、系统 SSH 服务和真实用户配置均不属于测试环境。
 
-## HTTPS 部署
+## 私有网络访问与可选 HTTPS
 
-远程输入 SSH 密码、密钥口令和操作私钥需要 HTTPS。宿主机 `http://localhost:8765`、`http://127.0.0.1:8765` 允许本地使用。仅伪造 Host 为 localhost 无法绕过检查，服务同时检查实际连接来源。
+localhost、局域网和私有组网通过 HTTP 即可使用全部 SSH 操作，包括口令输入、密钥导入导出、配置编辑和原生网页终端。默认允许实际连接来源为 127.0.0.0/8、10.0.0.0/8、172.16.0.0/12、192.168.0.0/16、100.64.0.0/10、::1/128、fc00::/7 和 fe80::/10。节点小宝的 100.66.1.x 已包含在默认范围内。
+
+可通过 `.env` 的 `ORH_SSH_HTTP_NETWORKS` 设置逗号分隔的 IP 或 CIDR。现有 `ORH_ALLOWED_HOSTS` 仍控制可访问的目标地址，管理员登录、Host/Origin、CSRF、危险操作确认与密码复验继续生效。HTTP 与 WS 使用相同来源策略，不采信客户端提供的 X-Forwarded-For。
 
 RemoteHub 原生 TLS 可直接用于 macOS launchd 和 Linux systemd，无需依赖转发头信任。将有效证书和私钥路径写入私有 `.env`。
 
@@ -45,7 +47,7 @@ ORH_TLS_KEY_FILE=/absolute/path/privkey.pem
 
 启用 TLS 后使用 HTTPS 登录一次。浏览器登录 Cookie 在 HTTPS 下带 Secure 属性，旧 HTTP 登录可能需要重新登录。原生 TLS 不接受代理伪造的 X-Forwarded-Proto。若已有反向代理，推荐其通过 HTTPS 回源，保留 Host/Origin 及配置端口。多域名、443 端口转换需匹配现有 Host/Origin allowlist。
 
-当前控制台若仍使用 HTTP，远程 SSH 敏感操作将提示使用 HTTPS，本次开发不自动替换现有网络入口或生成不受客户端信任的证书。远程管理账户具有既有文件和终端权限，应为整个控制台部署 HTTPS。
+当前 HTTP 入口可直接用于允许的私有网络。HTTPS 是可选部署方式，传输加密与 HTTP 操作权限分别显示和判断。
 
 ## 数据与恢复
 

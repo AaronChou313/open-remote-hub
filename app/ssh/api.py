@@ -1,5 +1,4 @@
 """Authenticated SSH management API. Secret operations are purpose-bound."""
-import ipaddress
 import json
 from pathlib import Path
 import secrets
@@ -19,15 +18,8 @@ def audit(target, action):
 
 
 def secure(request):
-    if request.url.scheme == 'https':
-        return
-    try:
-        local = ipaddress.ip_address(request.client.host).is_loopback
-    except (ValueError, AttributeError):
-        local = False
-    if local and request.url.hostname in ('localhost', '127.0.0.1', '::1'):
-        return
-    raise HTTPException(403, 'SSH 口令与私钥操作需要 HTTPS。请使用配置了证书的 HTTPS 入口，或在宿主机 localhost 操作')
+    from app.ssh.transport import require_transport
+    require_transport(request)
 
 
 async def body(request: Request):
@@ -66,7 +58,7 @@ def overview(request: Request):
         protected = True
     except HTTPException:
         protected = False
-    return dict(data, directory=str(store.root()), secure_transport=protected, sessions=terminals.sessions())
+    return dict(data, directory=str(store.root()), secure_transport=request.url.scheme == 'https', transport_allowed=protected, sessions=terminals.sessions())
 
 
 @router.post('/reauth')
