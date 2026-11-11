@@ -61,7 +61,7 @@ def known(host, cancel=None):
 def scan(host, cancel=None):
     hostname, port, label, values = address(host, cancel)
     if values.get('proxyjump', 'none') != 'none':
-        raise HTTPException(409, '此连接使用跳板，请在加密原生终端中核验 OpenSSH 显示的指纹；自动扫描只支持直连地址')
+        raise HTTPException(409, '此连接使用跳板，请在原生终端中核验 OpenSSH 显示的指纹；自动扫描只支持直连地址')
     try:
         output = run(['ssh-keyscan', '-T', '5', '-p', port, hostname], timeout=18, cancel=cancel)
     except CommandFailure:

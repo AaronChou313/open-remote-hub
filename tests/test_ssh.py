@@ -546,3 +546,17 @@ def test_http_network_configuration_and_forwarded_header_boundary(ssh_home, monk
     assert remote.post('/api/ssh/keys/generate', json={'name':'custom-network'}).status_code == 200
     monkeypatch.setenv('ORH_SSH_HTTP_NETWORKS', 'invalid')
     assert remote.post('/api/ssh/keys/generate', json={'name':'invalid-policy'}).status_code == 503
+
+
+@pytest.mark.parametrize('algorithm,bits,kind', [('ed25519',None,'ED25519'), ('rsa',2048,'RSA'), ('rsa',3072,'RSA'), ('rsa',4096,'RSA'), ('ecdsa',256,'ECDSA'), ('ecdsa',384,'ECDSA'), ('ecdsa',521,'ECDSA')])
+def test_supported_key_generation_algorithms(ssh_home, algorithm, bits, kind):
+    client, directory, _ = ssh_home
+    result = post(client, '/keys/generate', dict(name='multi-algorithm', algorithm=algorithm, bits=bits, passphrase='algorithm-fixture'))
+    assert result['type'] == kind
+    if bits:
+        assert result['bits'] == bits
+    from app.ssh.process import keygen
+    public = keygen(['ssh-keygen','-y','-f',str(directory/'multi-algorithm')], ['algorithm-fixture'])
+    assert keys.public_line(public)['fingerprint'] == result['fingerprint']
+    for algorithm, bits in [('dsa',1024), ('rsa',1024), ('rsa;id',2048), ('ecdsa',4096)]:
+        assert client.post('/api/ssh/keys/generate', json=dict(name='invalid-algorithm', algorithm=algorithm, bits=bits)).status_code == 400

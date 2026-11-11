@@ -185,13 +185,23 @@ def publish(name, private, public):
 
 def generate(body):
     name = key_name(body.get('name'))
+    algorithm = str(body.get('algorithm', 'ed25519')).lower()
+    sizes = {'ed25519': (), 'rsa': (2048, 3072, 4096), 'ecdsa': (256, 384, 521)}
+    if algorithm not in sizes:
+        raise HTTPException(400, '密钥类型支持 ED25519、RSA 和 ECDSA')
+    bits = str(body.get('bits') or (4096 if algorithm == 'rsa' else 256))
+    if sizes[algorithm] and (not bits.isdecimal() or int(bits) not in sizes[algorithm]):
+        raise HTTPException(400, '此密钥类型不支持选择的位数')
     comment = str(body.get('comment', '')).strip()
     if len(comment) > 200 or any(c in comment for c in '\r\n\x00'):
         raise HTTPException(400, '密钥备注无效')
     with store.locked(), staging() as temp:
         ensure_new(name)
         password = str(body.get('passphrase', ''))
-        keygen(['ssh-keygen', '-q', '-t', 'ed25519', '-a', '64', '-f', str(temp), '-C', comment], [password, password])
+        command = ['ssh-keygen', '-q', '-t', algorithm, '-a', '64', '-f', str(temp), '-C', comment]
+        if sizes[algorithm]:
+            command += ['-b', bits]
+        keygen(command, [password, password])
         public = public_line(temp.with_suffix('.pub').read_text())
         publish(name, temp, temp.with_suffix('.pub'))
     return dict(name=name, **public)

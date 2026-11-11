@@ -16,6 +16,7 @@ window.RemoteHubSSH = (() => {
 
   const encode = encodeURIComponent;
   const button = (action, label, attributes = '') => `<button type="button" data-ssh="${action}" ${attributes}>${label}</button>`;
+  const menuAction = (action, label, glyph, danger = false) => button(action, `${icon(glyph)}<span>${label}</span>`, `class="ssh-menu-action${danger ? ' danger' : ''}"`);
   const field = (name, label, value = '', attributes = '') => `<label>${label}<input name="${name}" value="${esc(value)}" ${attributes}></label>`;
   const errorBox = '<p class="ssh-error" role="alert" hidden></p>';
 
@@ -56,6 +57,7 @@ window.RemoteHubSSH = (() => {
     if (submitting) return null;
     if (dialog.open && dirty && !await confirmAction('放弃未保存修改？', '切换后将丢弃此窗口中的编辑内容。')) return null;
     dirty = false;
+    dialog.classList?.remove('ssh-dialog--wide');
     if (activeJob) {
       api(`/ssh/jobs/${activeJob}/cancel`, {}).catch(() => {});
       activeJob = null;
@@ -81,6 +83,7 @@ window.RemoteHubSSH = (() => {
 
   function attachForm(work, track = true) {
     const target = dialog.querySelector('form');
+    target.querySelector('input, select, textarea')?.focus({preventScroll:true});
     target.oninput = () => { if (track) dirty = true; };
     target.onsubmit = event => {
       event.preventDefault();
@@ -254,8 +257,38 @@ window.RemoteHubSSH = (() => {
   }
 
   async function details(row) {
-    const epoch = await open(row.alias, `<div class="ssh-row-actions">${button('edit', row.managed ? '编辑连接' : '编辑原生配置')}${button('new', '新建独立终端 ↗')}${button('diagnose', '连接诊断')}${button('fingerprint', '主机指纹')}${button('deploy', '部署公钥')}${button('organize', '设置分组')}${row.managed ? button('delete', '删除连接', 'class="danger"') : ''}</div><h3>生效配置</h3><div id="sshEffective">读取中…</div><h3>终端会话</h3><div id="sshTerminalList"></div>`);
+    const epoch = await open(row.alias, `
+      <div class="ssh-manage-layout">
+
+        <div class="ssh-manage-content">
+          <div class="ssh-detail-intro">
+            <p id="sshConnectionAddress" class="mono">${esc(row.hostname || row.alias)}</p>
+            <span class="badge">${row.managed ? 'OpenRemoteHub 连接' : '原生 SSH Config'}</span>
+          </div>
+          <div class="ssh-detail-connect">
+            ${button('enter', `${icon('terminal')}进入终端 ${icon('external')}`, 'class="primary"')}
+            ${button('new', `${icon('plus')}新开终端`)}
+          </div>
+          <section class="ssh-detail-section"><h3>连接信息</h3><div id="sshEffective" class="muted">正在读取生效配置…</div></section>
+          <section class="ssh-detail-section"><h3>终端会话</h3><div id="sshTerminalList"></div></section>
+        </div>
+        <nav class="ssh-manage-menu" aria-label="连接管理操作">
+          <div class="ssh-menu-section">
+            <h3>连接设置</h3>
+            ${menuAction('edit', row.managed ? '编辑连接' : '编辑原生配置', 'rename')}
+            ${menuAction('organize', '设置分组', 'folder')}
+          </div>
+          <div class="ssh-menu-section">
+            <h3>连接工具</h3>
+            ${menuAction('diagnose', '连接诊断', 'network')}
+            ${menuAction('fingerprint', '主机指纹', 'password')}
+            ${menuAction('deploy', '部署公钥', 'upload')}
+          </div>
+          ${row.managed ? `<div class="ssh-menu-section ssh-menu-danger">${menuAction('delete', '删除连接', 'delete', true)}</div>` : ''}
+        </nav>
+      </div>`);
     if (!epoch) return;
+    dialog.classList.add('ssh-dialog--wide');
     const sessions = overview.sessions.filter(session => session.host.toLowerCase() === row.alias.toLowerCase());
     dialog.querySelector('#sshTerminalList').innerHTML = sessions.length ? sessions.map(session => `<div class="ssh-session-row"><span class="mono">${esc(session.session)}</span><span>${session.running ? '运行中' : session.state === 'completed' ? '已退出' : '已断开'}</span>${session.live_session ? `<a class="button" target="_blank" rel="noopener" href="/terminal/${encode(session.session)}">查看终端 ↗</a>` : ''}</div>`).join('') : '<p class="muted">尚无 SSH 终端</p>';
     dialog.querySelectorAll('[data-ssh]').forEach(control => {
@@ -267,6 +300,7 @@ window.RemoteHubSSH = (() => {
             if (row.managed) await connectionForm(row);
             else await editConfig(row.sources[0].file);
           }
+          if (action === 'enter') await connect(row.alias, control);
           if (action === 'new') await connect(row.alias, control, true);
           if (action === 'diagnose') await diagnose(row.alias);
           if (action === 'fingerprint') await fingerprints(row.alias);
@@ -283,7 +317,12 @@ window.RemoteHubSSH = (() => {
     try {
       const result = await request(`/ssh/connections/${encode(row.alias)}/effective`);
       if (epoch !== dialogEpoch) return;
-      dialog.querySelector('#sshEffective').innerHTML = `<dl class="ssh-definition">${Object.entries(result).map(([key, value]) => `<dt>${esc(key)}</dt><dd class="mono">${esc(Array.isArray(value) ? value.join('\n') : value)}</dd>`).join('')}</dl>`;
+      dialog.querySelector('#sshConnectionAddress').textContent = `${result.user || ''}@${result.hostname || row.alias}:${result.port || 22}`;
+      const names = {hostname:'主机地址', user:'用户名', port:'端口', identityfile:'身份密钥', proxyjump:'跳板', identityagent:'SSH Agent', forwardagent:'Agent 转发', identitiesonly:'仅指定密钥', stricthostkeychecking:'主机身份校验', userknownhostsfile:'主机指纹文件', hostkeyalias:'主机密钥别名'};
+      const primary = ['hostname', 'user', 'port', 'identityfile', 'proxyjump'];
+      const rows = entries => `<dl class="ssh-definition">${entries.map(([key, value]) => `<dt>${esc(names[key] || key)}</dt><dd class="mono">${esc(Array.isArray(value) ? value.join('\n') : value)}</dd>`).join('')}</dl>`;
+      const entries = Object.entries(result);
+      dialog.querySelector('#sshEffective').innerHTML = rows(entries.filter(([key]) => primary.includes(key))) + `<details class="ssh-more-options"><summary>更多 OpenSSH 选项</summary>${rows(entries.filter(([key]) => !primary.includes(key)))}</details>`;
     } catch (error) {
       if (epoch === dialogEpoch) dialog.querySelector('#sshEffective').textContent = error.message;
     }
@@ -387,7 +426,7 @@ window.RemoteHubSSH = (() => {
   async function renderKeys(version) {
     const data = await request('/ssh/keys');
     if (!current() || version !== renderEpoch || tab !== 'keys') return;
-    $('#sshPanel').innerHTML = `<div class="ssh-toolbar"><span class="muted">${data.keys.length} 个本地密钥</span><div class="ssh-row-actions"><button id="sshImport">导入密钥</button><button class="primary" id="sshGenerate">＋ 生成 ED25519</button></div></div><div class="ssh-key-list">${data.keys.length ? data.keys.map((key, index) => `<article class="ssh-key-row"><div><h2>${esc(key.name)}</h2><p class="muted">${key.unavailable ? '文件权限或格式不可读取' : `${esc(key.type || '私钥')} · ${key.private ? key.encrypted ? '口令保护' : '无口令' : '仅公钥'}`}</p>${key.fingerprint ? `<code>${esc(key.fingerprint)}</code>` : ''}</div>${key.unavailable ? '' : button('key', '管理', `data-index="${index}"`)}</article>`).join('') : empty('暂无 SSH 密钥')}</div><h3>密钥备份</h3><div>${data.backups.length ? data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('key-restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('') : '<p class="muted">暂无密钥备份</p>'}</div>`;
+    $('#sshPanel').innerHTML = `<div class="ssh-toolbar"><span class="muted">${data.keys.length} 个本地密钥</span><div class="ssh-row-actions"><button id="sshImport">导入密钥</button><button class="primary" id="sshGenerate">＋ 新建密钥</button></div></div><div class="ssh-key-list">${data.keys.length ? data.keys.map((key, index) => `<article class="ssh-key-row"><div><h2>${esc(key.name)}</h2><p class="muted">${key.unavailable ? '文件权限或格式不可读取' : `${esc(key.type || '私钥')}${key.bits && key.type !== 'ED25519' ? ' ' + key.bits : ''} · ${key.private ? key.encrypted ? '口令保护' : '无口令' : '仅公钥'}`}</p>${key.fingerprint ? `<code>${esc(key.fingerprint)}</code>` : ''}</div>${key.unavailable ? '' : button('key', '管理', `data-index="${index}"`)}</article>`).join('') : empty('暂无 SSH 密钥')}</div>${data.backups.length ? '<details class="ssh-backup-section"><summary>密钥备份与恢复 <span>' + data.backups.length + '</span></summary><div>' : ''}${data.backups.length ? data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('key-restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('') : ''}${data.backups.length ? '</div></details>' : ''}`;
     $('#sshGenerate').onclick = () => generate();
     $('#sshImport').onclick = () => importKey();
     $('#sshPanel').querySelectorAll('[data-ssh="key-restore"]').forEach(control => {
@@ -404,15 +443,37 @@ window.RemoteHubSSH = (() => {
   }
 
   async function generate() {
-    if (!await open('生成 ED25519 密钥', form(`${field('name', '密钥名称', '', 'required pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" maxlength="96"')}${field('comment', '备注', '', 'maxlength="200"')}${field('passphrase', '密钥口令（可选）', '', 'type="password" autocomplete="new-password"')}${field('again', '再次输入密钥口令', '', 'type="password" autocomplete="new-password"')}`, '生成密钥'))) return;
+    if (!await open('新建 SSH 密钥', form(`
+      ${field('name', '密钥名称', '', 'required pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" maxlength="96" placeholder="例如 work-laptop"')}
+      <div class="ssh-form-grid">
+        <label>密钥类型<select name="algorithm" id="sshKeyAlgorithm">
+          <option value="ed25519">ED25519</option><option value="rsa">RSA</option><option value="ecdsa">ECDSA</option>
+        </select></label>
+        <label id="sshKeyBitsField" hidden>密钥位数<select name="bits" id="sshKeyBits" disabled></select></label>
+      </div>
+      ${field('comment', '备注', '', 'maxlength="200" placeholder="用途或邮箱，可选"')}
+      <div class="ssh-form-grid">
+        ${field('passphrase', '密钥口令', '', 'type="password" autocomplete="new-password" placeholder="可选"')}
+        ${field('again', '确认密钥口令', '', 'type="password" autocomplete="new-password"')}
+      </div>`, '创建密钥'))) return;
+    const algorithm = dialog.querySelector('#sshKeyAlgorithm');
+    const bits = dialog.querySelector('#sshKeyBits');
+    algorithm.onchange = () => {
+      const choices = algorithm.value === 'rsa' ? [2048, 3072, 4096] : algorithm.value === 'ecdsa' ? [256, 384, 521] : [];
+      bits.innerHTML = choices.map(value => `<option value="${value}" ${value === (algorithm.value === 'rsa' ? 4096 : 256) ? 'selected' : ''}>${value} 位</option>`).join('');
+      bits.disabled = choices.length === 0;
+      dialog.querySelector('#sshKeyBitsField').hidden = !choices.length;
+    };
     attachForm(async values => {
       if (values.passphrase !== values.again) throw Error('两次口令不一致');
       await request('/ssh/keys/generate', values);
       dirty = false;
       submitting = false; dialog.close();
-      notify('密钥已生成');
+      notify('密钥已创建');
       await reload();
     });
+    const target = dialog.querySelector('form');
+    target.oninput = () => { dirty = ['name', 'comment', 'passphrase', 'again'].some(name => target.elements[name].value.length > 0); };
   }
 
   async function importKey() {
@@ -456,8 +517,25 @@ window.RemoteHubSSH = (() => {
   }
 
   async function keyDetails(key) {
-    const epoch = await open(key.name, `${key.public ? `<textarea class="ssh-public" readonly aria-label="SSH 公钥">${esc(key.public)}</textarea><div class="ssh-row-actions">${button('copy', '复制公钥')}<a class="button" href="/api/ssh/keys/${encode(key.name)}/public" download>下载公钥</a></div>` : '<p class="muted">尚无公钥文件。</p>' + button('derive', '生成匹配公钥')}<h3>关联连接</h3><div id="sshKeyReferences">读取中…</div><div class="ssh-row-actions">${key.private ? button('passphrase', '修改密钥口令') + button('export', '导出私钥') : ''}${button('delete', '删除密钥', 'class="danger"')}</div>`);
+    const epoch = await open(key.name, `
+      <div class="ssh-manage-layout">
+
+        <div class="ssh-manage-content">
+          <div class="ssh-key-summary"><span class="badge">${esc(key.type || 'SSH')}${key.bits ? ' · ' + key.bits + ' 位' : ''}</span><span class="muted">${key.private ? key.encrypted ? '口令保护' : '未设置口令' : '仅公钥'}</span></div>
+          ${key.fingerprint ? `<p class="ssh-fingerprint mono">${esc(key.fingerprint)}</p>` : ''}
+          <section class="ssh-detail-section"><h3>公钥内容</h3>${key.public ? `<textarea class="ssh-public" readonly aria-label="SSH 公钥">${esc(key.public)}</textarea>` : '<p class="muted">可从私钥生成匹配公钥</p>'}</section>
+          <section class="ssh-detail-section"><h3>关联连接</h3><div id="sshKeyReferences" class="muted">正在检查引用…</div></section>
+        </div>
+        <nav class="ssh-manage-menu" aria-label="密钥管理操作">
+          <div class="ssh-menu-section"><h3>公钥操作</h3>
+            ${key.public ? menuAction('copy', '复制公钥', 'copy') + `<a class="ssh-menu-action" href="/api/ssh/keys/${encode(key.name)}/public" download>${icon('download')}<span>下载公钥</span></a>` : menuAction('derive', '生成匹配公钥', 'password')}
+          </div>
+          ${key.private ? `<div class="ssh-menu-section"><h3>私钥操作</h3>${menuAction('passphrase', '修改密钥口令', 'password')}${menuAction('export', '导出私钥', 'download')}</div>` : ''}
+          <div class="ssh-menu-section ssh-menu-danger">${menuAction('delete', '删除密钥', 'delete', true)}</div>
+        </nav>
+      </div>`);
     if (!epoch) return;
+    dialog.classList.add('ssh-dialog--wide');
     dialog.querySelectorAll('[data-ssh]').forEach(control => {
       const action = control.dataset.ssh;
       if (action === 'close') return;
@@ -509,8 +587,9 @@ window.RemoteHubSSH = (() => {
 
   async function renderConfig(version) {
     const data = await request('/ssh/config');
+    data.files.sort((a, b) => Number(b.relative === 'config') - Number(a.relative === 'config') || a.name.localeCompare(b.name));
     if (!current() || version !== renderEpoch || tab !== 'config') return;
-    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div>${data.requires_trust ? '<div class="ssh-attention"><p>配置包含可执行命令规则，使用前需核验当前版本。</p><button id="sshTrustConfig">核验并授权命令规则</button></div>' : ''}<div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '查看 / 高级编辑' : '查看', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}<h3>配置备份</h3><div class="ssh-backups">${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('') || '<p class="muted">暂无配置备份</p>'}</div>`;
+    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div>${data.requires_trust ? '<div class="ssh-attention"><p>配置包含可执行命令规则，使用前需核验当前版本。</p><button id="sshTrustConfig">核验并授权命令规则</button></div>' : ''}<div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '查看 / 高级编辑' : '查看', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}${data.backups.length ? '<details class="ssh-backup-section"><summary>配置备份与恢复 <span>' + data.backups.length + '</span></summary><div class="ssh-backups">' : ''}${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('')}${data.backups.length ? '</div></details>' : ''}`;
     const linkControl = $('#sshLink');
     if (linkControl) linkControl.onclick = async () => {
       try { const plan = await request('/ssh/config/plan', {action:'include'}); await applyPlan(plan); }

@@ -283,4 +283,4 @@ node --check static/sessions.js
 
 ## Web SSH 管理
 
-侧栏 **SSH 管理** 提供连接、密钥、原生 Config、主机指纹、公钥部署、连接诊断及独立 Zellij SSH 终端。首次接入 Config 前可预览差异，高风险密钥和配置操作要求管理员复验。localhost、局域网和私有组网支持通过 HTTP 使用全部 SSH 操作。HTTPS 可选。完整使用与部署流程见 [SSH.md](SSH.md)。
+侧栏 **SSH 管理** 支持生成 ED25519、RSA、ECDSA 密钥，提供连接、密钥、原生 Config、主机指纹、公钥部署、连接诊断及独立 Zellij SSH 终端。首次接入 Config 前可预览差异，高风险密钥和配置操作要求管理员复验。localhost、局域网和私有组网支持通过 HTTP 使用全部 SSH 操作。HTTPS 可选。完整使用与部署流程见 [SSH.md](SSH.md)。

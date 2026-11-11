@@ -8,7 +8,7 @@ class Dialog {
   listeners = {};
   content = '';
   controls = [];
-  form = {oninput:null, onsubmit:null};
+  form = {oninput:null, onsubmit:null, querySelector:() => null};
   addEventListener(name, callback) { this.listeners[name] = callback; }
   setAttribute() {}
   set innerHTML(value) { this.content = value; }
@@ -16,7 +16,7 @@ class Dialog {
   replaceChildren() { this.content = ''; }
   querySelector(selector) {
     if (selector === 'form') return this.form;
-    return {onclick:null, hidden:false, textContent:''};
+    return {onclick:null, hidden:false, textContent:'', focus(){}, select(){}};
   }
   querySelectorAll() { return this.controls; }
   showModal() { this.open = true; }
@@ -27,8 +27,10 @@ class Dialog {
 }
 const dialog = new Dialog();
 let resolveRequest;
+let copyHandler;
+let copiedText;
 const context = {
-  window: {}, document: {createElement:() => dialog, body:{append(){}}},
+  window: {}, document: {createElement:() => dialog, body:{append(){}}, addEventListener(type, handler){ if(type === 'copy') copyHandler = handler; }, removeEventListener(){ copyHandler = null; }, execCommand(){ copyHandler({clipboardData:{setData(type,text){copiedText = text;}}, preventDefault(){}}); return true; }},
   esc: value => String(value ?? ''), confirmAction:async () => true,
   FormData: class { *[Symbol.iterator]() { yield ['name','fixture']; } },
   api: () => new Promise(resolve => { resolveRequest = resolve; }),
@@ -37,7 +39,7 @@ const context = {
 };
 let source = fs.readFileSync('static/ssh.js', 'utf8');
 source = source.replace('return {render, canLeave, reset, isDirty: () => dirty};',
-  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, setCurrent:fn=>{current=fn}}};');
+  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, copyPublic, setCurrent:fn=>{current=fn}}};');
 vm.createContext(context);
 vm.runInContext(source, context);
 const ssh = context.window.RemoteHubSSH;
@@ -61,4 +63,6 @@ await submitted;
 assert.equal(completed, false, 'an old response cannot complete in a new dialog');
 assert.match(dialog.content, /fresh/);
 assert.equal(dialog.open, true);
-console.log('SSH dialog transitions, in-flight guard, and stale-response isolation passed');
+await ssh.test.copyPublic('ssh-ed25519 isolated-public-fixture');
+assert.equal(copiedText, 'ssh-ed25519 isolated-public-fixture');
+console.log('SSH dialogs, stale responses, and HTTP public-key copy passed');
