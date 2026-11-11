@@ -5,7 +5,16 @@ const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor
 let renderVersion=0;
 let view=typeof location!=='undefined'&&location.hash==='#proxy'?'proxy':localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={knowledge:['知识库','目录中的笔记，随时阅读与记录。'],ssh:['SSH 管理','管理连接、密钥与原生 SSH 配置。'],proxy:['代理与网络','管理机场配置、主机代理与网络连接。'],overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
+const titles={knowledge:'知识库',ssh:'SSH 管理',proxy:'代理与网络',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',tasks:'任务与服务'};
+let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
+function updateSidebar(){
+ document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
+ const button=$('#sidebarToggle'),label=sidebarCollapsed?'展开导航':'收起导航';
+ button.setAttribute('aria-expanded',String(!sidebarCollapsed));button.setAttribute('aria-label',label);button.title=label;
+ document.querySelectorAll('aside nav button').forEach(item=>{const name=item.textContent.trim();item.title=name;item.setAttribute('aria-label',name)});
+}
+updateSidebar();
+$('#sidebarToggle').onclick=()=>{sidebarCollapsed=!sidebarCollapsed;localStorage.setItem('orh-sidebar-collapsed',String(sidebarCollapsed));updateSidebar()};
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?(path.startsWith('/environments')?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
 async function withBusy(button,key,label,work){
@@ -23,7 +32,7 @@ async function switchView(target){
  if(target!==view)window.scrollTo?.(0,0);
  renderVersion++;busy=false;window.RemoteHubSessions?.close();view=target;localStorage.setItem('orh-view',view);
  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x.dataset.view===view));
- $('#title').textContent=titles[view][0];$('#subtitle').textContent=titles[view][1];$('#breadcrumb').textContent='工作空间 / '+titles[view][0];
+ $('#title').textContent=titles[view];$('#breadcrumb').textContent='工作空间 / '+titles[view];
  $('#error').hidden=true;$('#content').innerHTML=empty('正在读取本机数据…');refresh();
 }
 function showLogin(){window.RemoteHubKnowledge?.reset();window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}

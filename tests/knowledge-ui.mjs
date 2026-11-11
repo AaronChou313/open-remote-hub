@@ -59,3 +59,20 @@ assert.equal(await knowledge.canLeave(),true);
 knowledge.reset();
 assert.equal(knowledge.isDirty(),false);
 console.log('Knowledge Markdown, tree filtering, paths, save races, and unsaved-edit guards passed');
+
+const nested = knowledge.test.treeMarkup([
+  {path:'folder',name:'folder',kind:'directory'},
+  {path:'folder/sub',name:'sub',kind:'directory'},
+  {path:'folder/sub/笔记.md',name:'笔记.md',kind:'file'},
+  {path:'folder/image.png',name:'image.png',kind:'file'},
+]);
+assert.match(nested,/data-folder="folder\/sub"/);
+assert.match(nested,/kb-folder-chevron/);
+assert.doesNotMatch(nested,/image.png/);
+console.log('Recursive notebook folders show explicit expansion controls and Markdown only.');
+
+const knowledgeStyles = fs.readFileSync('static/knowledge.css','utf8');
+const cells = knowledgeStyles.match(/\.kb-markdown th,\s*\.kb-markdown td\s*\{([^}]*)\}/)[1];
+assert.match(cells,/white-space:\s*normal/);
+assert.match(cells,/overflow-wrap:\s*anywhere/);
+console.log('Markdown table cells wrap long content instead of inheriting dashboard nowrap.');

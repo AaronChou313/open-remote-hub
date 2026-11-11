@@ -14,6 +14,7 @@ window.RemoteHubSSH = (() => {
   let renderEpoch = 0;
   let submitting = false;
   let effectiveRequests = new Map();
+  let filterCleanup;
 
   const encode = encodeURIComponent;
   const button = (action, label, attributes = '') => `<button type="button" data-ssh="${action}" ${attributes}>${label}</button>`;
@@ -130,6 +131,7 @@ window.RemoteHubSSH = (() => {
   }
 
   async function render(isCurrent) {
+    filterCleanup?.();
     current = isCurrent;
     const version = ++renderEpoch;
     const data = await request('/ssh/overview');
@@ -166,17 +168,53 @@ window.RemoteHubSSH = (() => {
 
   function renderConnections() {
     const groups = [...new Set(overview.connections.map(row => row.metadata?.group ?? row.group ?? '').filter(Boolean))].sort();
-    $('#sshPanel').innerHTML = `${!overview.linked && overview.connections.some(row => row.managed) ? '<div class="ssh-attention"><p>受管连接尚未接入原生 Config</p><button id="sshIncludePreview">预览并接入</button></div>' : ''}<div class="ssh-toolbar"><input id="sshSearch" type="search" aria-label="搜索 SSH 连接" placeholder="搜索别名、地址或分组" value="${esc(query)}"><select id="sshGroup" aria-label="筛选分组"><option value="">所有分组</option>${groups.map(name => `<option value="${esc(name)}" ${group === name ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select><button id="sshFavorites" aria-pressed="${favorites}">仅收藏</button><button id="sshNew" class="primary">${icon('plus')}新建连接</button></div><div id="sshConnections"></div>`;
+    if (group && !groups.includes(group)) group = '';
+    $('#sshPanel').innerHTML = `${!overview.linked && overview.connections.some(row => row.managed) ? '<div class="ssh-attention"><p>受管连接尚未接入原生 Config</p><button id="sshIncludePreview">预览并接入</button></div>' : ''}<div class="ssh-toolbar"><input id="sshSearch" type="search" aria-label="搜索 SSH 连接" placeholder="搜索别名、地址或分组" value="${esc(query)}"><div class="ssh-toolbar-actions"><button id="sshFilter" popovertarget="sshFilterPanel" aria-expanded="false">${icon('settings')}筛选</button><button id="sshNew" class="primary">${icon('plus')}新建连接</button></div><div id="sshFilterPanel" popover class="ssh-filter-panel" role="dialog" aria-label="SSH 连接筛选"><label>分组<select id="sshGroup"><option value="">所有分组</option>${groups.map(name => `<option value="${esc(name)}" ${group === name ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></label><label class="ssh-filter-check"><input id="sshFavorites" type="checkbox" ${favorites ? 'checked' : ''}>仅显示已收藏连接</label><button id="sshFilterReset" type="button">清除筛选</button></div></div><div id="sshConnections"></div>`;
     $('#sshSearch').oninput = event => { query = event.target.value; drawConnections(); };
-    $('#sshGroup').onchange = event => { group = event.target.value; drawConnections(); };
-    $('#sshFavorites').onclick = event => { favorites = !favorites; event.currentTarget.setAttribute('aria-pressed', favorites); drawConnections(); };
+    const filter = $('#sshFilter'), panel = $('#sshFilterPanel');
+    function updateFilter() {
+      const count = Number(Boolean(group)) + Number(favorites);
+      filter.innerHTML = `${icon('settings')}筛选${count ? `<span class="ssh-filter-count">${count}</span>` : ''}`;
+      filter.dataset.active = String(count > 0);
+      $('#sshFilterReset').disabled = count === 0;
+      drawConnections();
+    }
+    function positionFilter() {
+      const rect = filter.getBoundingClientRect();
+      const width = panel.offsetWidth || 260, height = panel.offsetHeight || 190;
+      panel.style.left = Math.max(16, Math.min(rect.right - width, innerWidth - width - 16)) + 'px';
+      panel.style.top = (rect.bottom + height + 8 <= innerHeight ? rect.bottom + 8 : Math.max(16, rect.top - height - 8)) + 'px';
+    }
+    panel.addEventListener('beforetoggle', event => { if (event.newState === 'open') positionFilter(); });
+    panel.addEventListener('toggle', () => {
+      const opened = panel.matches(':popover-open');
+      filter.setAttribute('aria-expanded', String(opened));
+      if (opened) positionFilter();
+    });
+    const closeFilter = () => { if (panel.matches(':popover-open')) panel.hidePopover(); };
+    const moveFilter = () => {
+      if (!panel.matches(':popover-open')) return;
+      const rect = filter.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > innerHeight) closeFilter();
+      else positionFilter();
+    };
+    window.addEventListener('scroll', moveFilter, true);
+    window.addEventListener('resize', moveFilter);
+    filterCleanup = () => {
+      closeFilter();
+      window.removeEventListener('scroll', moveFilter, true);
+      window.removeEventListener('resize', moveFilter);
+    };
+    $('#sshGroup').onchange = event => { group = event.target.value; updateFilter(); };
+    $('#sshFavorites').onchange = event => { favorites = event.target.checked; updateFilter(); };
+    $('#sshFilterReset').onclick = () => { group = ''; favorites = false; $('#sshGroup').value = ''; $('#sshFavorites').checked = false; updateFilter(); };
+    updateFilter();
     $('#sshNew').onclick = () => connectionForm().catch(showDialogError);
     const include = $('#sshIncludePreview');
     if (include) include.onclick = async () => {
       try { await applyPlan(await request('/ssh/config/plan', {action:'include'})); }
       catch (error) { showError(error); }
     };
-    drawConnections();
   }
 
   function connectionFacts(row, values = row) {
@@ -629,6 +667,7 @@ window.RemoteHubSSH = (() => {
   }
 
   function reset() {
+    filterCleanup?.();
     if (dialog?.open) { dirty = false; submitting = false; dialog.close(); }
     submitting = false;
     dialogEpoch++;

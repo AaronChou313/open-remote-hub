@@ -49,7 +49,7 @@
 .kb-note-toolbar button, .kb-note-toolbar a { padding: 7px 10px; font-size: 12px; min-height: 34px; }
 .kb-note-toolbar .orh-icon { width: 14px; height: 14px; }
 .kb-editor { display: block; width: 100%; min-height: 470px; resize: vertical; padding: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: 13px/1.9 ui-monospace, SFMono-Regular, Consolas, monospace; tab-size: 4; }
-.kb-markdown { max-width: 72ch; margin: 0 auto; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
+.kb-markdown { max-width: none; margin: 0 auto; font-size: 14px; line-height: 1.85; overflow-wrap: anywhere; }
 .kb-markdown > :first-child { margin-top: 0; }
 .kb-markdown h1, .kb-markdown h2, .kb-markdown h3, .kb-markdown h4 { margin: 1.6em 0 .65em; line-height: 1.45; letter-spacing: 0; }
 .kb-markdown h1 { font-size: 26px; }
@@ -63,8 +63,8 @@
 .kb-markdown pre { padding: 16px; background: var(--bg); border-radius: 8px; overflow: auto; font-size: 12px; line-height: 1.7; }
 .kb-markdown code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; }
 .kb-markdown :not(pre) > code { padding: .15em .35em; background: var(--bg); border-radius: 4px; }
-.kb-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
-.kb-markdown th, .kb-markdown td { border: 1px solid var(--line); padding: 9px 12px; }
+.kb-markdown table { display: table; width: 100%; max-width: 100%; table-layout: auto; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+.kb-markdown th, .kb-markdown td { border: 1px solid var(--line); padding: 9px 10px; white-space: normal; overflow-wrap: anywhere; vertical-align: top; line-height: 1.65; }
 .kb-markdown img { max-width: 100%; height: auto; border-radius: 6px; }
 .kb-markdown hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
 .kb-markdown input[type="checkbox"] { width: auto; margin-right: 6px; }
@@ -93,3 +93,34 @@
   .kb-markdown h2 { font-size: 19px; }
   .kb-dialog { padding: 20px; }
 }
+
+.kb-markdown>p,.kb-markdown>ul,.kb-markdown>ol{max-width:72ch}
+.kb-folder-chevron{display:inline-flex;transform:rotate(-90deg);color:var(--muted)}
+.kb-tree-folder[open]>summary>.kb-folder-chevron{transform:rotate(0)}
+.kb-tree-folder>summary>.kb-folder-chevron .orh-icon{width:12px;height:12px}
+.kb-library-actions .kb-remove{border-color:color-mix(in srgb,var(--red) 35%,var(--line))}
+.kb-library-actions .kb-trash{background:color-mix(in srgb,var(--red) 10%,var(--surface))}
+.kb-directory-input{display:flex;align-items:center;gap:8px}
+.kb-directory-input input{min-width:0;flex:1}
+.kb-directory-input button{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;min-height:42px}
+.kb-picker{width:min(680px,calc(100vw - 24px));max-height:90dvh;overflow:auto;padding:24px;border-radius:14px}
+.kb-picker .detail-dialog-bar{align-items:center;margin-bottom:20px;gap:12px}
+.kb-picker .detail-dialog-bar h2{font-size:18px}
+.kb-picker button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.kb-picker-location,.kb-picker-create{display:flex;gap:8px;margin-bottom:14px}
+.kb-picker-location input,.kb-picker-create input{flex:1;min-width:0;margin:0}
+.kb-picker-navigation{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kb-picker-navigation button,.kb-picker-navigation select{font-size:12px;min-height:36px}
+.kb-picker-navigation select{flex:1;width:auto;min-width:70px;margin:0}
+.kb-picker-create{margin-top:14px}
+#kbPickerStatus{font-size:11px;overflow-wrap:anywhere;margin:16px 0 10px}
+#kbPickerDirectories{min-height:180px;max-height:40dvh;overflow:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+#kbPickerDirectories>button{display:flex;width:100%;justify-content:flex-start;padding:12px 8px;border:0;border-radius:0;background:transparent;text-align:left;font-size:13px}
+#kbPickerDirectories>button:hover{background:var(--soft)}
+#kbPickerDirectories>button>span{flex:1;overflow-wrap:anywhere}
+#kbPickerDirectories>button>.orh-icon:last-child{width:14px;height:14px;transform:rotate(-90deg)}
+.kb-picker-empty{padding:25px 8px;font-size:12px}
+#kbPickerMore{margin-top:12px}
+@media(max-width:760px){.kb-picker{padding:18px}.kb-picker-navigation button{min-height:44px}.kb-markdown th,.kb-markdown td{padding:8px 6px;font-size:12px}}
+
+.kb-dialog label[for="kbDirectory"]{margin-bottom:8px}.kb-directory-input{margin-bottom:18px}

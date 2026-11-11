@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const nodes=new Map(),opened=[];
-function node(selector){if(!nodes.has(selector))nodes.set(selector,{textContent:'',value:'',hidden:false,disabled:false,isConnected:true,open:false,innerHTML:'',dataset:{},classList:{add(v){this[v]=true},toggle(v){this[v]=!this[v]},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},append(){},addEventListener(){},focus(){},reset(){},close(){this.open=false},showModal(){this.open=true},closest(){return null},querySelectorAll(){return []}});return nodes.get(selector)}
+function node(selector){if(!nodes.has(selector))nodes.set(selector,{textContent:'',value:'',hidden:false,disabled:false,isConnected:true,open:false,innerHTML:'',dataset:{},classList:{add(v){this[v]=true},toggle(v,force){this[v]=force===undefined?!this[v]:force},contains(v){return!!this[v]}},setAttribute(){},removeAttribute(){},replaceChildren(){},append(){},addEventListener(){},focus(){},reset(){},close(){this.open=false},showModal(){this.open=true},closest(){return null},querySelectorAll(){return []}});return nodes.get(selector)}
 const context=vm.createContext({console,AbortSignal,URL,JSON,Date,Number,Set,Map,Promise,queueMicrotask,setTimeout(){},setInterval(){},localStorage:{getItem(){return null},setItem(){}},matchMedia(){return {matches:false}},window:{open(url){opened.push(url);return {opener:{}}}},document:{body:node('body'),hidden:false,querySelector:node,querySelectorAll(){return []},createElement(){return node('new-link')},createTextNode(t){return t},addEventListener(){}},fetch(){throw Error('Unexpected network call')},EventSource:class{close(){}},prompt(){return 'renamed'}});
 vm.runInContext(fs.readFileSync('static/icons.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/sessions.js','utf8'),context);context.RemoteHubSessions=context.window.RemoteHubSessions;
@@ -55,3 +55,10 @@ for(const id of ['password','passwordConfirm','newPassword','newPasswordConfirm'
 }
 assert.doesNotMatch(passwordMarkup,/id="currentPassword"/);
 console.log('Password form uses current admin session and accepts unrestricted passwords.');
+
+node('#sidebarToggle').onclick();
+assert.equal(node('body').classList.contains('sidebar-collapsed'),true);
+node('#sidebarToggle').onclick();
+assert.equal(node('body').classList.contains('sidebar-collapsed'),false);
+assert.doesNotMatch(passwordMarkup,/id="subtitle"|个人基础设施/);
+console.log('Compact page headings and icon-only sidebar toggle passed.');

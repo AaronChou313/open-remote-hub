@@ -97,3 +97,18 @@ def test_auth_and_asset_download(workspace):
     client.post('/api/logout', json={})
     assert client.get('/api/knowledge').status_code == 401
     assert client.post('/api/knowledge', json=dict(directory=str(root))).status_code == 401
+
+
+def test_directory_chooser_browses_nested_folders_only(workspace):
+    client, _, root = workspace
+    (root / '研究' / '子目录').mkdir(parents=True)
+    (root / 'note.md').write_text('Markdown')
+    (root / 'image.png').write_bytes(b'png')
+    response = client.get('/api/knowledge/directories', params={'directory':str(root)})
+    assert response.status_code == 200
+    data = response.json()
+    assert [row['name'] for row in data['directories']] == ['研究']
+    nested = client.get('/api/knowledge/directories', params={'directory':str(root / '研究')}).json()
+    assert nested['directories'][0]['name'] == '子目录'
+    assert nested['parent'] == str(root)
+    assert client.get('/api/knowledge/directories', params={'directory':str(root.parent)}).status_code == 403

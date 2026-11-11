@@ -68,6 +68,19 @@ class Library(BaseModel):
     create: bool = False
 
 
+@router.get('/directories')
+def directories(request: Request, directory: str = '~', offset: int = 0):
+    value = location(directory)
+    result = files.listing(request, value['root'], value['path'], offset=offset)
+    current = absolute(value)
+    parent = Path(current).parent
+    return dict(directory=current, parent=str(parent) if parent != Path(current) and fs.locate(parent) else None,
+                home=str(Path.home()) if fs.locate(Path.home()) else None,
+                roots=fs.roots(), root=value['root'], path=value['path'],
+                directories=[row for row in result['entries'] if row['kind'] == 'directory' and not row['protected']],
+                next_offset=result['next_offset'] if result['entries'] and result['entries'][-1]['kind'] == 'directory' else None)
+
+
 @router.get('')
 def libraries():
     result = []

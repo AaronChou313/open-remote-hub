@@ -15,6 +15,9 @@ window.RemoteHubKnowledge = (() => {
   let search = '';
   let dialog;
   let formBusy = false;
+  let picker;
+  let pickerRequest = 0;
+  const expandedFolders = new Set();
   const encode = encodeURIComponent;
   const admin = () => me.role === 'admin';
   const basename = path => path.split('/').at(-1);
@@ -43,6 +46,9 @@ window.RemoteHubKnowledge = (() => {
     draft = '';
     library = null;
     if (dialog?.open) dialog.close();
+    if (picker?.open) picker.close();
+    pickerRequest++;
+    expandedFolders.clear();
   }
 
   function bind(selector, work) {
@@ -100,7 +106,7 @@ window.RemoteHubKnowledge = (() => {
     $('#content').innerHTML = `<section class="kb-home"><div class="kb-toolbar"><label class="kb-search">${icon('search')}<input id="kbLibrarySearch" type="search" placeholder="搜索知识库" aria-label="搜索知识库"></label>${admin() ? `<div class="kb-actions">${action('kbAttach', '添加目录', 'folder')}${action('kbCreate', '新建知识库', 'plus', 'class="primary"')}</div>` : ''}</div><div id="kbLibraries"></div></section>`;
     function draw(query = '') {
       const rows = data.libraries.filter(row => (row.name + ' ' + row.directory).toLowerCase().includes(query.toLowerCase()));
-      $('#kbLibraries').innerHTML = rows.length ? `<div class="kb-library-grid">${rows.map(row => `<article class="kb-library" data-library="${esc(row.id)}"><div class="kb-library-heading">${icon('knowledge')}<h2>${esc(row.name)}</h2></div><p class="kb-library-path mono">${esc(row.directory)}</p>${row.available ? '' : `<p class="danger-text">${esc(row.error)}</p>`}<div class="kb-library-actions">${action('', '打开', 'knowledge', `data-action="open" class="primary" ${row.available ? '' : 'disabled'}`)}${admin() ? `${action('', '编辑', 'rename', 'data-action="edit"')}${action('', '移除', 'logout', 'data-action="remove"')}${row.available && row.path ? action('', '删除目录', 'delete', 'data-action="trash" class="danger"') : ''}` : ''}</div></article>`).join('')}</div>` : empty(query ? '没有匹配的知识库' : '添加主机上的笔记目录，或创建一个新的知识库。');
+      $('#kbLibraries').innerHTML = rows.length ? `<div class="kb-library-grid">${rows.map(row => `<article class="kb-library" data-library="${esc(row.id)}"><div class="kb-library-heading">${icon('knowledge')}<h2>${esc(row.name)}</h2></div><p class="kb-library-path mono">${esc(row.directory)}</p>${row.available ? '' : `<p class="danger-text">${esc(row.error)}</p>`}<div class="kb-library-actions">${action('', '打开', 'knowledge', `data-action="open" class="primary" ${row.available ? '' : 'disabled'}`)}${admin() ? `${action('', '编辑', 'rename', 'data-action="edit"')}${action('', '移除知识库', 'link', 'data-action="remove" class="danger kb-remove" title="移除目录关联，保留磁盘文件"')}${row.available && row.path ? action('', '删除目录', 'delete', 'data-action="trash" class="danger kb-trash" title="将目录及全部文件移入回收目录"') : ''}` : ''}</div></article>`).join('')}</div>` : empty(query ? '没有匹配的知识库' : '添加主机上的笔记目录，或创建一个新的知识库。');
       $('#kbLibraries').querySelectorAll('[data-action]').forEach(control => {
         control.onclick = async () => {
           const row = rows.find(item => item.id === control.closest('[data-library]').dataset.library);
@@ -129,17 +135,92 @@ window.RemoteHubKnowledge = (() => {
 
   function libraryForm(create, row) {
     const title = row ? '编辑知识库' : create ? '新建知识库' : '添加目录';
-    form(title, `<label>名称<input name="name" value="${esc(row?.name || '')}" maxlength="100" placeholder="留空使用目录名称"></label><label>主机目录<input name="directory" value="${esc(row?.directory || '')}" required placeholder="${create ? '~/Knowledge/我的知识库' : '~/Documents/笔记'}" autocomplete="off"></label>`, row ? '保存' : create ? '创建' : '添加', async values => {
+    form(title, `<label>名称<input name="name" value="${esc(row?.name || '')}" maxlength="100" placeholder="留空使用目录名称"></label><label for="kbDirectory">主机目录</label><div class="kb-directory-input"><input id="kbDirectory" name="directory" value="${esc(row?.directory || '')}" required placeholder="${create ? '~/Knowledge/我的知识库' : '~/Documents/笔记'}" autocomplete="off"><button type="button" id="kbBrowseDirectory">${icon('folder')}浏览</button></div>`, row ? '保存' : create ? '创建' : '添加', async values => {
       await api(row ? '/knowledge/' + row.id : '/knowledge', row ? {...values, revision:row.revision} : {...values, create});
       notify(row ? '知识库已更新' : '知识库已添加');
       await render(current, false);
     });
+    dialog.querySelector('#kbBrowseDirectory').onclick = () => chooseDirectory(dialog.querySelector('[name="directory"]'));
+  }
+
+  async function chooseDirectory(input) {
+    if (!picker) {
+      picker = document.createElement('dialog');
+      picker.className = 'kb-picker';
+      picker.setAttribute('aria-labelledby', 'kbPickerTitle');
+      document.body.append(picker);
+      picker.addEventListener('close', () => { pickerRequest++; });
+    }
+    picker.innerHTML = `<div class="detail-dialog-bar"><h2 id="kbPickerTitle">选择知识库目录</h2><button id="kbPickerClose" type="button">${icon('close')}关闭</button></div>
+      <div class="kb-picker-location"><label class="sr-only" for="kbPickerPath">目录路径</label><input id="kbPickerPath" autocomplete="off"><button id="kbPickerGo" type="button">前往</button></div>
+      <div class="kb-picker-navigation"><button id="kbPickerUp" type="button" disabled>${icon('up')}上一级</button><button id="kbPickerHome" type="button" disabled>${icon('folder')}主目录</button><label class="sr-only" for="kbPickerRoot">文件系统</label><select id="kbPickerRoot" aria-label="文件系统"></select><button id="kbPickerNew" type="button" disabled>${icon('mkdir')}新建文件夹</button></div>
+      <div class="kb-picker-create" hidden><input id="kbPickerFolderName" aria-label="新文件夹名称" placeholder="新文件夹名称"><button id="kbPickerMkdir" type="button">创建</button></div>
+      <p id="kbPickerStatus" class="muted" role="status">正在读取目录…</p><div id="kbPickerDirectories"></div><button id="kbPickerMore" type="button" hidden>加载更多目录</button>
+      <div class="dialog-actions"><button id="kbPickerSelect" type="button" class="primary" disabled>选择此目录</button></div>`;
+    picker.showModal();
+    const control = selector => picker.querySelector(selector);
+    let selected = null;
+    let homeDirectory;
+    const handle = work => async () => {
+      try { await work(); }
+      catch (error) { if (picker.open) control('#kbPickerStatus').textContent = error.message; }
+    };
+    async function load(directory, offset = 0) {
+      const token = ++pickerRequest;
+      control('#kbPickerStatus').textContent = '正在读取目录…';
+      control('#kbPickerSelect').disabled = true;
+      const data = await api('/knowledge/directories?' + new URLSearchParams({directory, offset}));
+      if (!picker.open || token !== pickerRequest) return;
+      const folders = offset ? [...selected.directories, ...data.directories] : data.directories;
+      selected = {...data, directories:folders};
+      control('#kbPickerPath').value = data.directory;
+      control('#kbPickerUp').disabled = !data.parent;
+      homeDirectory = data.home;
+      control('#kbPickerHome').disabled = !homeDirectory;
+      control('#kbPickerNew').disabled = false;
+      control('#kbPickerSelect').disabled = false;
+      control('#kbPickerRoot').innerHTML = data.roots.map(root => `<option value="${esc(root.path)}" ${root.id === data.root ? 'selected' : ''}>${esc(root.path)}</option>`).join('');
+      control('#kbPickerDirectories').innerHTML = folders.length ? folders.map((folder, index) => `<button type="button" data-directory="${index}">${icon('folder')}<span>${esc(folder.name)}</span>${icon('chevron')}</button>`).join('') : '<p class="muted kb-picker-empty">此目录没有子文件夹</p>';
+      control('#kbPickerStatus').textContent = folders.length + ' 个文件夹';
+      control('#kbPickerMore').hidden = data.next_offset === null;
+      control('#kbPickerDirectories').querySelectorAll('[data-directory]').forEach(button => {
+        button.onclick = handle(() => load(selected.directory.replace(/\/$/, '') + '/' + selected.directories[Number(button.dataset.directory)].name));
+      });
+    }
+    control('#kbPickerClose').onclick = () => picker.close();
+    control('#kbPickerGo').onclick = handle(() => load(control('#kbPickerPath').value));
+    control('#kbPickerPath').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); control('#kbPickerGo').click(); } };
+    control('#kbPickerUp').onclick = handle(() => load(selected.parent));
+    control('#kbPickerHome').onclick = handle(() => load(homeDirectory));
+    control('#kbPickerRoot').onchange = handle(() => load(control('#kbPickerRoot').value));
+    control('#kbPickerMore').onclick = handle(() => load(selected.directory, selected.next_offset));
+    control('#kbPickerSelect').onclick = () => { input.value = selected.directory; picker.close(); input.focus(); };
+    control('#kbPickerNew').onclick = () => { control('.kb-picker-create').hidden = !control('.kb-picker-create').hidden; control('#kbPickerFolderName').focus(); };
+    control('#kbPickerMkdir').onclick = handle(async () => {
+      if (!selected) return;
+      const name = control('#kbPickerFolderName').value.trim();
+      if (!name || name.includes('/') || name.includes('\\')) throw Error('请输入单个文件夹名称');
+      await withBusy(control('#kbPickerMkdir'), 'kb:mkdir', '创建中…', () => api('/files/operation', {root:selected.root, path:[selected.path, name].filter(Boolean).join('/'), action:'mkdir'}));
+      control('.kb-picker-create').hidden = true;
+      control('#kbPickerFolderName').value = '';
+      await load(selected.directory.replace(/\/$/, '') + '/' + name);
+    });
+    await handle(async () => {
+      const config = await api('/files/roots');
+      homeDirectory = config.default ? config.home : config.roots[0]?.path;
+      control('#kbPickerHome').disabled = !homeDirectory;
+      control('#kbPickerRoot').innerHTML = config.roots.map(root => `<option value="${esc(root.path)}">${esc(root.path)}</option>`).join('');
+      const initial = input.value || homeDirectory;
+      if (!initial) throw Error('没有可访问的目录');
+      await load(initial);
+    })();
   }
 
   async function openLibrary(id, token = ++generation) {
     const owner = current;
     const data = await api(`/knowledge/${encode(id)}/tree`);
     if (!owner() || token !== generation) return;
+    if (library?.id !== id) expandedFolders.clear();
     library = data;
     entries = data.entries;
     $('#content').innerHTML = `<section class="kb-workspace"><div class="kb-workspace-heading"><div>${action('kbBack', '知识库', 'folder', 'class="kb-back"')}<h2>${esc(data.name)}</h2><p class="mono muted">${esc(data.directory)}</p></div><div class="kb-actions">${admin() ? action('kbNewNote', '新建笔记', 'plus', 'class="primary"') : ''}${action('kbFiles', '文件管理', 'folder')}</div></div><div class="kb-layout"><details class="kb-browser" open><summary>笔记目录 <span>${data.count}</span>${icon('chevron')}</summary><label class="kb-search">${icon('search')}<input id="kbNoteSearch" type="search" placeholder="搜索笔记名称或路径" aria-label="搜索笔记名称或路径" value="${esc(search)}"></label><div id="kbTree"></div>${data.truncated ? '<p class="kb-tree-status muted">目录较大，已显示本次扫描的部分内容。</p>' : ''}${data.warnings.length ? `<p class="kb-tree-status muted">${data.warnings.length} 个目录无法读取</p>` : ''}</details><section class="kb-document" id="kbDocument">${empty('选择一篇笔记开始阅读')}</section></div></section>`;
@@ -159,6 +240,7 @@ window.RemoteHubKnowledge = (() => {
   }
 
   function treeMarkup(rows, query = '') {
+    rows = rows.filter(row => row.kind === 'directory' || row.kind === 'file' && /\.(md|markdown)$/i.test(row.name));
     const notes = rows.filter(row => row.kind === 'file' && row.path.toLowerCase().includes(query.toLowerCase()));
     const matches = new Set(notes.map(row => row.path));
     const folders = new Set();
@@ -175,12 +257,16 @@ window.RemoteHubKnowledge = (() => {
     }
     function branch(path) {
       const values = (children.get(path) || []).sort((a, b) => (a.kind !== 'directory') - (b.kind !== 'directory') || a.name.localeCompare(b.name, 'zh-CN', {numeric:true}));
-      return values.map(row => row.kind === 'directory' ? `<details class="kb-tree-folder" ${query || note?.path.startsWith(row.path + '/') ? 'open' : ''}><summary>${icon('folder')}<span>${esc(row.name)}</span></summary><div>${branch(row.path)}</div></details>` : `<button class="kb-note-link" data-note="${esc(row.path)}" aria-current="${note?.path === row.path ? 'page' : 'false'}">${icon('file')}<span>${esc(row.name.replace(/\.(md|markdown)$/i, ''))}</span></button>`).join('');
+      return values.map(row => row.kind === 'directory' ? `<details class="kb-tree-folder" data-folder="${esc(row.path)}" ${query || expandedFolders.has(row.path) || note?.path.startsWith(row.path + '/') ? 'open' : ''}><summary><span class="kb-folder-chevron">${icon('chevron')}</span>${icon('folder')}<span>${esc(row.name)}</span></summary><div>${branch(row.path)}</div></details>` : `<button class="kb-note-link" data-note="${esc(row.path)}" aria-current="${note?.path === row.path ? 'page' : 'false'}">${icon('file')}<span>${esc(row.name.replace(/\.(md|markdown)$/i, ''))}</span></button>`).join('');
     }
     return notes.length || visible.some(row => row.kind === 'directory') ? branch('') : '<p class="kb-tree-status muted">没有匹配的笔记</p>';
   }
 
   function drawTree() {
+    $('#kbTree').querySelectorAll('[data-folder]').forEach(folder => {
+      if (folder.open) expandedFolders.add(folder.dataset.folder);
+      else expandedFolders.delete(folder.dataset.folder);
+    });
     $('#kbTree').innerHTML = treeMarkup(entries, search);
     $('#kbTree').onclick = async event => {
       const control = event.target.closest('[data-note]');
@@ -267,12 +353,28 @@ window.RemoteHubKnowledge = (() => {
         return;
       }
       const path = relativePath(href, note.path);
-      if (path && /\.(md|markdown)$/i.test(path)) {
+      if (path && entries.some(entry => entry.kind === 'directory' && entry.path === path)) {
+        link.href = '#';
+        link.onclick = event => { event.preventDefault(); showFolder(path); };
+      } else if (path && /\.(md|markdown)$/i.test(path)) {
         link.href = '#';
         link.onclick = async event => { event.preventDefault(); try { await openNote(path); } catch (error) { showError(error); } };
       } else if (path) link.href = '/api' + endpoint('asset', path);
       else { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
     });
+  }
+
+  function showFolder(path) {
+    let folder = path;
+    while (folder) { expandedFolders.add(folder); folder = parent(folder); }
+    $('#kbTree').querySelectorAll('[data-folder]').forEach(row => { if (expandedFolders.has(row.dataset.folder)) row.open = true; });
+    search = '';
+    $('#kbNoteSearch').value = '';
+    $('.kb-browser').open = true;
+    drawTree();
+    const target = [...$('#kbTree').querySelectorAll('[data-folder]')].find(row => row.dataset.folder === path);
+    target?.querySelector('summary').focus();
+    target?.scrollIntoView({block:'nearest'});
   }
 
   async function save() {

@@ -128,3 +128,14 @@
   .ssh-auth-options { gap: 6px; }
   .ssh-auth-options span { gap: 5px; font-size: 11px; }
 }
+
+.ssh-toolbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.ssh-filter-panel{width:260px;max-width:calc(100vw - 32px);position:fixed;inset:auto;margin:0;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 10px 30px #0002}
+.ssh-filter-panel:popover-open{display:grid;gap:18px}
+.ssh-filter-panel>label:first-child{display:grid;gap:8px;font-size:12px}
+.ssh-filter-panel select{width:100%;margin:0}
+.ssh-filter-check{display:flex;align-items:center;gap:8px;font-size:12px}
+.ssh-filter-check input{width:16px;height:16px;margin:0;accent-color:var(--accent)}
+#sshFilter[data-active="true"]{border-color:var(--accent);color:var(--accent);background:var(--soft)}
+.ssh-filter-count{display:inline-flex;min-width:18px;height:18px;align-items:center;justify-content:center;border-radius:5px;background:var(--accent);color:var(--surface);font-size:10px}
+body.dark .ssh-filter-count{color:var(--bg)}

@@ -81,3 +81,7 @@ assert.match(facts,/tester/);
 assert.match(facts,/2222/);
 assert.match(facts,/密码/);
 console.log('SSH cards display connection facts directly and omit management menus.');
+
+assert.match(source,/id="sshFilterPanel" popover/);
+assert.match(source,/id="sshFavorites" type="checkbox"/);
+assert.doesNotMatch(source,/id="sshFavorites" aria-pressed/);
