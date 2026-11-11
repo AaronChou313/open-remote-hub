@@ -37,7 +37,7 @@ def argv(host, interactive=True, identity=None):
         from app.ssh.keys import key_name
         key_name(identity)
         store.read(store.path(identity), private=True)
-        command += ['-i', str(store.path(identity)), '-o', 'IdentitiesOnly=yes']
+        command += ['-i', str(store.path(identity)), '-o', 'IdentitiesOnly=yes', '-o', 'PubkeyAuthentication=yes']
     return command + ['--', config.alias(host)]
 
 

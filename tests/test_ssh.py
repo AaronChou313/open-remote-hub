@@ -546,3 +546,24 @@ def test_supported_key_generation_algorithms(ssh_home, algorithm, bits, kind):
     assert keys.public_line(public)['fingerprint'] == result['fingerprint']
     for algorithm, bits in [('dsa',1024), ('rsa',1024), ('rsa;id',2048), ('ecdsa',4096)]:
         assert client.post('/api/ssh/keys/generate', json=dict(name='invalid-algorithm', algorithm=algorithm, bits=bits)).status_code == 400
+
+
+@pytest.mark.parametrize('authentication,preferred,pubkey', [
+    ('password', 'keyboard-interactive,password', False),
+    ('key', 'publickey', True),
+])
+def test_connection_authentication_modes_use_native_ssh_config(ssh_home, authentication, preferred, pubkey):
+    from app.ssh import terminals
+    client, directory, _ = ssh_home
+    post(client, '/keys/generate', dict(name='identity'))
+    row = add(client, authentication=authentication, identityfile=str(directory / 'identity'))
+    link(client)
+    effective = client.get('/api/ssh/connections/test/effective').json()
+    assert effective['preferredauthentications'] == preferred
+    assert (effective['pubkeyauthentication'] in ('yes', 'true')) == pubkey
+    assert row['authentication'] == authentication
+    # Explicit deployment verification can still use a key on a password-mode connection.
+    command = terminals.argv('test', identity='identity')
+    assert 'PubkeyAuthentication=yes' in command
+    invalid = client.post('/api/ssh/connections/save', json=dict(alias='invalid', authentication='password;id'))
+    assert invalid.status_code == 400

@@ -8,6 +8,9 @@ const RemoteHubIcons = Object.freeze({
   image: 'file-image', link: 'link', upload: 'upload', download: 'download', search: 'search',
   up: 'arrow-up', copy: 'copy', mkdir: 'folder-plus', delete: 'trash-2', rename: 'pencil',
   save: 'save', restore: 'archive-restore', start: 'play', stop: 'square', branch: 'git-branch',
+  ssh: 'terminal', key: 'key-round', star: 'star', fingerprint: 'fingerprint',
+  diagnose: 'activity', settings: 'settings-2', chevron: 'chevron-down',
+  lock: 'lock-keyhole', shield: 'shield-check', close: 'x',
   cpu: 'cpu', memory: 'memory-stick', disk: 'hard-drive', network: 'network',
 });
 function icon(name) {

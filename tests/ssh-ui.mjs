@@ -39,8 +39,9 @@ const context = {
 };
 let source = fs.readFileSync('static/ssh.js', 'utf8');
 source = source.replace('return {render, canLeave, reset, isDirty: () => dirty};',
-  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, copyPublic, actionDialog, setCurrent:fn=>{current=fn}}};');
+  'return {render, canLeave, reset, isDirty: () => dirty, test:{open, attachForm, request, leaveDialog, copyPublic, actionDialog, connectionFacts, setCurrent:fn=>{current=fn}}};');
 vm.createContext(context);
+vm.runInContext(fs.readFileSync('static/icons.js', 'utf8'), context);
 vm.runInContext(source, context);
 const ssh = context.window.RemoteHubSSH;
 ssh.test.setCurrent(() => true);
@@ -72,3 +73,11 @@ await dialog.form.onsubmit({preventDefault(){}, submitter:{}});
 assert.equal(actionCount, 1, 'one confirmation directly completes an authorized action');
 assert.doesNotMatch(source, /\/ssh\/reauth|\/ssh\/config\/trust/);
 console.log('SSH dialogs, session-authorized actions, stale responses, and HTTP public-key copy passed');
+
+assert.doesNotMatch(source, /ssh-manage-menu|keyDetails|data-ssh="details"/);
+const facts = ssh.test.connectionFacts({alias:'lab',authentication:'password'},{hostname:'127.0.0.1',user:'tester',port:'2222'});
+assert.match(facts,/127\.0\.0\.1/);
+assert.match(facts,/tester/);
+assert.match(facts,/2222/);
+assert.match(facts,/密码/);
+console.log('SSH cards display connection facts directly and omit management menus.');

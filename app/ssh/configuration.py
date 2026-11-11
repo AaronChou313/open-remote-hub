@@ -139,6 +139,11 @@ def quote(value):
 def normalized(body):
     result = dict(alias=alias(body.get('alias')), group=str(body.get('group', '')).strip()[:80],
                   favorite=bool(body.get('favorite', False)))
+    authentication = body.get('authentication', 'auto')
+    if authentication not in ('auto', 'password', 'key'):
+        raise HTTPException(400, '请选择密码或密钥认证方式')
+    if authentication != 'auto':
+        result['authentication'] = authentication
     for key in FIELDS:
         value = str(body.get(key, '')).strip()
         if not value:
@@ -177,6 +182,12 @@ def render(rows):
     lines = ['# Managed by OpenRemoteHub. Edit connections in the Web console.']
     for row in sorted(rows, key=lambda r: r['alias'].lower()):
         lines.append('\nHost ' + alias(row['alias']))
+        if row.get('authentication') == 'password':
+            lines.extend(['    PreferredAuthentications keyboard-interactive,password',
+                          '    PubkeyAuthentication no', '    PasswordAuthentication yes',
+                          '    KbdInteractiveAuthentication yes'])
+        elif row.get('authentication') == 'key':
+            lines.extend(['    PreferredAuthentications publickey', '    PubkeyAuthentication yes'])
         for key, native in FIELDS.items():
             if row.get(key):
                 lines.append('    ' + native + ' ' + quote(str(row[key])))
@@ -261,7 +272,9 @@ def effective(host, cancel=None):
         values.setdefault(key, []).append(value)
     # Never return commands, tokens, arbitrary environment values or config dumps.
     allowed = ('hostname', 'user', 'port', 'identityfile', 'identityagent', 'proxyjump', 'forwardagent',
-               'identitiesonly', 'stricthostkeychecking', 'userknownhostsfile', 'hostkeyalias')
+               'identitiesonly', 'stricthostkeychecking', 'userknownhostsfile', 'hostkeyalias',
+               'preferredauthentications', 'pubkeyauthentication', 'passwordauthentication',
+               'kbdinteractiveauthentication')
     return {key: (values[key] if key in ('identityfile', 'userknownhostsfile') else values[key][0])
             for key in allowed if key in values}
 

@@ -112,11 +112,13 @@ def test_isolated_handshake_auth_key_rotation_and_cancel(ssh_home, ssh_server):
 
 
 @pytest.mark.live
-def test_password_public_key_deployment_over_tty_is_idempotent(ssh_home, ssh_server):
+@pytest.mark.parametrize('authentication', ['auto', 'password', 'key'])
+def test_password_public_key_deployment_over_tty_is_idempotent(ssh_home, ssh_server, authentication):
     client, directory, data = ssh_home
     container, port = ssh_server
     post(client, '/keys/generate', dict(name='deploy-key', passphrase='test-encrypted-key'))
-    add(client, 'isolated', port=port, user='tester')
+    add(client, 'isolated', port=port, user='tester', authentication=authentication,
+        identityfile=str(directory / 'deploy-key'))
     link(client)
     scan_and_trust(client)
 

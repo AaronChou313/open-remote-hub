@@ -65,7 +65,12 @@ def execute(launch, data, ssh_dir):
         if row.get('key'):
             public = public_line(store.read(store.path(row['key'] + '.pub')).decode())['public']
             import shlex
-            command = argv(row['host']) + ['sh -c ' + shlex.quote(DEPLOY)]
+            command = argv(row['host'])
+            index = command.index('--')
+            command[index:index] = ['-o', 'PreferredAuthentications=publickey,keyboard-interactive,password',
+                                    '-o', 'PubkeyAuthentication=yes', '-o', 'PasswordAuthentication=yes',
+                                    '-o', 'KbdInteractiveAuthentication=yes']
+            command += ['sh -c ' + shlex.quote(DEPLOY)]
             result = subprocess.run(command, input=(public + '\n').encode(), env=environment())
             if result.returncode:
                 print('\n公钥部署失败，请核验主机指纹、密码和远端文件权限，然后重新部署。')
