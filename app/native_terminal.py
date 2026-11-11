@@ -106,6 +106,8 @@ async def entry_page(request:Request,name:str):
 async def enter(request:Request,name:str):
     if not admin(request.cookies.get('orh','')):
         raise HTTPException(403,'请先登录控制台')
+    from app.ssh.security import protect_session
+    protect_session(request, name)
     from app.terminal_entry import prepare
     return await asyncio.to_thread(prepare,name)
 
@@ -116,6 +118,8 @@ async def native(request: Request, path: str):
         if request.method == 'GET' and (not path or '/' not in path):
             return HTMLResponse('<!doctype html><meta charset="utf-8"><title>请登录 RemoteHub</title><p>登录已到期，请<a href="/" target="_blank" rel="noopener">返回控制台登录</a>后刷新此页。</p>', status_code=403)
         raise HTTPException(403, '请先登录 RemoteHub，再刷新终端页面')
+    from app.ssh.security import protect_session
+    protect_session(request, path.split('/')[0])
     if not route_allowed(path, request.method):
         raise HTTPException(404)
     # The native session endpoint must attach an explicitly selected live session.
@@ -170,6 +174,8 @@ async def native_socket(ws: WebSocket, path: str):
     if path.startswith('terminal/'):
         try:
             main.zname(path[len('terminal/'):])
+            from app.ssh.security import protect_session
+            protect_session(ws, path[len('terminal/'):])
         except HTTPException:
             await ws.close(code=1008)
             return

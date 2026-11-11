@@ -11,6 +11,11 @@ import uvicorn
 # loopback process so closing the console never ends its current agent work.
 from app.main import app
 from app.dsh import settings
+cert = os.environ.get('ORH_TLS_CERT_FILE')
+key = os.environ.get('ORH_TLS_KEY_FILE')
+if bool(cert) != bool(key):
+    raise SystemExit('ORH_TLS_CERT_FILE 和 ORH_TLS_KEY_FILE 必须同时配置')
+tls = dict(ssl_certfile=cert, ssl_keyfile=key) if cert else {}
 cfg=settings()
 if cfg['enabled']:
     import socket
@@ -23,9 +28,9 @@ if cfg['enabled']:
             sock=socket.socket(family,socket.SOCK_STREAM)
             sockets.append(sock);sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
             sock.bind((address,port));sock.set_inheritable(True)
-        config=uvicorn.Config(Dispatch(app,cfg['gateway_port']),log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False)
+        config=uvicorn.Config(Dispatch(app,cfg['gateway_port']),log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False,**tls)
         uvicorn.Server(config).run(sockets=sockets)
     finally:
         for sock in sockets:sock.close()
 else:
-    uvicorn.run(app,host=NETWORK.bind,port=PORT,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False)
+    uvicorn.run(app,host=NETWORK.bind,port=PORT,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False,**tls)

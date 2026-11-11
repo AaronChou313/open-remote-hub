@@ -442,4 +442,6 @@ from app.proxy import router as proxy_router
 app.include_router(proxy_router)
 from app.proxy_manager import router as proxy_manager_router
 app.include_router(proxy_manager_router)
+from app.ssh.api import router as ssh_router
+app.include_router(ssh_router)
 app.mount('/static',StaticFiles(directory=ROOT/'static'),name='static')
