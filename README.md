@@ -280,3 +280,7 @@ node --check static/sessions.js
 ```
 
 [架构](docs/architecture.md) · [验证与限制](docs/validation.md)
+
+## Web SSH 管理
+
+侧栏 **SSH 管理** 提供连接、密钥、原生 Config、主机指纹、公钥部署、连接诊断及独立 Zellij SSH 终端。首次接入 Config 前可预览差异，高风险密钥和配置操作要求管理员复验。远程敏感操作需要 HTTPS。完整使用与部署流程见 [SSH.md](SSH.md)。

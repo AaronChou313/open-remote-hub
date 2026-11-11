@@ -74,7 +74,7 @@ def discover():
                 for pattern in parts[1:]:
                     expanded = os.path.expanduser(pattern)
                     if not os.path.isabs(expanded):
-                        expanded = str(store.root() / expanded)
+                        expanded = str(Path.home() / '.ssh' / expanded)
                     for child in sorted(glob.glob(expanded)):
                         visit(child, depth + 1)
             if key == 'match' and 'exec' in [p.lower().lstrip('!') for p in parts[1:]]:
@@ -191,11 +191,11 @@ def native_arguments():
     return ['-F', str(store.path('config'))]
 
 
-def effective(host):
+def effective(host, cancel=None):
     alias(host)
     assert_trusted()
     try:
-        output = run(['ssh', '-G'] + native_arguments() + ['--', host])
+        output = run(['ssh', '-G'] + native_arguments() + ['--', host], cancel=cancel)
     except CommandFailure:
         raise HTTPException(400, 'OpenSSH 无法求值此配置，请检查 SSH 配置语法') from None
     values = {}
@@ -204,7 +204,7 @@ def effective(host):
         values.setdefault(key, []).append(value)
     # Never return commands, tokens, arbitrary environment values or config dumps.
     allowed = ('hostname', 'user', 'port', 'identityfile', 'identityagent', 'proxyjump', 'forwardagent',
-               'identitiesonly', 'stricthostkeychecking', 'userknownhostsfile')
+               'identitiesonly', 'stricthostkeychecking', 'userknownhostsfile', 'hostkeyalias')
     return {key: (values[key] if key in ('identityfile', 'userknownhostsfile') else values[key][0])
             for key in allowed if key in values}
 
@@ -351,7 +351,7 @@ def validate(key, text):
                     for index, part in enumerate(parts[:-1]):
                         if part.lower().lstrip('!') == 'exec':
                             parts[index + 1] = 'false'
-                    line = ' '.join(quote(part) for part in parts)
+                    line = ' '.join(part if part.lower().lstrip('!') in ('match', 'all', 'canonical', 'final', 'host', 'originalhost', 'user', 'localuser', 'localnetwork', 'exec', 'tagged', 'command') else quote(part) for part in parts)
                 lines.append(line)
             destination.write_text('\n'.join(lines) + '\n')
             destination.chmod(0o600)

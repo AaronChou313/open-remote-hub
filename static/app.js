@@ -5,7 +5,7 @@ const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor
 let renderVersion=0;
 let view=typeof location!=='undefined'&&location.hash==='#proxy'?'proxy':localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={proxy:['代理与网络','管理机场配置、主机代理与网络连接。'],overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
+const titles={ssh:['SSH 管理','管理连接、密钥与原生 SSH 配置。'],proxy:['代理与网络','管理机场配置、主机代理与网络连接。'],overview:['系统概览','实时掌握主机状态，让每一项任务尽在掌控。'],docker:['容器与镜像','连接 OrbStack / Docker，直接管理本机容器。'],zellij:['终端管理','管理会话，进入原生终端。'],files:['文件管理','浏览主机文件，让目录、项目和终端相连。'],projects:['项目管理','本地项目、Git 状态与开发任务。'],environments:['开发环境','查看工具、项目环境与依赖。'],dsh:['DeepSeek Harness','使用本机 DSH 的原生工作空间。'],tasks:['任务与服务','明确的命令，可追踪的进程，由你管理的任务。']};
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?(path.startsWith('/environments')?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
 async function withBusy(button,key,label,work){
@@ -15,6 +15,7 @@ async function withBusy(button,key,label,work){
  try{return await work()}finally{pendingOperations.delete(key);if(button?.isConnected){button.disabled=false;if(markup!==undefined)button.innerHTML=markup;else button.textContent=text;button.removeAttribute('aria-busy')}}
 }
 async function switchView(target){
+ if(view!==target&&window.RemoteHubSSH&&!await RemoteHubSSH.canLeave())return;
  if(view!==target&&window.RemoteHubProxyManager&&!await RemoteHubProxyManager.canLeave())return;
  if(view!==target&&window.RemoteHubWorkspace&&!await RemoteHubWorkspace.canLeave())return;
  if(!titles[target])target='overview';
@@ -24,7 +25,7 @@ async function switchView(target){
  $('#title').textContent=titles[view][0];$('#subtitle').textContent=titles[view][1];$('#breadcrumb').textContent='工作空间 / '+titles[view][0];
  $('#error').hidden=true;$('#content').innerHTML=empty('正在读取本机数据…');refresh();
 }
-function showLogin(){window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
+function showLogin(){window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
 function notify(text){$('#toast').textContent=text;$('#toast').hidden=false;setTimeout(()=>$('#toast').hidden=true,3500)}
 function showError(e,operation=true){$('#error').textContent=e.message;$('#error').dataset.kind=operation?'operation':'load';$('#error').hidden=false;if(!operation)$('#connection').textContent='更新失败 · 保留最近数据'}
 async function confirmAction(title,message){if($('#confirmDialog').open)return false;$('#confirmTitle').textContent=title;$('#confirmMessage').textContent=message;$('#confirmDialog').returnValue='cancel';$('#confirmDialog').showModal();return new Promise(resolve=>$('#confirmDialog').addEventListener('close',()=>resolve($('#confirmDialog').returnValue==='confirm'),{once:true}))}
@@ -80,7 +81,7 @@ async function refresh(){
  if($('#shell').hidden)return;
  if(busy){refreshQueued=true;return}
  const version=++renderVersion,target=view;busy=true;$('#refresh').disabled=true;
- try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,tasks:tasksView,dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
+ try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,tasks:tasksView,dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
  catch(e){if(version===renderVersion){if($('#content').textContent==='正在读取本机数据…')$('#content').innerHTML=empty('暂时无法读取，请点击刷新重试。');showError(e.name==='TimeoutError'?Error('读取超时，请稍后刷新。现有任务不会因此停止。'):e,false)}}
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
@@ -104,13 +105,13 @@ $('#refresh').onclick=refresh;$('#theme').onclick=()=>{document.body.classList.t
   }catch(e){$('#taskError').textContent=e.message}
  });
 };
-setInterval(()=>{if(!['files','projects','environments','dsh','proxy'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!$('#taskDialog').open&&!$('#confirmDialog').open)refresh()},5000);
+setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!$('#taskDialog').open&&!$('#confirmDialog').open)refresh()},5000);
 
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy','ssh'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');
 $('#cancelSession').onclick=()=>$('#sessionDialog').close();$('#sessionForm').onsubmit=e=>{e.preventDefault();const name=$('#sessionName').value.trim();if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)){$('#sessionError').textContent='名称仅支持字母、数字、点、下划线、短横线';return}if(mountTerminal(name))$('#sessionDialog').close()};
 
 function updateThemeControl(){const dark=document.body.classList.contains('dark'),label=dark?'切换为浅色模式':'切换为暗色模式';$('#theme').setAttribute('aria-label',label);$('#theme').setAttribute('title',label);$('#themeMoon').hidden=dark;$('#themeSun').hidden=!dark}
 updateThemeControl();
-window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubWorkspace?.isDirty()||window.RemoteHubProxyManager?.isDirty()){e.preventDefault();e.returnValue=''}});
+window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubSSH?.isDirty()||window.RemoteHubWorkspace?.isDirty()||window.RemoteHubProxyManager?.isDirty()){e.preventDefault();e.returnValue=''}});
 enter();

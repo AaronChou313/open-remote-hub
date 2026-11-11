@@ -61,10 +61,22 @@ def encrypted(data):
     return None
 
 
+def identity_path(value, config, host):
+    import getpass
+    values = {'%': '%', 'd': str(Path.home()), 'h': config.get('hostname', host),
+              'n': host, 'r': config.get('user', getpass.getuser()), 'p': str(config.get('port', '22')),
+              'u': getpass.getuser(), 'i': str(os.getuid()), 'k': config.get('hostkeyalias', host)}
+    expanded = re.sub(r'%([%dhnrpuik])', lambda match: values[match[1]], value)
+    return str(Path(os.path.expandvars(os.path.expanduser(expanded))).absolute())
+
+
 def references(key):
     from app.ssh.configuration import inventory, effective
     target = str(store.path(key))
     result, unresolved = [], []
+    for row in store.rows('connection'):
+        if row.get('identityfile') and identity_path(row['identityfile'], row, row['alias']) in (target, target + '.pub'):
+            result.append(row['alias'])
     for row in inventory()['connections']:
         try:
             config = effective(row['alias'])
@@ -72,9 +84,10 @@ def references(key):
             unresolved.append(row['alias'])
             continue
         for value in config.get('identityfile', []):
-            expanded = str(Path(value.replace('~/', str(Path.home()) + '/', 1)).absolute())
-            if expanded == target:
-                result.append(row['alias'])
+            expanded = identity_path(value, config, row['alias'])
+            if expanded in (target, target + '.pub'):
+                if row['alias'] not in result:
+                    result.append(row['alias'])
                 break
     return dict(connections=result, unresolved=unresolved)
 
@@ -99,8 +112,14 @@ def inventory():
             private = store.read(store.path(name), private=True)
             pub = store.read(store.path(name + '.pub')).decode()
             info = public_line(pub) if pub else {}
-            if not pub and private and encrypted(private) is False:
-                info = public_line(keygen(['ssh-keygen', '-y', '-f', str(store.path(name))], ['']))
+            if not pub and private:
+                try:
+                    fingerprint = run(['ssh-keygen', '-l', '-E', 'sha256', '-f', str(store.path(name))])
+                    match = re.search(r'^(\d+) (SHA256:\S+).*\(([^)]+)\)', fingerprint.strip())
+                    if match:
+                        info = dict(fingerprint=match[2], type=match[3], bits=int(match[1]))
+                except CommandFailure:
+                    pass
             entries.append(dict(name=name, private=bool(private), encrypted=encrypted(private) if private else None,
                                 revision=store.digest(private), public_revision=store.digest(pub.encode()),
                                 **info))
@@ -136,10 +155,12 @@ def publish(name, private, public):
             os.chmod(source, 0o600)
             os.link(source, target, follow_symlinks=False)
             destinations.append(target)
-    except FileExistsError:
+    except OSError as error:
         for path in destinations:
             path.unlink()
-        raise HTTPException(409, '密钥文件已存在，未覆盖') from None
+        if isinstance(error, FileExistsError):
+            raise HTTPException(409, '密钥文件已存在，未覆盖') from None
+        raise HTTPException(400, '密钥文件保存失败，已撤回本次创建') from None
 
 
 def generate(body):
@@ -219,3 +240,20 @@ def delete(name, body):
                 backups.append(store.backup(key, content))
                 store.path(key).unlink()
         return dict(backups=backups)
+
+
+def recover_public(name, body):
+    key_name(name)
+    with store.locked(), staging() as temp:
+        private = store.read(store.path(name), private=True)
+        if not private:
+            raise HTTPException(404, '私钥不存在')
+        if store.read(store.path(name + '.pub')):
+            raise HTTPException(409, '公钥已存在，未覆盖')
+        temp.write_bytes(private)
+        temp.chmod(0o600)
+        result = public_line(keygen(['ssh-keygen', '-y', '-f', str(temp)], [str(body.get('passphrase', ''))]))
+        public = temp.with_suffix('.pub')
+        public.write_text(result['public'] + '\n')
+        publish(name, None, public)
+        return result

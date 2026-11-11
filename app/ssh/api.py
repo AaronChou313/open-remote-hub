@@ -77,7 +77,7 @@ def reauth(request: Request, value=Depends(body)):
     operation = value.get('operation')
     target = str(value.get('target', ''))
     if operation not in ('key-import', 'key-export', 'key-delete', 'key-passphrase', 'config-read',
-                         'config-apply', 'config-trust', 'backup-restore') or len(target) > 100:
+                         'config-apply', 'config-trust', 'backup-restore', 'host-update', 'host-remove') or len(target) > 100:
         raise HTTPException(400, '管理员复验操作无效')
     if not passwords.verify(str(value.get('password', ''))):
         audit('administrator', 'reauth-failed')
@@ -157,14 +157,19 @@ def host_info(host: str):
 
 
 @router.post('/hosts/trust')
-def trust_host(value=Depends(body)):
+def trust_host(request: Request, value=Depends(body)):
+    secure(request)
+    scan = store.get('scan', value.get('scan_id'))
+    if scan and hosts.known(scan['host'])['entries']:
+        require_grant(request, value, 'host-update', scan['host'])
     result = hosts.trust(value)
     audit('known_hosts', 'fingerprint-trust')
     return result
 
 
 @router.post('/hosts/{host}/remove')
-def remove_host(host: str, value=Depends(body)):
+def remove_host(host: str, request: Request, value=Depends(body)):
+    require_grant(request, value, 'host-remove', host)
     if value.get('confirm') != host:
         raise HTTPException(400, '请确认移除的主机记录')
     result = hosts.remove(host, value.get('revision'))
@@ -174,7 +179,9 @@ def remove_host(host: str, value=Depends(body)):
 
 @router.get('/keys')
 def key_list():
-    return dict(keys=keys.inventory())
+    entries = keys.inventory()
+    backups = [row for row in store.rows('backup') if row.get('kind') == 'key']
+    return dict(keys=entries, backups=backups, revisions={row['file']: store.revision(row['file']) for row in backups})
 
 
 @router.get('/keys/{name}/references')
@@ -229,6 +236,14 @@ def passphrase(name: str, request: Request, value=Depends(body)):
     return result
 
 
+@router.post('/keys/{name}/recover-public')
+def recover_public(name: str, request: Request, value=Depends(body)):
+    secure(request)
+    result = keys.recover_public(name, value)
+    audit(name, 'key-public-derive')
+    return result
+
+
 @router.post('/keys/{name}/delete')
 def key_delete(name: str, request: Request, value=Depends(body)):
     keys.key_name(name)
@@ -279,6 +294,7 @@ def config_plan(request: Request, value=Depends(body)):
         for line in text.splitlines():
             config.tokens(line)
         result = dict(file=file['relative'], text=text, revision=value['revision'], diff=config.diff(old, text))
+    config.validate(result['file'], result['text'])
     token = secrets.token_hex(16)
     store.put('plan', token, dict(result, expires=time.time() + 300))
     return dict(result, plan=token)
@@ -293,6 +309,7 @@ def config_apply(request: Request, value=Depends(body)):
     if value.get('confirm') != plan['file']:
         raise HTTPException(400, '请确认配置文件名称')
     with store.locked():
+        config.validate(plan['file'], plan['text'])
         if plan['file'] == 'config' and not store.path(config.MANAGED).exists():
             store.write(config.MANAGED, config.render(store.rows('connection')), store.digest(b''), False)
         result = store.write(plan['file'], plan['text'].encode(), plan['revision'])
@@ -323,6 +340,13 @@ def restore_backup(request: Request, value=Depends(body)):
     from app.main import DATA
     content = store.read(DATA / 'ssh-backups' / item['id'], private=True)
     with store.locked():
-        result = store.write(item['file'], content, value.get('revision'))
+        if item['file'] == config.MANAGED:
+            if content != config.render(item.get('connections', [])):
+                raise HTTPException(409, '此受管配置备份缺少匹配的连接元数据，恢复已停止')
+            result = config.commit_connections(item['connections'], value.get('revision'))
+        else:
+            if item['file'] == 'config' or any(f.get('relative') == item['file'] for f in config.discover()['files']):
+                config.validate(item['file'], content.decode())
+            result = store.write(item['file'], content, value.get('revision'))
     audit(item['file'], 'backup-restore')
     return result

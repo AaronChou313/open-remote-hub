@@ -119,7 +119,7 @@ async def native(request: Request, path: str):
             return HTMLResponse('<!doctype html><meta charset="utf-8"><title>请登录 RemoteHub</title><p>登录已到期，请<a href="/" target="_blank" rel="noopener">返回控制台登录</a>后刷新此页。</p>', status_code=403)
         raise HTTPException(403, '请先登录 RemoteHub，再刷新终端页面')
     from app.ssh.security import protect_session
-    protect_session(request, path.split('/')[0])
+    protect_session(request, path)
     if not route_allowed(path, request.method):
         raise HTTPException(404)
     # The native session endpoint must attach an explicitly selected live session.
@@ -128,6 +128,7 @@ async def native(request: Request, path: str):
         from app import main
         name = request.query_params.get('session', '')
         main.zname(name)
+        protect_session(request, name)
         entries = await asyncio.to_thread(main.zellij_list)
         if not any(s['name'] == name and s['status'] == 'running' for s in entries['sessions']):
             raise HTTPException(409, '请在控制台创建或恢复会话后进入')

@@ -120,7 +120,7 @@ def read(path, private=False):
             os.close(descriptor)
             descriptor = new
         try:
-            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=descriptor)
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=descriptor)
         except FileNotFoundError:
             return b''
         try:
@@ -169,7 +169,9 @@ def backup(key, data):
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
-    put('backup', token, dict(file=key, created=time.time(), revision=digest(data)))
+    kind = 'key' if b'PRIVATE KEY-----' in data[:200] or key.endswith('.pub') else 'config'
+    metadata = {'connections': rows('connection')} if key == 'openremotehub.conf' else {}
+    put('backup', token, dict(file=key, created=time.time(), revision=digest(data), kind=kind, **metadata))
     return token
 
 

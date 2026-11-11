@@ -124,6 +124,8 @@ async def lifespan(app):
     await upstream.close()
     from app.dsh_gateway import close as close_dsh
     await close_dsh()
+    from app.ssh.jobs import shutdown as close_ssh_jobs
+    await asyncio.to_thread(close_ssh_jobs)
     stop_sampling.set();thread.join(5)
 
 app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)

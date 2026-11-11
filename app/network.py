@@ -40,7 +40,8 @@ class Network:
 
     def local_url(self, port):
         address = {'0.0.0.0': '127.0.0.1', '::': '::1'}.get(self.bind, self.bind)
-        return f'http://{f"[{address}]" if ":" in address else address}:{port}'
+        scheme = 'https' if os.environ.get('ORH_TLS_CERT_FILE') else 'http'
+        return f'{scheme}://{f"[{address}]" if ":" in address else address}:{port}'
 
     def allows(self, authority, port, scheme='http'):
         try:

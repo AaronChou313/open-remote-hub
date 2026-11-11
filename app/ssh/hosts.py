@@ -8,14 +8,14 @@ from app.ssh.keys import public_line
 from app.ssh.process import run, CommandFailure
 
 
-def address(host):
-    values = config.effective(host)
+def address(host, cancel=None):
+    values = config.effective(host, cancel=cancel)
     hostname = values.get('hostname', host)
     port = values.get('port', '22')
     import re
     if not re.fullmatch(r'[A-Za-z0-9:][A-Za-z0-9.:%_-]{0,252}', hostname) or not port.isdecimal() or not 1 <= int(port) <= 65535:
         raise HTTPException(400, '生效的 SSH 地址或端口无效')
-    label = hostname if port == '22' else f'[{hostname}]:{port}'
+    label = values.get('hostkeyalias') or (hostname if port == '22' else f'[{hostname}]:{port}')
     return hostname, port, label, values
 
 
@@ -37,7 +37,7 @@ def matching(label, content):
     line_number = None
     for line in output.splitlines():
         if line.startswith('# Host ') and 'found: line ' in line:
-            line_number = int(line.rsplit(' ', 1)[1])
+            line_number = int(line.strip().rsplit(' ', 1)[1])
         elif line and not line.startswith('#'):
             parts = line.split()
             marker = parts.pop(0) if parts[0].startswith('@') else ''
@@ -49,8 +49,8 @@ def matching(label, content):
     return entries
 
 
-def known(host):
-    hostname, port, label, values = address(host)
+def known(host, cancel=None):
+    hostname, port, label, values = address(host, cancel)
     content = store.read(store.path('known_hosts'))
     paths = values.get('userknownhostsfile', [])
     outside = [p for value in paths for p in value.split() if p not in (str(store.path('known_hosts')), '~/.ssh/known_hosts', 'none')]
@@ -59,7 +59,7 @@ def known(host):
 
 
 def scan(host, cancel=None):
-    hostname, port, label, values = address(host)
+    hostname, port, label, values = address(host, cancel)
     if values.get('proxyjump', 'none') != 'none':
         raise HTTPException(409, '此连接使用跳板，请在加密原生终端中核验 OpenSSH 显示的指纹；自动扫描只支持直连地址')
     try:
@@ -80,7 +80,7 @@ def scan(host, cancel=None):
     if not found:
         raise HTTPException(502, '目标未返回可识别的主机公钥')
     token = secrets.token_hex(16)
-    state = known(host)
+    state = known(host, cancel)
     result = dict(host=host, label=label, keys=list(found.values()), expires=time.time() + 300,
                   revision=state['revision'], signature=config.discover()['signature'])
     store.put('scan', token, result)
@@ -133,7 +133,8 @@ def remove_lines(content, entries, label):
                 parts[offset] = ','.join(names)
                 output.append(' '.join(parts) + '\n')
         else:
-            raise HTTPException(409, '此记录使用通配符，删除会影响其他主机，请通过高级编辑处理')
+            parts[offset] = ','.join(['!' + label] + names)
+            output.append(' '.join(parts) + '\n')
     return ''.join(output).encode()
 
 

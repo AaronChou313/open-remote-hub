@@ -30,7 +30,7 @@ def argv(host, interactive=True, identity=None):
                '-o', 'StrictHostKeyChecking=' + ('ask' if interactive else 'yes'),
                '-o', 'ConnectTimeout=10', '-o', 'ConnectionAttempts=1']
     if store.root() != Path.home() / '.ssh':
-        command += ['-o', 'UserKnownHostsFile=' + str(store.path('known_hosts')), '-o', 'GlobalKnownHostsFile=none']
+        command += ['-o', 'UserKnownHostsFile=' + config.quote(str(store.path('known_hosts'))), '-o', 'GlobalKnownHostsFile=none']
     if not interactive:
         command += ['-o', 'BatchMode=yes']
     if identity:
@@ -46,6 +46,18 @@ def sessions():
     actual = {s['name']: s for s in host_sessions()}
     result = []
     for row in store.rows('terminal'):
+        if row.get('pid') and row.get('state') == 'running':
+            import psutil
+            try:
+                process = psutil.Process(row['pid'])
+                if abs(process.create_time() - row['process_created']) < .01:
+                    ancestors = {parent.pid for parent in process.parents()}
+                    renamed = next((entry for entry in actual.values() if entry.get('pid') in ancestors), None)
+                    if renamed and renamed['name'] != row['session']:
+                        row['session'] = renamed['name']
+                        store.put('terminal', row['id'], row)
+            except (psutil.Error, KeyError):
+                pass
         active = actual.get(row['session'], {}).get('status') == 'running'
         # A live Zellij shell alone is not proof an SSH process is still connected.
         running = active and row.get('state') in ('starting', 'running')

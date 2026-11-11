@@ -11,7 +11,7 @@ from app.ssh import configuration as config, hosts, storage as store
 from app.ssh.process import run, CommandFailure
 from app.ssh.terminals import argv, connection
 
-pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ssh-diagnostic')
+pool = None
 lock = threading.RLock()
 active = {}
 
@@ -34,12 +34,19 @@ def classification(text):
 
 
 def start(host, kind='diagnose'):
+    global pool
     if kind not in ('diagnose', 'scan'):
         raise HTTPException(400, '未知诊断类型')
-    connection(host)
+    config.alias(host)
+    inventory = config.inventory()
+    if not any(row['alias'].lower() == host.lower() for row in inventory['connections']):
+        raise HTTPException(404, 'SSH 连接不存在')
+    config.assert_trusted()
     with lock:
         if len(active) >= 4:
             raise HTTPException(429, '已有四个 SSH 检查正在运行，请等待或取消')
+        if pool is None:
+            pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ssh-diagnostic')
         token = secrets.token_hex(16)
         event = threading.Event()
         active[token] = event
@@ -58,7 +65,7 @@ def worker(token, cancel):
             store.put('job', token, row)
             row['result'] = hosts.scan(row['host'], cancel)
         else:
-            hostname, port, _, values = hosts.address(row['host'])
+            hostname, port, _, values = hosts.address(row['host'], cancel)
             row.update(stage='检查 TCP 端口', checks=[])
             store.put('job', token, row)
             if values.get('proxyjump', 'none') == 'none':
@@ -115,3 +122,14 @@ def stop(token):
         if event:
             event.set()
     return dict(row, cancellation_requested=bool(event))
+
+
+def shutdown():
+    global pool
+    with lock:
+        previous = pool
+        pool = None
+        for event in active.values():
+            event.set()
+    if previous:
+        previous.shutdown(wait=True)

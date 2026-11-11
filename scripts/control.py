@@ -12,7 +12,14 @@ ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT))
 from app.main import PORT, NETWORK
 LOCAL_URL=NETWORK.local_url(PORT)
-local_http=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+tls_handlers=[]
+if os.environ.get('ORH_TLS_CERT_FILE'):
+    import ssl
+    context=ssl.create_default_context(cafile=os.environ['ORH_TLS_CERT_FILE'])
+    context.check_hostname=False
+    if hasattr(ssl,'VERIFY_X509_PARTIAL_CHAIN'):context.verify_flags|=ssl.VERIFY_X509_PARTIAL_CHAIN
+    tls_handlers.append(urllib.request.HTTPSHandler(context=context))
+local_http=urllib.request.build_opener(urllib.request.ProxyHandler({}),*tls_handlers)
 state=ROOT/'.runtime/server.json'
 def process():
     try:
