@@ -40,8 +40,24 @@ def tokens(line):
     return result
 
 
+def read_source(path):
+    """Follow native Include links for read-only inspection, then pin the target.
+
+    Linked sources cannot be edited through the config API. Their canonical
+    destination and content digest participate in the authorization signature.
+    """
+    try:
+        canonical = Path(path).resolve(strict=True)
+    except FileNotFoundError:
+        return Path(path).absolute(), b''
+    except (OSError, RuntimeError):
+        raise HTTPException(403, 'SSH Include 路径无法安全解析') from None
+    return canonical, store.read(canonical, allow_root=True)
+
+
 def discover():
     files, hosts, rules, warnings = [], {}, [], []
+    unverified = []
     visited = set()
 
     def visit(path, depth=0):
@@ -52,21 +68,28 @@ def discover():
             raise HTTPException(400, 'SSH Include 超过深度或文件数量上限')
         visited.add(str(path))
         try:
-            content = store.read(path)
+            canonical, content = read_source(path)
             text = content.decode('utf-8')
         except (HTTPException, UnicodeError):
-            warnings.append('部分 Include 文件因权限、软链接或编码无法读取')
+            warnings.append('部分 Include 文件因权限或编码无法读取')
+            unverified.append(str(path))
             return
         if b'PRIVATE KEY-----' in content or b'\x00' in content:
             warnings.append('Include 含非 SSH 配置内容，已阻止通过配置接口读取')
+            unverified.append(str(path))
             return
         if not content and not path.exists():
             return
-        inside = path.is_relative_to(store.root())
+        inside = path.is_relative_to(store.root()) and canonical == path and path.stat().st_uid == os.getuid()
         file_id = store.digest(str(path).encode())[:24]
         dynamic = False
         for number, line in enumerate(text.splitlines(), 1):
-            parts = tokens(line)
+            try:
+                parts = tokens(line)
+            except HTTPException:
+                warnings.append('部分配置行引号不完整，请在高级编辑中修正')
+                unverified.append(str(path) + ':' + str(number))
+                continue
             if not parts:
                 continue
             key = parts[0].lower()
@@ -88,21 +111,23 @@ def discover():
                         host['sources'].append(dict(file=file_id, line=number, managed=path == store.path(MANAGED)))
                     else:
                         rules.append(dict(pattern=item, file=file_id, line=number))
-        files.append(dict(id=file_id, path=str(path), name=path.name, revision=store.digest(content),
+        files.append(dict(id=file_id, path=str(path), read_path=str(canonical), name=path.name, revision=store.digest(content),
                           editable=inside and path != store.path(MANAGED), dynamic=dynamic,
                           relative=str(path.relative_to(store.root())) if inside else None))
 
     visit(store.path('config'))
     if store.path(MANAGED).exists() and str(store.path(MANAGED)) not in visited:
         visit(store.path(MANAGED))
-    signature = store.digest(json.dumps(sorted((f['path'], f['revision']) for f in files)).encode())
+    signature = store.digest(json.dumps(sorted((f['path'], f['read_path'], f['revision']) for f in files)).encode())
     trusted = store.get('trust-config', signature) is not None
     return dict(hosts=list(hosts.values()), files=files, rules=rules, warnings=sorted(set(warnings)),
-                signature=signature, requires_trust=any(f['dynamic'] for f in files) and not trusted)
+                signature=signature, unverified_sources=unverified, requires_trust=any(f['dynamic'] for f in files) and not trusted)
 
 
 def assert_trusted():
     result = discover()
+    if result['unverified_sources']:
+        raise HTTPException(409, '部分 SSH Include 无法核验，请先在 SSH 配置中修复路径、语法或文件权限')
     if result['requires_trust']:
         raise HTTPException(409, '原生配置含 Match exec 或命令指令，请先在 SSH 配置中核验并授权当前版本')
     return result
@@ -164,12 +189,17 @@ def render(rows):
 
 
 def include_plan():
-    old = store.read(store.path('config')).decode('utf-8')
+    canonical, content = read_source(store.path('config'))
+    old = content.decode('utf-8')
     line = 'Include ' + quote(str(store.path(MANAGED))) + '\n'
     # Keep the owned Include first because OpenSSH uses the first obtained value.
     remaining = []
     for original in old.splitlines(keepends=True):
-        parts = tokens(original)
+        try:
+            parts = tokens(original)
+        except HTTPException:
+            remaining.append(original)
+            continue
         if parts and parts[0].lower() == 'include' and len(parts) == 2:
             expanded = Path(os.path.expanduser(parts[1]))
             if not expanded.is_absolute():
@@ -178,17 +208,47 @@ def include_plan():
                 continue
         remaining.append(original)
     new = line + ''.join(remaining)
-    return dict(file='config', text=new, revision=store.digest(old.encode()), diff=diff(old, new), linked=old == new)
+    return dict(file='config', text=new, revision=store.digest(old.encode()), diff=diff(old, new), linked=old == new, read_only=canonical != store.path('config') or (store.path('config').exists() and canonical.stat().st_uid != os.getuid()))
 
 
 def diff(old, new):
     return ''.join(difflib.unified_diff(old.splitlines(True), new.splitlines(True), fromfile='当前版本', tofile='保存后'))
 
 
-def native_arguments():
-    if store.root() == Path.home() / '.ssh':
-        return []
-    return ['-F', str(store.path('config'))]
+def native_arguments(interactive=True):
+    """A first-value policy file also protects OpenSSH's native ProxyJump child.
+
+    Original Includes and Match rules are read by OpenSSH unchanged. The system
+    configuration is included after the user's file, matching native precedence.
+    """
+    from app.main import DATA
+    import secrets
+    folder = DATA / 'ssh-policy'
+    folder.mkdir(mode=0o700, exist_ok=True)
+    lines = ['Host *', '    StrictHostKeyChecking ' + ('ask' if interactive else 'yes'),
+             '    BatchMode ' + ('no' if interactive else 'yes'), '    PermitLocalCommand no',
+             '    RemoteCommand none', '    ForkAfterAuthentication no',
+             '    ControlMaster no', '    ControlPath none']
+    if store.root() != Path.home() / '.ssh':
+        lines += ['    UserKnownHostsFile ' + quote(str(store.path('known_hosts'))),
+                  '    GlobalKnownHostsFile none']
+    lines += ['Include ' + quote(str(store.path('config'))), 'Host *', 'Include /etc/ssh/ssh_config', '']
+    content = '\n'.join(lines).encode()
+    target = folder / (store.digest(content) + '.conf')
+    if not target.exists():
+        temp = folder / ('.write-' + secrets.token_hex(12))
+        fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        try:
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp, target)
+        finally:
+            temp.unlink(missing_ok=True)
+    if store.read(target, private=True) != content:
+        raise HTTPException(409, 'SSH 运行策略文件已改变，请检查宿主机配置')
+    return ['-F', str(target)]
 
 
 def effective(host, cancel=None):
@@ -253,6 +313,9 @@ def save_connection(body):
         row['revision'] = store.digest(json.dumps(row, sort_keys=True).encode())
         updated = [r for r in entries if r != existing] + [row]
         result = commit_connections(updated, expected)
+        if existing:
+            store.remove('host-meta', existing['alias'].lower())
+        store.remove('host-meta', row['alias'].lower())
         return dict(row, file=result)
 
 
@@ -327,7 +390,7 @@ def validate(key, text):
             elif source == store.path(MANAGED) and not source.exists():
                 value = render(store.rows('connection')).decode()
             else:
-                value = store.read(source).decode()
+                value = read_source(source)[1].decode()
             if 'PRIVATE KEY-----' in value or '\x00' in value:
                 raise HTTPException(400, 'Include 包含非 SSH 配置内容')
             total += len(value.encode())

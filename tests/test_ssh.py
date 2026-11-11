@@ -111,7 +111,11 @@ def test_path_input_permissions_and_dynamic_rules(ssh_home, tmp_path):
     target = tmp_path / 'elsewhere'
     target.write_text('secret')
     (directory / 'config').symlink_to(target)
-    assert client.get('/api/ssh/overview').status_code == 403
+    response = client.get('/api/ssh/overview')
+    assert response.status_code == 200
+    assert not response.json()['files'][0]['editable']
+    assert client.post('/api/ssh/config/plan', json={'action':'include'}).status_code == 403
+    assert target.read_text() == 'secret'
     (directory / 'config').unlink()
     marker = tmp_path / 'must-not-execute'
     (directory / 'config').write_text(f'Host external\n HostName localhost\nMatch exec "touch {marker}"\n User root\n')
@@ -146,7 +150,7 @@ def test_advanced_diff_backups_and_version_conflict(ssh_home):
     client, directory, _ = ssh_home
     (directory / 'config').write_text('Host original\n HostName 127.0.0.1\n')
     info = client.get('/api/ssh/config').json()['files'][0]
-    opened = post(client, '/config/read', dict(file=info['id'], grant=grant(client, 'config-read', info['id'])))
+    opened = post(client, '/config/read', dict(file=info['id']))
     plan = post(client, '/config/plan', dict(file=info['id'], revision=opened['revision'], text=opened['text'] + '\nHost added\n HostName localhost\n'))
     assert '+Host added' in plan['diff']
     post(client, '/config/apply', dict(plan=plan['plan'], confirm='config', grant=grant(client, 'config-apply', 'config')))
@@ -369,3 +373,119 @@ def test_remote_http_cannot_open_owned_ssh_terminal(ssh_home):
     with pytest.raises(WebSocketDisconnect):
         with remote.websocket_connect(origin.replace('http:', 'ws:') + '/terminal/ws/terminal/ssh-test-guard?web_client_id=fixture&rows=24&cols=80', headers={'Origin':origin}):
             pass
+
+
+def test_organizing_managed_connection_keeps_revision_and_group_consistent(ssh_home):
+    client, directory, _ = ssh_home
+    row = add(client, group='old')
+    organized = post(client, '/connections/metadata', dict(alias='test', group='favorite-group', favorite=True))
+    assert organized['revision'] != row['revision']
+    view = client.get('/api/ssh/overview').json()
+    row = view['connections'][0]
+    assert row['favorite'] and row['group'] == 'favorite-group'
+    post(client, '/connections/save', dict(row, original_alias='test', connection_revision=row['revision'],
+                                         managed_revision=view['managed_revision'], group='edited'))
+    row = client.get('/api/ssh/overview').json()['connections'][0]
+    assert row['group'] == 'edited'
+    assert row['favorite']
+
+
+def test_interrupted_key_pair_deletion_rolls_back(ssh_home, monkeypatch):
+    client, directory, _ = ssh_home
+    post(client, '/keys/generate', dict(name='rollback'))
+    original = (directory / 'rollback').read_bytes()
+    row = client.get('/api/ssh/keys').json()['keys'][0]
+    unlink = Path.unlink
+    def interrupted(path, *args, **kwargs):
+        if path == directory / 'rollback.pub':
+            raise PermissionError('isolated test interruption')
+        return unlink(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'unlink', interrupted)
+    response = client.post('/api/ssh/keys/rollback/delete', json=dict(confirm='rollback', revision=row['revision'], public_revision=row['public_revision'], grant=grant(client, 'key-delete', 'rollback')))
+    assert response.status_code == 409
+    assert (directory / 'rollback').read_bytes() == original
+    assert (directory / 'rollback.pub').exists()
+
+
+@pytest.mark.parametrize('password', ['', 'encrypted-pem-fixture'])
+def test_import_and_change_rsa_pem_passphrase(ssh_home, password):
+    from app.ssh.process import keygen
+    client, directory, _ = ssh_home
+    source = directory / 'rsa-source'
+    keygen(['ssh-keygen', '-q', '-m', 'PEM', '-t', 'rsa', '-b', '2048', '-f', str(source)], [password, password])
+    imported = post(client, '/keys/import', dict(name='pem-import', private=source.read_text(), passphrase=password,
+                   grant=grant(client, 'key-import', 'pem-import')))
+    row = next(key for key in client.get('/api/ssh/keys').json()['keys'] if key['name'] == 'pem-import')
+    assert row['encrypted'] == bool(password)
+    post(client, '/keys/pem-import/passphrase', dict(revision=row['revision'], old_passphrase=password, passphrase='replacement-phrase',
+                   grant=grant(client, 'key-passphrase', 'pem-import')))
+    derived = keygen(['ssh-keygen', '-y', '-f', str(directory / 'pem-import')], ['replacement-phrase'])
+    assert keys.public_line(derived)['fingerprint'] == imported['fingerprint']
+
+
+def test_keygen_secret_never_enters_argv_or_environment(ssh_home, monkeypatch):
+    import subprocess
+    client, directory, data = ssh_home
+    secret = 'private-unicode-口令-fixture'
+    original = subprocess.Popen
+    calls = []
+    def inspected(argv, **kwargs):
+        calls.append((argv, kwargs.get('env', {})))
+        return original(argv, **kwargs)
+    monkeypatch.setattr(subprocess, 'Popen', inspected)
+    post(client, '/keys/generate', dict(name='secret-check', passphrase=secret))
+    assert calls
+    for argv, environment in calls:
+        assert all(secret not in str(argument) for argument in argv)
+        assert secret not in json.dumps(environment)
+    for path in list(directory.rglob('*')) + list(data.rglob('*')):
+        if path.is_file():
+            assert secret.encode() not in path.read_bytes()
+
+
+def test_bounded_process_timeout_and_cancel():
+    from app.ssh.process import run
+    from fastapi import HTTPException
+    import threading
+    with pytest.raises(HTTPException) as error:
+        run([sys.executable, '-c', 'import time;time.sleep(10)'], timeout=.2)
+    assert error.value.status_code == 504
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(HTTPException) as error:
+        run([sys.executable, '-c', 'import time;time.sleep(10)'], cancel=cancel)
+    assert error.value.status_code == 409
+
+
+def test_linked_include_is_inspected_and_requires_dynamic_authorization(ssh_home, tmp_path):
+    client, directory, _ = ssh_home
+    source = tmp_path / 'native-tool.conf'
+    marker = tmp_path / 'must-not-execute-linked-rule'
+    source.write_text(f'Host linked\n HostName localhost\nMatch exec "touch {marker}"\n User alternate\n')
+    include = directory / 'native-tool.conf'
+    include.symlink_to(source)
+    (directory / 'config').write_text('Include "' + str(include) + '"\n')
+    found = client.get('/api/ssh/config').json()
+    assert found['requires_trust']
+    linked = next(row for row in found['files'] if row['path'] == str(include))
+    assert linked['read_path'] == str(source) and not linked['editable']
+    assert client.get('/api/ssh/connections/linked/effective').status_code == 409
+    assert not marker.exists()
+    raw = post(client, '/config/read', dict(file=linked['id']))
+    assert 'Match exec' in raw['text']
+    before = found['signature']
+    source.write_text(source.read_text() + '# edited externally\n')
+    assert cfg.discover()['signature'] != before
+
+
+def test_bad_config_can_be_opened_for_repair_without_executing_it(ssh_home):
+    client, directory, _ = ssh_home
+    (directory / 'config').write_text('Host repair\n HostName "unterminated\n')
+    found = client.get('/api/ssh/config').json()
+    assert found['warnings'] and found['unverified_sources']
+    assert client.get('/api/ssh/connections/repair/effective').status_code == 409
+    info = found['files'][0]
+    post(client, '/config/read', dict(file=info['id']))
+    plan = post(client, '/config/plan', dict(file=info['id'], revision=info['revision'], text='Host repair\n HostName localhost\n'))
+    post(client, '/config/apply', dict(plan=plan['plan'], confirm='config', grant=grant(client, 'config-apply', 'config')))
+    assert client.get('/api/ssh/connections/repair/effective').json()['hostname'] == 'localhost'

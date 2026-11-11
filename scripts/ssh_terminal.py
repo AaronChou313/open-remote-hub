@@ -46,6 +46,7 @@ def execute(launch, data, ssh_dir):
     from app.ssh import storage as store, configuration as config
     from app.ssh.terminals import argv
     from app.ssh.keys import public_line
+    from app.ssh.process import environment
     import psutil
     row = store.get('terminal', launch)
     if not row or time.time() - row['created'] > 60 or row['state'] != 'starting':
@@ -65,7 +66,7 @@ def execute(launch, data, ssh_dir):
             public = public_line(store.read(store.path(row['key'] + '.pub')).decode())['public']
             import shlex
             command = argv(row['host']) + ['sh -c ' + shlex.quote(DEPLOY)]
-            result = subprocess.run(command, input=(public + '\n').encode())
+            result = subprocess.run(command, input=(public + '\n').encode(), env=environment())
             if result.returncode:
                 print('\n公钥部署失败，请核验主机指纹、密码和远端文件权限，然后重新部署。')
                 code = result.returncode
@@ -76,10 +77,10 @@ def execute(launch, data, ssh_dir):
                 index = command.index('--')
                 command[index:index] = ['-o', 'PasswordAuthentication=no', '-o', 'KbdInteractiveAuthentication=no',
                                         '-o', 'PreferredAuthentications=publickey', '-o', 'StrictHostKeyChecking=yes']
-                code = subprocess.run(command + ['true']).returncode
+                code = subprocess.run(command + ['true'], env=environment()).returncode
                 print('\n公钥认证验证成功。' if code == 0 else '\n公钥已部署，但认证验证失败。请检查目标 SSH 授权策略或密钥口令。')
         else:
-            code = subprocess.run(argv(row['host'])).returncode
+            code = subprocess.run(argv(row['host']), env=environment()).returncode
             print('\nSSH 已断开。需要继续时，请在控制台点击重新连接。')
     finally:
         row.update(state='completed' if code == 0 else 'failed', exit_code=code, ended=time.time())

@@ -26,6 +26,8 @@ def key_name(value):
 def public_line(text):
     if not isinstance(text, str) or len(text) > 16384 or len(text.strip().splitlines()) != 1:
         raise HTTPException(400, '请输入单行 OpenSSH 公钥')
+    if any(ord(character) < 32 and character != '\t' for character in text.strip()):
+        raise HTTPException(400, '公钥含无效控制字符')
     parts = text.strip().split(None, 2)
     if len(parts) < 2 or not re.fullmatch(r'(ssh-|ecdsa-|sk-)[A-Za-z0-9@._+-]+', parts[0]):
         raise HTTPException(400, '公钥格式无效，不支持 authorized_keys 选项前缀')
@@ -58,6 +60,8 @@ def encrypted(data):
             return blob[offset + 4:offset + 4 + length] != b'none'
         except (ValueError, struct.error):
             return None
+    if re.search(br'-----BEGIN (?:RSA |DSA |EC )?PRIVATE KEY-----', data):
+        return False
     return None
 
 
@@ -234,11 +238,20 @@ def delete(name, body):
         public = store.read(store.path(name + '.pub'))
         if store.digest(private) != body.get('revision') or store.digest(public) != body.get('public_revision'):
             raise HTTPException(409, '密钥文件已改变，请刷新')
-        backups = []
-        for key, content in ((name, private), (name + '.pub', public)):
-            if content:
-                backups.append(store.backup(key, content))
+        originals = [(key, content) for key, content in ((name, private), (name + '.pub', public)) if content]
+        backups = [store.backup(key, content) for key, content in originals]
+        removed = []
+        try:
+            for key, content in originals:
+                if store.digest(store.read(store.path(key))) != store.digest(content):
+                    raise HTTPException(409, '密钥文件正在被外部修改，删除已停止')
                 store.path(key).unlink()
+                removed.append((key, content))
+        except (OSError, HTTPException):
+            for key, content in removed:
+                if not store.path(key).exists():
+                    store.write(key, content, store.digest(b''), False)
+            raise HTTPException(409, '删除中断，原文件已保留恢复备份，请刷新检查') from None
         return dict(backups=backups)
 
 

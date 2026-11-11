@@ -110,7 +110,7 @@ def locked():
             os.close(directory)
 
 
-def read(path, private=False):
+def read(path, private=False, allow_root=False):
     """Reject links in every path component, foreign ownership and hard links."""
     path = Path(path).absolute()
     descriptor = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
@@ -125,7 +125,7 @@ def read(path, private=False):
             return b''
         try:
             info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            if not stat.S_ISREG(info.st_mode) or info.st_uid not in ((os.getuid(), 0) if allow_root else (os.getuid(),)) or info.st_nlink != 1:
                 raise HTTPException(403, 'SSH 文件的类型、所有者或链接不安全')
             if info.st_mode & (0o077 if private else 0o022):
                 raise HTTPException(403, 'SSH 文件权限过宽，请通过主机文件权限设置修正')
@@ -169,7 +169,7 @@ def backup(key, data):
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
-    kind = 'key' if b'PRIVATE KEY-----' in data[:200] or key.endswith('.pub') else 'config'
+    kind = 'key' if b'PRIVATE KEY-----' in data[:200] or data.startswith((b'ssh-', b'ecdsa-', b'sk-')) else 'config'
     metadata = {'connections': rows('connection')} if key == 'openremotehub.conf' else {}
     put('backup', token, dict(file=key, created=time.time(), revision=digest(data), kind=kind, **metadata))
     return token

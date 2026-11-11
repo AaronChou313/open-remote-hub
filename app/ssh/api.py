@@ -76,8 +76,8 @@ def reauth(request: Request, value=Depends(body)):
     main.throttle(request)
     operation = value.get('operation')
     target = str(value.get('target', ''))
-    if operation not in ('key-import', 'key-export', 'key-delete', 'key-passphrase', 'config-read',
-                         'config-apply', 'config-trust', 'backup-restore', 'host-update', 'host-remove') or len(target) > 100:
+    if operation not in ('key-import', 'key-export', 'key-delete', 'key-passphrase',
+                         'config-apply', 'config-trust', 'backup-restore', 'host-update', 'host-remove') or len(target) > 512:
         raise HTTPException(400, '管理员复验操作无效')
     if not passwords.verify(str(value.get('password', ''))):
         audit('administrator', 'reauth-failed')
@@ -110,9 +110,21 @@ def metadata(value=Depends(body)):
     host = config.alias(value.get('alias'))
     if not any(r['alias'].lower() == host.lower() for r in config.inventory()['connections']):
         raise HTTPException(404, 'SSH 连接不存在')
-    store.put('host-meta', host.lower(), dict(group=str(value.get('group', ''))[:80], favorite=bool(value.get('favorite'))))
+    with store.locked():
+        managed = store.get('connection', host.lower())
+        values = dict(group=str(value.get('group', '')).strip()[:80], favorite=bool(value.get('favorite')))
+        revision = None
+        if managed:
+            managed.update(values)
+            content = {k: v for k, v in managed.items() if k not in ('id', 'revision')}
+            revision = store.digest(json.dumps(content, sort_keys=True).encode())
+            managed['revision'] = revision
+            store.put('connection', host.lower(), managed)
+            store.remove('host-meta', host.lower())
+        else:
+            store.put('host-meta', host.lower(), values)
     audit(host, 'connection-organize')
-    return dict(ok=True)
+    return dict(ok=True, revision=revision)
 
 
 @router.get('/connections/{host}/effective')
@@ -268,7 +280,7 @@ def config_read(request: Request, value=Depends(body)):
     file = next((f for f in config.discover()['files'] if f['id'] == file_id), None)
     if not file:
         raise HTTPException(404, '配置文件不存在')
-    content = store.read(Path(file['path'])).decode()
+    content = config.read_source(file['path'])[1].decode()
     if 'PRIVATE KEY-----' in content or '\x00' in content:
         raise HTTPException(403, '私钥只能通过专用密钥导出操作读取')
     return dict(file, text=content)
@@ -286,7 +298,7 @@ def config_plan(request: Request, value=Depends(body)):
         text = value.get('text')
         if not isinstance(text, str) or '\x00' in text or len(text.encode()) > store.LIMIT or 'PRIVATE KEY-----' in text:
             raise HTTPException(400, '配置文本无效')
-        old = store.read(Path(file['path'])).decode()
+        old = config.read_source(file['path'])[1].decode()
         if store.digest(old.encode()) != value.get('revision'):
             raise HTTPException(409, '配置已修改，请重新打开')
         # Syntax and effective rules are checked by OpenSSH at use time. Validation
@@ -294,6 +306,8 @@ def config_plan(request: Request, value=Depends(body)):
         for line in text.splitlines():
             config.tokens(line)
         result = dict(file=file['relative'], text=text, revision=value['revision'], diff=config.diff(old, text))
+    if result.get('read_only'):
+        raise HTTPException(403, '原生 Config 是外部工具管理的软链接，请在其配置源中加入受管 Include')
     config.validate(result['file'], result['text'])
     token = secrets.token_hex(16)
     store.put('plan', token, dict(result, expires=time.time() + 300))

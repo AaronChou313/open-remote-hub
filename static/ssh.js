@@ -84,7 +84,7 @@ window.RemoteHubSSH = (() => {
     target.oninput = () => { if (track) dirty = true; };
     target.onsubmit = event => {
       event.preventDefault();
-      withBusy(event.submitter, 'ssh:dialog', '处理中…', async () => {
+      return withBusy(event.submitter, 'ssh:dialog:' + dialogEpoch, '处理中…', async () => {
         const epoch = dialogEpoch;
         const controls = [...dialog.querySelectorAll('input, textarea, select, button')];
         const states = controls.map(control => control.disabled);
@@ -198,6 +198,7 @@ window.RemoteHubSSH = (() => {
     $('#sshConnections').onclick = async event => {
       const control = event.target.closest('[data-ssh]');
       if (!control) return;
+      const valid = current;
       const host = control.closest('[data-host]').dataset.host;
       const row = overview.connections.find(item => item.alias === host);
       try {
@@ -205,16 +206,20 @@ window.RemoteHubSSH = (() => {
         if (control.dataset.ssh === 'details') await details(row);
         if (control.dataset.ssh === 'favorite') {
           const favorite = row.metadata?.favorite ?? row.favorite ?? false;
-          await withBusy(control, 'ssh:favorite:' + host, '…', () => api('/ssh/connections/metadata', {alias: host, group: row.metadata?.group ?? row.group ?? '', favorite: !favorite}));
+          const result = await withBusy(control, 'ssh:favorite:' + host, '…', () => api('/ssh/connections/metadata', {alias: host, group: row.metadata?.group ?? row.group ?? '', favorite: !favorite}));
+          if (!valid()) return;
+          if (result?.revision) row.revision = result.revision;
           row.metadata = {...row.metadata, favorite: !favorite};
           drawConnections();
         }
-      } catch (error) { showError(error); }
+      } catch (error) { if (valid()) showError(error); }
     };
   }
 
   async function connect(host, control, newSession = false, key) {
     if (pendingOperations.has('ssh:connect:' + host)) return;
+    const owner = current;
+    const epoch = dialog?.open ? dialogEpoch : null;
     const target = window.open('about:blank', '_blank');
     if (!target) throw Error('浏览器阻止了新标签页，请允许此站点弹出终端');
     target.opener = null;
@@ -222,9 +227,9 @@ window.RemoteHubSSH = (() => {
       await withBusy(control, 'ssh:connect:' + host, '准备终端…', async () => {
         const endpoint = `/ssh/connections/${encode(host)}/${key ? 'deploy' : 'connect'}`;
         const result = await request(endpoint, key ? {key} : {new: newSession});
-        target.location.replace(result.url);
-        if (dialog?.open) { dirty = false; submitting = false; dialog.close(); }
-        await reload();
+        if (!target.closed) target.location.replace(result.url);
+        if (epoch !== null && epoch === dialogEpoch && dialog?.open) { dirty = false; submitting = false; dialog.close(); }
+        if (owner()) await reload();
       });
     } catch (error) { target.close(); throw error; }
   }
@@ -298,10 +303,18 @@ window.RemoteHubSSH = (() => {
     const epoch = await open(kind === 'scan' ? '核验主机指纹 · ' + host : '连接诊断 · ' + host,
       `<p id="sshJobStatus" role="status">正在开始检查…</p><div id="sshJobResult"></div>${button('cancel', '取消检查')}`);
     if (!epoch) return;
-    const job = await request(`/ssh/connections/${encode(host)}/diagnose`, {kind});
-    if (epoch !== dialogEpoch) { await request(`/ssh/jobs/${job.id}/cancel`, {}); return; }
-    activeJob = job.id;
     const cancel = dialog.querySelector('[data-ssh="cancel"]');
+    cancel.disabled = true;
+    let job;
+    try {
+      job = await api(`/ssh/connections/${encode(host)}/diagnose`, {kind});
+    } catch (error) {
+      if (epoch === dialogEpoch) showDialogError(error);
+      return;
+    }
+    if (epoch !== dialogEpoch || !current()) { await api(`/ssh/jobs/${job.id}/cancel`, {}); return; }
+    activeJob = job.id;
+    cancel.disabled = false;
     cancel.onclick = async () => { await request(`/ssh/jobs/${job.id}/cancel`, {}); cancel.disabled = true; };
     while (epoch === dialogEpoch && current()) {
       const result = await request(`/ssh/jobs/${job.id}`);

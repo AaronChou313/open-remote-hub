@@ -25,7 +25,7 @@ def connection(host):
 
 
 def argv(host, interactive=True, identity=None):
-    command = ['ssh'] + config.native_arguments() + ['-o', 'PermitLocalCommand=no',
+    command = ['ssh'] + config.native_arguments(interactive) + ['-o', 'PermitLocalCommand=no',
                '-o', 'RemoteCommand=none', '-o', 'ControlMaster=no', '-o', 'ControlPath=none',
                '-o', 'StrictHostKeyChecking=' + ('ask' if interactive else 'yes'),
                '-o', 'ConnectTimeout=10', '-o', 'ConnectionAttempts=1']
@@ -67,7 +67,7 @@ def sessions():
             import psutil
             try:
                 process = psutil.Process(row['pid'])
-                running = process.is_running() and abs(process.create_time() - row['process_created']) < .01
+                running = process.is_running() and process.status() != psutil.STATUS_ZOMBIE and abs(process.create_time() - row['process_created']) < .01
             except (psutil.Error, KeyError):
                 running = False
         result.append(dict(row, running=running, live_session=active))
@@ -93,6 +93,7 @@ def launch(host, new=False, key=None):
             if existing:
                 ensure_web()
                 return dict(session=existing['session'], url='/terminal/' + existing['session'], reused=True)
+        ensure_web()
         token = secrets.token_hex(8)
         name = 'ssh-' + token[:12]
         # Never resurrect a name or insert commands into an existing pane.
@@ -106,10 +107,11 @@ def launch(host, new=False, key=None):
                    '--data', str(main.DATA), '--ssh-dir', str(store.root()), '--launch', token]
         try:
             main.cli(command, 10, cwd=str(Path.home()))
-            ensure_web()
         except Exception:
-            row['state'] = 'launch_failed'
-            store.put('terminal', token, row)
+            latest = store.get('terminal', token)
+            if latest and latest['state'] == 'starting':
+                latest['state'] = 'launch_failed'
+                store.put('terminal', token, latest)
             raise
         main.audit('ssh', host, 'deploy-terminal' if key else 'connect-terminal')
         return dict(session=name, url='/terminal/' + name, reused=False)

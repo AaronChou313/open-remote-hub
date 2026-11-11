@@ -15,13 +15,13 @@
 
 ## 配置边界
 
-生效配置由系统 `ssh -G` 求值，包括 Host、Match 和 Include。发现过程仅提取别名及来源，支持引号路径、glob、递归 Include 和重复条目标记。相对 Include 由原生 OpenSSH 以用户 `~/.ssh` 为基础解析。复杂的动态 Include 可能无法自动枚举所有别名，其已知别名仍按原生规则求值。
+生效配置由系统 `ssh -G` 求值，包括 Host、Match 和 Include。发现过程仅提取别名及来源，支持引号路径、glob、递归 Include 和重复条目标记。软链接 Include 通过规范目标进行只读核验，目标路径和内容摘要均绑定到授权版本。无法核验的来源会阻止连接并提示修复。相对 Include 由原生 OpenSSH 以用户 `~/.ssh` 为基础解析。复杂的动态 Include 可能无法自动枚举所有别名，其已知别名仍按原生规则求值。
 
-高级编辑面向 SSH 管理目录内已发现的配置，包括子目录文件。保存前预览差异，执行 OpenSSH 语法校验，再以管理员密码确认。管理范围之外的 Include 可查看，保持只读。`openremotehub.conf` 通过连接表单编辑。
+高级编辑面向 SSH 管理目录内已发现的配置，包括子目录文件。保存前预览差异，执行 OpenSSH 语法校验，再以管理员密码确认。管理范围之外及软链接的 Include 可查看，保持只读。原生 config 本身为软链接时，已有连接仍可使用，新增受管 Include 需在外部工具管理的配置源中接入。`openremotehub.conf` 通过连接表单编辑。
 
 `Match exec`、`ProxyCommand`、`LocalCommand`、`KnownHostsCommand` 是可执行配置。自动发现时不会执行这些指令。核验并授权当前配置版本后，才允许原生求值或连接，配置改变后需重新核验。语法验证在私有镜像中将 Match exec 替换为固定的 false 命令。普通连接表单只接受结构化字段。
 
-默认使用严格主机身份检查。交互式首次连接允许 OpenSSH 展示指纹并由用户确认。使用 ProxyJump 的连接通过 OpenSSH 原生跳板机制连接，自动 keyscan 目前只支持直连。跳板首次认证和指纹核验请在加密原生终端中完成。外部 UserKnownHostsFile 和系统指纹文件继续由 OpenSSH 校验，Web 中的增删限定于管理目录的 known_hosts。
+运行时通过私有 OpenSSH 策略 Include 文件统一约束主机身份检查、SSH 连接复用和本地命令，原生 ProxyJump 的子连接也遵循该策略。用户和系统原始配置按原生顺序读入。默认使用严格主机身份检查。交互式首次连接允许 OpenSSH 展示指纹并由用户确认。使用 ProxyJump 的连接通过 OpenSSH 原生跳板机制连接，自动 keyscan 目前只支持直连。跳板首次认证和指纹核验请在加密原生终端中完成。外部 UserKnownHostsFile 和系统指纹文件继续由 OpenSSH 校验，Web 中的增删限定于管理目录的 known_hosts。
 
 指纹移除支持散列记录和共享主机行，保留其他主机。通配符记录通过增加目标主机的否定匹配保留其他主机。更新或移除已有指纹需要管理员复验。带 authorized_keys 选项的公钥需提供标准的 `类型 base64 备注` 公钥文件。
 
@@ -72,4 +72,4 @@ docker build -t openremotehub/ssh-test:local tests/fixtures/ssh
 .venv/bin/python -m pytest tests/test_ssh_live.py -m live -q
 ```
 
-普通测试仅操作 pytest 临时 SSH 目录。live 测试覆盖未知指纹、真实握手、公钥认证、密钥轮换阻断、核验更新、密码式公钥部署与幂等、加密私钥认证、两个 WebSocket 客户端、浏览器断开、网关重建、并行连接及显式退出。原生网关测试需已有本机 Zellij Web 网关初始化凭据，仅私下复制其认证到测试目录。
+普通测试仅操作 pytest 临时 SSH 目录。live 测试覆盖未知指纹、真实握手、公钥认证、密钥轮换阻断、核验更新、密码式公钥部署与幂等、加密私钥认证、两个 WebSocket 客户端、浏览器断开、网关重建、并行连接及显式退出。真实 ProxyJump 验证包含跳板错误指纹被拒绝及核验更新后的公钥登录。原生网关测试需已有本机 Zellij Web 网关初始化凭据，仅私下复制其认证到测试目录。
