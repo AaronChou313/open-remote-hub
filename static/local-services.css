@@ -1,0 +1,69 @@
+.entry-toolbar{display:flex;align-items:center;gap:14px;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap}
+.entry-toolbar>input{flex:1;max-width:440px;min-width:180px;margin:0}
+.entry-toolbar-actions{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}
+.entry-toolbar-actions select{width:auto;min-width:120px;margin:0}
+.entry-toolbar-actions button,.application-actions button,.application-actions a{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.application-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:20px}
+.application-card{display:flex;flex-direction:column;min-width:0;padding:24px;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.application-heading{display:flex;align-items:center;gap:12px}
+.application-heading>span{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;flex-shrink:0;background:var(--soft);color:var(--accent);border-radius:10px}
+.application-heading h2{font-size:17px;overflow-wrap:anywhere;flex:1;min-width:0}
+.application-heading small{font-size:11px}
+.application-address{font-size:12px;color:var(--muted);overflow-wrap:anywhere;margin:20px 0 24px}
+.application-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
+.application-actions button,.application-actions a{min-height:40px;padding:8px 12px;font-size:12px}
+.entry-dialog{width:min(570px,calc(100vw - 28px));padding:24px;border-radius:14px;max-height:90dvh;overflow:auto}
+.entry-dialog .detail-dialog-bar{align-items:center;gap:16px;margin-bottom:24px}
+.entry-dialog .detail-dialog-bar h2{font-size:19px;overflow-wrap:anywhere}
+.entry-dialog .detail-dialog-bar button{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}
+.entry-dialog label{display:flex;flex-direction:column;gap:8px;font-size:13px;margin-bottom:16px}
+.entry-dialog input,.entry-dialog select{width:100%;min-width:0;min-height:42px;margin:0}
+#appMode{margin-bottom:18px}
+.entry-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.entry-url-preview{font-size:12px;color:var(--accent);overflow-wrap:anywhere;margin:4px 0 18px}
+.entry-form-error{color:var(--red);font-size:12px;overflow-wrap:anywhere}
+.entry-form-note{font-size:12px;line-height:1.7;white-space:normal}
+.service-inactive{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.service-inactive input{width:16px;height:16px;margin:0;accent-color:var(--accent)}
+.service-summary{color:var(--muted);font-size:12px;margin:0 0 20px}
+.service-warning{font-size:12px;overflow-wrap:anywhere}
+.service-table{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.service-table td{vertical-align:top;padding:18px 16px;font-size:12px}
+.service-table th{padding:13px 16px}
+.service-name{white-space:normal;min-width:150px;max-width:260px}
+.service-name>strong{display:block;overflow-wrap:anywhere;line-height:1.5}
+.service-table small{display:block;font-size:11px;margin-top:5px}
+.service-state{display:inline-flex;font-size:10px;color:var(--muted);margin-top:7px}
+.service-state.service-running{color:var(--green)}
+.service-process{min-width:130px;max-width:230px}
+.service-process code{display:block;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:7px;font-size:10px;color:var(--muted)}
+.service-endpoints{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:180px;max-width:400px}
+.service-web-entry{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:6px;font-size:11px;overflow:hidden}
+.service-web-entry>a,.service-web-entry>span{display:inline-flex;align-items:center;gap:5px;padding:6px 7px;text-decoration:none;white-space:nowrap}
+.service-web-entry>span{color:var(--muted)}
+.service-web-entry .orh-icon{width:12px;height:12px}
+.service-web-entry>button{padding:6px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;display:inline-flex;align-items:center;justify-content:center}
+.service-tcp{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.service-tcp small{display:inline;margin:0;font-size:9px}
+.service-paging{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px;font-size:12px}
+.service-paging>div{display:flex;align-items:center;gap:12px}
+.service-paging button{font-size:12px}
+.service-dialog{width:min(820px,calc(100vw - 28px))}
+.service-definition{display:grid;grid-template-columns:90px minmax(0,1fr);gap:14px 18px;font-size:12px;margin:0 0 26px}
+.service-definition dt{color:var(--muted)}
+.service-definition dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.service-definition code{font-size:12px;line-height:1.7}
+.service-dialog h3{font-size:13px;margin:24px 0 12px}
+.service-detail-endpoints p{font-size:12px;margin-bottom:8px}
+.service-log{margin-top:22px}
+.service-log summary{font-size:12px;cursor:pointer;overflow-wrap:anywhere}
+.service-log pre{font-size:12px}
+@media(max-width:760px){
+ .entry-toolbar>input{max-width:none;flex-basis:100%}
+ .entry-toolbar-actions{margin-left:0;width:100%;justify-content:space-between}
+ .entry-dialog{padding:20px}
+ .entry-dialog input,.entry-dialog select{font-size:16px;min-height:44px}
+ .application-actions a,.application-actions button,.entry-toolbar-actions button{min-height:44px}
+ .service-table td,.service-table th{padding:13px 12px}
+ .service-definition{grid-template-columns:72px minmax(0,1fr);gap:12px}
+}

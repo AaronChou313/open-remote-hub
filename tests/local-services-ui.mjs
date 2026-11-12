@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const nodes = new Map();
+const node = selector => {
+  if (!nodes.has(selector)) nodes.set(selector,{innerHTML:'',textContent:'',querySelectorAll(){return []}});
+  return nodes.get(selector);
+};
+let response;
+const context = vm.createContext({window:{},location:{hostname:'192.168.1.20'},URL,Date,Set,Map,console,
+  $:node,me:{role:'admin'},esc:value=>String(value ?? '').replaceAll('<','&lt;').replaceAll('"','&quot;'),
+  icon:name=>`<svg>${name}</svg>`,empty:message=>message,uptime:()=>'',api:async()=>response});
+vm.runInContext(fs.readFileSync('static/applications.js','utf8'),context);
+context.RemoteHubApplications = context.window.RemoteHubApplications;
+vm.runInContext(fs.readFileSync('static/local-services.js','utf8'),context);
+const apps = context.RemoteHubApplications;
+assert.equal(apps.url({mode:'host',port:3000,path:'/editor?q=1'}),'http://192.168.1.20:3000/editor?q=1');
+assert.equal(apps.url({mode:'host',scheme:'https',port:443,path:'/'},'100.66.1.4'),'https://100.66.1.4/');
+assert.equal(apps.url({mode:'host',port:8080},'::1'),'http://[::1]:8080/');
+assert.equal(apps.url({mode:'custom',url:'https://service.example/ui'}),'https://service.example/ui');
+const local = context.window.RemoteHubLocalServices;
+assert.equal(local.entryUrl({binding:'loopback',address:'127.0.0.1',port:80,protocol:'http'}),null);
+context.location.hostname='127.0.0.1';
+assert.equal(local.entryUrl({binding:'loopback',address:'127.0.0.1',port:80,protocol:'http'}),'http://127.0.0.1/');
+context.location.hostname='100.66.1.4';
+assert.equal(local.entryUrl({binding:'all',address:'0.0.0.0',port:3000,protocol:'http'}),'http://100.66.1.4:3000/');
+response={applications:[{id:'one',name:'Editor',mode:'host',port:3000,path:'/',group:'开发'}]};
+await apps.render(()=>true);
+assert.match(node('#appEntries').innerHTML,/http:\/\/100.66.1.4:3000\//);
+assert.match(node('#appEntries').innerHTML,/data-application-action="edit"/);
+node('#appSearch').oninput({target:{value:'missing'}});
+assert.equal(node('#appEntries').innerHTML,'没有匹配的应用');
+response={warnings:[],time:Date.now()/1000,services:[{id:'test',name:'Python Web',source:'进程',scope:'host',running:true,pid:12,endpoints:[{protocol:'http',port:3000,address:'0.0.0.0',binding:'all'}]}]};
+await local.render(()=>true);
+assert.match(node('#serviceEntries').innerHTML,/Python Web/);
+assert.match(node('#serviceEntries').innerHTML,/data-service-add="0"/);
+assert.match(node('#serviceSummary').textContent,/1 个 Web/);
+node('#serviceSearch').oninput({target:{value:'12345'}});
+assert.equal(node('#serviceEntries').innerHTML,'没有匹配的本地服务');
+console.log('Application addresses, remote loopback scope, search, service listing and direct entries passed.');

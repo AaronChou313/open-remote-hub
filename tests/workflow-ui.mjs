@@ -29,10 +29,11 @@ assert.ok(!node('#content').innerHTML.includes('class="notice"'),'No explanatory
 assert.match(node('#content').innerHTML,/恢复并进入/);
 assert.match(node('#content').innerHTML,/\/terminal\/open\/old/);
 run(`api=async(p,b)=>{calls.push({p,b});return {id:'saved-task'}}`);
-node('#taskName').value='task';node('#taskArgv').value='["python3","-V"]';node('#taskCwd').value='/tmp';
-await node('#taskForm').onsubmit({preventDefault(){},submitter:{value:'run',textContent:'保存并启动',setAttribute(){},removeAttribute(){},isConnected:true}});
-assert.deepEqual(JSON.parse(run('JSON.stringify(calls.slice(-2).map(x=>x.p))')),['/tasks','/tasks/saved-task']);
-assert.equal(run('confirmations.length'),1,'Save-and-start is a single explicit user action');
+const navigation=fs.readFileSync('static/index.html','utf8');
+assert.match(navigation,/data-view="applications"/);
+assert.match(navigation,/data-view="services"/);
+assert.doesNotMatch(navigation,/id="taskDialog"|id="taskForm"|任务与服务|快捷任务/);
+assert.match(fs.readFileSync('static/workspace.js','utf8'),/switchView\('services'\)/,'Project task output opens local services');
 run(`globalThis.release=null;globalThis.count=0;globalThis.work=()=>new Promise(r=>{count++;release=r});globalThis.pending=withBusy(null,'single','等待',work)`);
 await run("withBusy(null,'single','等待',work)");
 assert.equal(run('count'),1,'Double clicks cannot submit a second operation');
@@ -41,7 +42,7 @@ assert.equal(run('pendingOperations.size'),0,'Busy state always released');
 node('#iconBusy').innerHTML=run("icon('start')")+'启动';
 await run("withBusy(document.querySelector('#iconBusy'),'icon:busy','启动中…',async()=>{})");
 assert.match(node('#iconBusy').innerHTML,/icons.svg#play/,'Busy state restores SVG markup');
-console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, save-and-start, duplicate protection passed.');
+console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, local-services navigation, duplicate protection passed.');
 
 node('#newPassword').value='1';node('#newPasswordConfirm').value='1';
 await node('#passwordForm').onsubmit({preventDefault(){}});

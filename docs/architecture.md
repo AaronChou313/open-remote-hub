@@ -6,6 +6,8 @@ FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入
 | --- | --- |
 | app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
 | app/projects.py | 项目记录、只读 Git、预设任务与文件/终端/环境关联 |
+| app/applications.py / static/applications.js | SQLite Web 入口记录、分组搜索、主机相对端口与自定义 URL 直连 |
+| app/local_services.py / static/local-services.js | 服务管理器、TCP 监听、Docker 发布端口和项目进程聚合，本机 HTTP 识别与详情日志 |
 | app/proxy.py / static/proxy.js / static/proxy-nodes.js | 固定本机 Clash / Mihomo 控制接口、状态筛选、单击模式 / 节点选择与连接详情、配置版本隔离 |
 | app/proxy_manager.py / static/proxy-manager.js | 私有机场配置库、受控订阅下载、配置检查和切换、TUN 生命周期、聚焦配置编辑器 |
 | scripts/proxy_engine.py / proxy_setup.py / proxyctl.py | root-owned Mihomo broker、用户私有 UDS、launchd/systemd 部署及本机 CLI，独立于控制台生命周期 |
