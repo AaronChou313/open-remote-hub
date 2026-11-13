@@ -120,7 +120,12 @@ updateThemeControl();
 window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubSSH?.isDirty()||window.RemoteHubWorkspace?.isDirty()||window.RemoteHubProxyManager?.isDirty()){e.preventDefault();e.returnValue=''}});
 enter();
 
-window.addEventListener?.('hashchange',()=>{
+window.addEventListener?.('hashchange',async()=>{
  const target={'#network':'remote','#remote':'remote','#proxy':'proxy'}[location.hash];
- if(target&&!$('#shell').hidden)switchView(target);
+ if(!target||$('#shell').hidden)return;
+ if(view==='remote'){
+  if(!await RemoteHubRemoteConnect.canLeave())return;
+  if(!await RemoteHubProxyManager.canLeave())return;
+ }
+ switchView(target);
 });
