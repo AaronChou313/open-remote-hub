@@ -433,6 +433,8 @@ from app.files import router as files_router
 app.include_router(files_router)
 from app.knowledge import router as knowledge_router
 app.include_router(knowledge_router)
+from app.remote_connect.api import router as remote_connect_router
+app.include_router(remote_connect_router)
 from app.applications import router as applications_router
 app.include_router(applications_router)
 from app.local_services import router as local_services_router

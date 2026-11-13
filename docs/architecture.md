@@ -5,6 +5,9 @@ FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入
 | 模块 | 职责 |
 | --- | --- |
 | app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
+| app/remote_connect/api.py / tailscale.py | 统一远程连接 API、原生 Tailscale CLI、状态及受控网络操作 |
+| app/remote_connect/rustdesk | RustDesk 本机 IPC、后台复用恢复及客户端设置 |
+| static/remote-connect.js / remote-connect.css | 组网与桌面状态、设备列表及原生客户端管理 |
 | app/projects.py | 项目记录、只读 Git、预设任务与文件/终端/环境关联 |
 | app/applications.py / static/applications.js | SQLite Web 入口记录、分组搜索、主机相对端口与自定义 URL 直连 |
 | app/local_services.py / static/local-services.js | 服务管理器、TCP 监听、Docker 发布端口和项目进程聚合，本机 HTTP 识别与详情日志 |

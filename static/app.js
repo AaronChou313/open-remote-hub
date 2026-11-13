@@ -3,9 +3,9 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=typeof location!=='undefined'&&location.hash==='#proxy'?'proxy':localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let view=typeof location!=='undefined'&&['#proxy','#remote'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={knowledge:'知识库',ssh:'SSH 管理',proxy:'代理与网络',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
+const titles={remote:'远程连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'代理与网络',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
 function updateSidebar(){
  document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
@@ -17,7 +17,7 @@ updateSidebar();
 $('#sidebarToggle').onclick=()=>{sidebarCollapsed=!sidebarCollapsed;localStorage.setItem('orh-sidebar-collapsed',String(sidebarCollapsed));updateSidebar()};
 if(view==='tasks')view='services';
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?((path.startsWith('/environments')||path.startsWith('/local-services'))?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
+async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?((path.startsWith('/environments')||path.startsWith('/local-services')||path.startsWith('/remote-connect'))?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
 async function withBusy(button,key,label,work){
  if(pendingOperations.has(key))return;pendingOperations.add(key);
  const text=button?.textContent,markup=button?.innerHTML;
@@ -26,6 +26,7 @@ async function withBusy(button,key,label,work){
 }
 async function switchView(target){
  if(target==='tasks')target='services';
+ if(view!==target&&window.RemoteHubRemoteConnect&&!await RemoteHubRemoteConnect.canLeave())return;
  if(view!==target&&window.RemoteHubApplications&&!RemoteHubApplications.canLeave())return;
  if(view!==target&&window.RemoteHubSSH&&!await RemoteHubSSH.canLeave())return;
  if(view!==target&&window.RemoteHubProxyManager&&!await RemoteHubProxyManager.canLeave())return;
@@ -38,7 +39,7 @@ async function switchView(target){
  $('#title').textContent=titles[view];$('#breadcrumb').textContent='工作空间 / '+titles[view];
  $('#error').hidden=true;$('#content').innerHTML=empty('正在读取本机数据…');refresh();
 }
-function showLogin(){window.RemoteHubApplications?.reset();window.RemoteHubLocalServices?.reset();window.RemoteHubKnowledge?.reset();window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
+function showLogin(){window.RemoteHubRemoteConnect?.reset();window.RemoteHubApplications?.reset();window.RemoteHubLocalServices?.reset();window.RemoteHubKnowledge?.reset();window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
 function notify(text){$('#toast').textContent=text;$('#toast').hidden=false;setTimeout(()=>$('#toast').hidden=true,3500)}
 function showError(e,operation=true){$('#error').textContent=e.message;$('#error').dataset.kind=operation?'operation':'load';$('#error').hidden=false;if(!operation)$('#connection').textContent='更新失败 · 保留最近数据'}
 async function confirmAction(title,message){if($('#confirmDialog').open)return false;$('#confirmTitle').textContent=title;$('#confirmMessage').textContent=message;$('#confirmDialog').returnValue='cancel';$('#confirmDialog').showModal();return new Promise(resolve=>$('#confirmDialog').addEventListener('close',()=>resolve($('#confirmDialog').returnValue==='confirm'),{once:true}))}
@@ -94,7 +95,7 @@ async function refresh(force=false){
  if($('#shell').hidden)return;
  if(busy){refreshQueued=true;return}
  const version=++renderVersion,target=view;busy=true;$('#refresh').disabled=true;
- try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
+ try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,remote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
  catch(e){if(version===renderVersion){if($('#content').textContent==='正在读取本机数据…')$('#content').innerHTML=empty('暂时无法读取，请点击刷新重试。');showError(e.name==='TimeoutError'?Error('读取超时，请稍后刷新。现有任务不会因此停止。'):e,false)}}
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
@@ -106,9 +107,9 @@ $('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError')
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});
 $('#content').onclick=e=>{const b=e.target.closest('button[data-kind]');if(b)act(b.dataset.kind,b.dataset.id,b.dataset.action,b)};
 $('#refresh').onclick=()=>refresh(true);$('#theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('orh-theme',document.body.classList.contains('dark')?'dark':'light');updateThemeControl()};$('#logout').onclick=async()=>{try{await api('/logout',{});showLogin()}catch(e){showError(e)}};$('#closeOutput').onclick=()=>$('#outputDialog').close();$('#outputDialog').onclose=()=>{if(stream){stream.close();stream=null}};
-setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh','knowledge','applications'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
+setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
 
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy','ssh','knowledge','applications'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');
 $('#cancelSession').onclick=()=>$('#sessionDialog').close();$('#sessionForm').onsubmit=e=>{e.preventDefault();const name=$('#sessionName').value.trim();if(!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name)){$('#sessionError').textContent='名称仅支持字母、数字、点、下划线、短横线';return}if(mountTerminal(name))$('#sessionDialog').close()};
 

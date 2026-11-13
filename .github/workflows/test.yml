@@ -26,6 +26,7 @@ jobs:
       - run: node tests/knowledge-ui.mjs
       - run: node tests/local-services-ui.mjs
       - run: node --check static/applications.js && node --check static/local-services.js
+      - run: node --check static/remote-connect.js
       - run: node --check static/knowledge.js
       - run: node --check static/ssh.js
       - run: node --check static/app.js && node --check static/sessions.js && node --check static/terminal-entry.js && node --check static/workspace.js && node --check static/dsh.js && node --check static/dsh-compat.js && node --check static/icons.js

@@ -32,6 +32,7 @@ run(`api=async(p,b)=>{calls.push({p,b});return {id:'saved-task'}}`);
 const navigation=fs.readFileSync('static/index.html','utf8');
 assert.match(navigation,/data-view="applications"/);
 assert.match(navigation,/data-view="services"/);
+assert.match(navigation,/data-view="remote"/);
 assert.doesNotMatch(navigation,/id="taskDialog"|id="taskForm"|任务与服务|快捷任务/);
 assert.match(fs.readFileSync('static/workspace.js','utf8'),/switchView\('services'\)/,'Project task output opens local services');
 run(`globalThis.release=null;globalThis.count=0;globalThis.work=()=>new Promise(r=>{count++;release=r});globalThis.pending=withBusy(null,'single','等待',work)`);
