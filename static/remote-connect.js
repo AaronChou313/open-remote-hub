@@ -4,6 +4,7 @@ window.RemoteHubRemoteConnect = (() => {
   let current = () => false;
   let state;
   let original = {};
+  let effectiveOriginal = {};
   let tab = "network";
   let operation = false;
   let dirty = false;
@@ -98,7 +99,8 @@ window.RemoteHubRemoteConnect = (() => {
       $("#rcServiceToggle").textContent =
         value.ready && value.accepting ? "暂停接入" : "启动接入服务";
       $("#rcServiceRestart").disabled = !value.ready;
-      $("#rcTemporaryPassword").disabled = !value.ready;
+      $("#rcCopyTemporary").disabled = !value.ready;
+      if (!value.ready) $("#rcTemporaryValue").value = "";
       $("#rcNativeMessage").textContent = value.message || "";
       $("#rcNativeMessage").hidden = !value.message;
     }
@@ -111,6 +113,7 @@ window.RemoteHubRemoteConnect = (() => {
         RemoteHubNodeBaby.update(data.nodebaby);
         updateNetwork(data.tailscale, data.lan_urls);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
+        if (tab === "overview" && data.rustdesk.ready) return loadSettings();
       });
       statusRequest = request;
       try {
@@ -173,26 +176,6 @@ window.RemoteHubRemoteConnect = (() => {
         await refresh();
         notify("已重新连接接入服务");
       });
-    $("#rcConnectForm").onsubmit = (event) => {
-      event.preventDefault();
-      busy($("#rcConnectForm button[type=submit]"), async () => {
-        await rdApi("/connect", {
-          target: $("#rcTarget").value,
-          mode: $("#rcMode").value,
-        });
-        notify("连接请求已发送到主机");
-      });
-    };
-    $("#rcTemporaryPassword").onclick = () =>
-      busy($("#rcTemporaryPassword"), async () => {
-        const result = await rdApi("/password/temporary", {});
-        $("#rcTemporaryValue").value = result.password || "";
-        $("#rcTemporaryDialog").showModal();
-      });
-    $("#rcCloseTemporary").onclick = () => $("#rcTemporaryDialog").close();
-    $("#rcTemporaryDialog").addEventListener("close", () => {
-      $("#rcTemporaryValue").value = "";
-    });
     $("#rcCopyTemporary").onclick = () =>
       busy($("#rcCopyTemporary"), async () => {
         await copy($("#rcTemporaryValue").value);
@@ -208,9 +191,11 @@ window.RemoteHubRemoteConnect = (() => {
         .forEach((input) => {
           const key = input.dataset.option;
           if (input.type === "checkbox") {
-            if (input.checked !== normalized(key, original[key]))
+            if (input.checked !== normalized(key, effectiveOriginal[key]))
               result[key] = input.checked ? "Y" : "N";
-          } else if (input.value.trim() !== original[key])
+          } else if (input.type === "radio") {
+            if (input.checked && input.value !== effectiveOriginal[key]) result[key] = input.value;
+          } else if (input.value.trim() !== effectiveOriginal[key])
             result[key] = input.value.trim();
         });
       return result;
@@ -219,55 +204,80 @@ window.RemoteHubRemoteConnect = (() => {
       dirty = Object.keys(changes()).length > 0;
       $("#rcDirty").hidden = !dirty;
     }
-    function fillSettings(options) {
-      original = options;
-      document
-        .querySelectorAll(".remote-connect [data-option]")
-        .forEach((input) => {
-          const key = input.dataset.option;
-          if (input.type === "checkbox")
-            input.checked = normalized(key, options[key]);
-          else input.value = options[key] || "";
-        });
+    function fillSettings(options, effective, preserve = true) {
+      const edits = preserve ? changes() : {};
+      document.querySelectorAll(".remote-connect [data-option]").forEach((input) => {
+        const key = input.dataset.option;
+        if (key in edits) return;
+        original[key] = options[key];
+        effectiveOriginal[key] = effective[key];
+        if (input.type === "radio") input.checked = input.value === effective[key];
+        else if (input.type === "checkbox") input.checked = normalized(key, effective[key]);
+        else input.value = effective[key] || "";
+      });
+      const passwordMode = document.querySelector('[data-option="approve-mode"]').value;
+      $("#rcPasswordOptions").hidden = passwordMode === "click";
+      const method = document.querySelector('[data-option="verification-method"]:checked')?.value;
+      $("#rcTemporaryOptions").disabled = method === "use-permanent-password";
+      $("#rcChangePassword").disabled = method === "use-temporary-password";
       markDirty();
     }
     async function loadSettings() {
+      const owner = current;
       loadingSettings = true;
-      $("#rcSaveSettings").disabled = true;
       try {
-        const result = await rdApi("/settings");
-        fillSettings(result.options);
+        const result = await rdApi("/live");
+        if (!owner()) return;
+        fillSettings(result.options, result.effective, Object.keys(original).length > 0);
+        $("#rcTemporaryValue").value = result.temporary_password || "";
+        $("#rcTemporaryValue").placeholder = result.temporary_enabled ? "暂不可用" : "当前验证方式已停用临时密码";
+        $("#rcCopyTemporary").disabled = !result.temporary_password;
       } finally {
         loadingSettings = false;
-        $("#rcSaveSettings").disabled = false;
       }
     }
-    $("#rcSettingsForm").oninput = () => {
-      if (!loadingSettings) markDirty();
-    };
-    $("#rcSettingsForm").onchange = () => {
-      if (!loadingSettings) markDirty();
+    async function saveSettings(patch) {
+      const controls = [...$("#rcSettingsForm").querySelectorAll("input,select,button")];
+      controls.forEach((control) => control.disabled = true);
+      try {
+        await rdApi("/settings", {changes: patch, before: original});
+        for (const key of Object.keys(patch)) {
+          original[key] = patch[key];
+          effectiveOriginal[key] = patch[key];
+        }
+        await loadSettings();
+        notify("已同步到 RustDesk");
+      } catch (error) {
+        // Restore changed controls from a fresh native read while retaining other drafts.
+        for (const key of Object.keys(patch)) effectiveOriginal[key] = optionValue(key);
+        await loadSettings();
+        throw error;
+      } finally {
+        controls.forEach((control) => control.disabled = false);
+        const method = document.querySelector('[data-option="verification-method"]:checked')?.value;
+        $("#rcTemporaryOptions").disabled = method === "use-permanent-password";
+        $("#rcChangePassword").disabled = method === "use-temporary-password";
+      }
+    }
+    function optionValue(key) {
+      const inputs = [...document.querySelectorAll(`[data-option="${key}"]`)];
+      const input = inputs.find((item) => item.type !== "radio" || item.checked);
+      return input.type === "checkbox" ? (input.checked ? "Y" : "N") : input.value.trim();
+    }
+    $("#rcSettingsForm").oninput = () => { if (!loadingSettings) markDirty(); };
+    $("#rcSettingsForm").onchange = (event) => {
+      if (loadingSettings) return;
+      markDirty();
+      const input = event.target.closest("[data-live-option]");
+      if (!input) return;
+      const key = input.dataset.option;
+      const value = optionValue(key);
+      busy(input, () => saveSettings({[key]: value}));
     };
     $("#rcSettingsForm").onsubmit = (event) => {
       event.preventDefault();
-      busy($("#rcSaveSettings"), async () => {
-        const patch = changes();
-        const controls = [
-          ...$("#rcSettingsForm").querySelectorAll("input,select,button"),
-        ];
-        controls.forEach((control) => (control.disabled = true));
-        try {
-          const result = await rdApi("/settings", {
-            changes: patch,
-            before: original,
-          });
-          fillSettings(result.options);
-          notify("设置已保存");
-          await refresh();
-        } finally {
-          controls.forEach((control) => (control.disabled = false));
-        }
-      });
+      const patch = changes();
+      if (Object.keys(patch).length) busy($("#rcSaveSettings"), () => saveSettings(patch));
     };
     document.querySelectorAll("[data-rc-tab]").forEach((button) => {
       button.onclick = () =>
@@ -282,7 +292,8 @@ window.RemoteHubRemoteConnect = (() => {
             ))
           )
             return;
-          if (next === "settings") await loadSettings();
+          if (dirty) fillSettings(original, effectiveOriginal, false);
+          if (next === "overview") await loadSettings();
           else {
             dirty = false;
             $("#rcDirty").hidden = true;
@@ -293,8 +304,9 @@ window.RemoteHubRemoteConnect = (() => {
           tab = next;
           $("#rcNetwork").hidden = next !== "network";
           $("#rcNodeBaby").hidden = next !== "nodebaby";
+          if (next === "nodebaby") RemoteHubNodeBaby.maybeCheck();
           $("#rcOverview").hidden = next !== "overview";
-          $("#rcSettings").hidden = next !== "settings";
+
           document
             .querySelectorAll("[data-rc-tab]")
             .forEach((item) =>
@@ -357,243 +369,60 @@ window.RemoteHubRemoteConnect = (() => {
   function markup() {
     return `<div id="rcRoot" class="remote-connect">
 <div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("link")}节点小宝</h2><span class="rc-dot" id="nbState">读取中</span></div><p id="nbAddress" class="mono">—</p><small id="nbSummary" class="muted"></small></article></div>
-<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active">${icon("network")}Tailscale 设备</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button><button data-rc-tab="settings">${icon("settings")}RustDesk 设置</button></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active">${icon("network")}Tailscale 设备</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
 ${RemoteHubNodeBaby.markup()}
 <section id="rcNetwork"><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
-<section id="rcOverview" hidden>
+        <section id="rcOverview" hidden>
           <div class="overview-grid">
-            <article class="panel device">
-              <div class="section-heading">
-                <h2>RustDesk 客户端</h2>
-                <span class="muted" id="rcVersion">—</span>
-              </div>
-              <label class="muted" for="rcDeviceId">RustDesk ID</label>
-              <div class="device-id-row">
-                <input
-                  id="rcDeviceId"
-                  readonly
-                  value="—"
-                  aria-label="RustDesk ID"
-                /><button
-                  id="rcCopyId"
-                  class="icon-button"
-                  aria-label="复制 ID"
-                  title="复制 ID"
-                >
-                  <svg><use href="/static/icons.svg#copy"></use></svg>
-                </button>
-              </div>
-              <div class="device-actions">
-                <a id="rcConnectHere" class="button primary" href="#"
-                  ><svg><use href="/static/icons.svg#external-link"></use></svg
-                  >从当前设备连接此主机</a
-                ><button id="rcTemporaryPassword">
-                  <svg><use href="/static/icons.svg#key-round"></use></svg>查看临时密码
-                </button>
-              </div>
-              <dl>
-                <div>
-                  <dt>接入服务</dt>
-                  <dd id="rcAccepting">—</dd>
-                </div>
-                <div>
-                  <dt>正在远程控制</dt>
-                  <dd id="rcConnections">—</dd>
-                </div>
-                <div>
-                  <dt>固定密码</dt>
-                  <dd id="rcPasswordSet">—</dd>
-                </div>
-                <div>
-                  <dt>进程</dt>
-                  <dd id="rcProcesses" class="mono">—</dd>
-                </div>
-              </dl>
+            <article class="panel identity-panel">
+              <div class="section-heading"><h2>RustDesk</h2><span id="rcVersion" class="version-label">—</span></div>
+              <label for="rcDeviceId">RustDesk ID</label>
+              <div class="device-id-row"><input id="rcDeviceId" readonly value="—" aria-label="RustDesk ID"><button id="rcCopyId" class="icon-button" aria-label="复制 ID">${icon("copy")}</button></div>
+              <label for="rcTemporaryValue">临时密码</label>
+              <div class="device-id-row"><input id="rcTemporaryValue" readonly autocomplete="off" aria-label="临时密码"><button id="rcCopyTemporary" class="icon-button" aria-label="复制临时密码">${icon("copy")}</button></div>
+              <a id="rcConnectHere" class="button" href="#">${icon("external")}在当前设备的 RustDesk 中打开</a>
+              <dl><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
             </article>
-            <div class="right-column">
-              <article class="panel">
-                <div class="section-heading">
-                  <h2>在主机上发起连接</h2>
-                  <svg class="section-icon">
-                    <use href="/static/icons.svg#terminal"></use>
-                  </svg>
-                </div>
-                <form id="rcConnectForm">
-                  <label for="rcTarget">目标 ID 或主机地址</label
-                  ><input
-                    id="rcTarget"
-                    name="target"
-                    autocomplete="off"
-                    placeholder="输入对方的 RustDesk ID"
-                    required
-                    maxlength="254"
-                  />
-                  <div class="connect-bottom">
-                    <label class="mode-select" for="rcMode"
-                      ><span class="sr-only">连接方式</span
-                      ><select id="rcMode">
-                        <option value="desktop">远程桌面</option>
-                        <option value="files">文件传输</option>
-                      </select></label
-                    ><button type="submit" class="primary">
-                      <svg><use href="/static/icons.svg#play"></use></svg>在主机上连接
-                    </button>
-                  </div>
-                </form>
-                <p class="muted small">
-                  连接窗口显示在主机桌面，密码和确认由 RustDesk 处理。
-                </p>
-              </article>
-              <article class="panel">
-                <div class="section-heading">
-                  <h2>运行管理</h2>
-                  <button id="rcOpenNative" class="text-button">
-                    在主机打开客户端<svg>
-                      <use href="/static/icons.svg#external-link"></use>
-                    </svg>
-                  </button>
-                </div>
-                <label class="switch-row" for="rcAutostart"
-                  ><span>登录主机后自动运行</span
-                  ><input id="rcAutostart" type="checkbox" role="switch"
-                /></label>
-                <div class="service-actions">
-                  <button id="rcServiceToggle" class="primary">
-                    启动接入服务</button
-                  ><button id="rcServiceRestart">重新连接接入服务</button>
-                </div>
-                <p id="rcNativeMessage" class="muted small" hidden></p>
-              </article>
-            </div>
+            <article class="panel">
+              <div class="section-heading"><h2>运行管理</h2><button id="rcOpenNative" class="text-button">在主机打开客户端 ${icon("external")}</button></div>
+              <label class="switch-row"><span>登录主机后自动运行</span><input id="rcAutostart" type="checkbox" role="switch"></label>
+              <div class="service-actions"><button id="rcServiceToggle" class="primary">启动接入服务</button><button id="rcServiceRestart">重新连接接入服务</button></div>
+              <p id="rcNativeMessage" class="muted small" hidden></p>
+            </article>
           </div>
-        </section>
-        <section id="rcSettings" hidden>
           <form id="rcSettingsForm">
-            <div class="settings-heading">
-              <h2>客户端设置</h2>
-              <div class="actions">
-                <span id="rcDirty" class="muted small" hidden>尚未保存</span
-                ><button id="rcSaveSettings" type="submit" class="primary">
-                  保存设置
-                </button>
+            <article class="panel rc-auth-panel">
+              <h2>密码</h2>
+              <label class="sr-only" for="rcApproveMode">连接批准方式</label>
+              <select id="rcApproveMode" data-option="approve-mode" data-live-option>
+                <option value="password">允许密码访问</option><option value="click">允许点击访问</option><option value="password-click">允许密码或点击访问</option>
+              </select>
+              <div id="rcPasswordOptions">
+                <label class="rc-radio-row"><input type="radio" name="rcVerification" data-option="verification-method" data-live-option value="use-temporary-password">使用一次性密码</label>
+                <fieldset id="rcTemporaryOptions" class="rc-password-length"><legend>一次性密码长度</legend>
+                  ${["6","8","10"].map((length) => `<label><input type="radio" name="rcPasswordLength" data-option="temporary-password-length" data-live-option value="${length}">${length}</label>`).join("")}
+                  <label class="rc-numeric-password"><input type="checkbox" data-option="allow-numeric-one-time-password" data-live-option>一次性密码为数字</label>
+                </fieldset>
+                <label class="rc-radio-row"><input type="radio" name="rcVerification" data-option="verification-method" data-live-option value="use-permanent-password">使用固定密码</label>
+                <button id="rcChangePassword" type="button" class="rc-set-password">${icon("password")}设置固定密码</button>
+                <label class="rc-radio-row"><input type="radio" name="rcVerification" data-option="verification-method" data-live-option value="use-both-passwords">同时使用两种密码</label>
               </div>
-            </div>
-            <div class="settings-section">
-              <div><h3>连接与网络</h3></div>
-              <div class="field-grid">
-                <label
-                  >ID 服务器<input
-                    data-option="custom-rendezvous-server"
-                    placeholder="默认使用 RustDesk 公共服务"
-                    autocomplete="off" /></label
-                ><label
-                  >中继服务器<input
-                    data-option="relay-server"
-                    placeholder="可选，主机名或 IP"
-                    autocomplete="off" /></label
-                ><label
-                  >API 服务器<input
-                    data-option="api-server"
-                    placeholder="可选，http:// 或 https://"
-                    autocomplete="off" /></label
-                ><label
-                  >服务器公钥<input
-                    data-option="key"
-                    placeholder="自建服务器的公钥"
-                    autocomplete="off" /></label
-                ><label class="switch-row"
-                  ><span>允许 IP 直连</span
-                  ><input type="checkbox" data-option="direct-server" /></label
-                ><label
-                  >直连端口<input
-                    data-option="direct-access-port"
-                    type="number"
-                    min="1"
-                    max="65535"
-                    placeholder="21118"
-                /></label>
-              </div>
-            </div>
-            <div class="settings-section">
-              <h3>操作权限</h3>
-              <div class="field-grid">
-                <label class="switch-row"
-                  ><span>键盘与鼠标</span
-                  ><input
-                    type="checkbox"
-                    data-option="enable-keyboard" /></label
-                ><label class="switch-row"
-                  ><span>剪贴板同步</span
-                  ><input
-                    type="checkbox"
-                    data-option="enable-clipboard" /></label
-                ><label class="switch-row"
-                  ><span>文件传输</span
-                  ><input
-                    type="checkbox"
-                    data-option="enable-file-transfer" /></label
-                ><label class="switch-row"
-                  ><span>音频</span
-                  ><input type="checkbox" data-option="enable-audio"
-                /></label>
-              </div>
-            </div>
-            <div class="settings-section">
-              <h3>连接验证</h3>
-              <div class="field-grid">
-                <label
-                  >批准方式<select data-option="approve-mode">
-                    <option value="">沿用原生默认设置</option>
-                    <option value="password">密码批准</option>
-                    <option value="click">手动确认</option>
-                    <option value="password-click">密码或手动确认</option>
-                  </select></label
-                ><label
-                  >访问密码<select data-option="verification-method">
-                    <option value="">沿用原生默认设置</option>
-                    <option value="use-temporary-password">临时密码</option>
-                    <option value="use-permanent-password">固定密码</option>
-                    <option value="use-both-passwords">
-                      临时密码与固定密码
-                    </option>
-                  </select></label
-                ><label
-                  >临时密码长度<select data-option="temporary-password-length">
-                    <option value="">沿用原生默认设置</option>
-                    <option value="6">6 位</option>
-                    <option value="8">8 位</option>
-                    <option value="10">10 位</option>
-                  </select></label
-                >
-                <div class="password-setting">
-                  <span>固定密码</span
-                  ><button id="rcChangePassword" type="button">
-                    <svg><use href="/static/icons.svg#key-round"></use></svg
-                    >设置固定密码
-                  </button>
-                </div>
-              </div>
-            </div>
+            </article>
+            <article class="panel rc-permission-panel"><h2>权限</h2><div class="field-grid">
+              ${[["enable-keyboard","键盘与鼠标"],["enable-clipboard","剪贴板同步"],["enable-file-transfer","文件传输"],["enable-audio","音频"],["allow-remote-config-modification","允许远程修改配置"]].map(([key,label]) => `<label class="switch-row"><span>${label}</span><input type="checkbox" data-option="${key}" data-live-option></label>`).join("")}
+            </div></article>
+            <details class="panel rc-network-details"><summary>网络设置</summary><div class="field-grid">
+              <label>ID 服务器<input data-option="custom-rendezvous-server" placeholder="RustDesk 公共服务" autocomplete="off"></label>
+              <label>中继服务器<input data-option="relay-server" autocomplete="off"></label>
+              <label>API 服务器<input data-option="api-server" autocomplete="off"></label>
+              <label>服务器公钥<input data-option="key" autocomplete="off"></label>
+              <label class="switch-row"><span>允许 IP 直连</span><input type="checkbox" data-option="direct-server" data-live-option></label>
+              <label>直连端口<input data-option="direct-access-port" type="number" min="1" max="65535"></label>
+            </div><div class="rc-form-actions"><span id="rcDirty" class="muted" hidden>尚未保存</span><button id="rcSaveSettings" type="submit" class="primary">保存网络设置</button></div></details>
           </form>
-        </section><dialog id="rcTemporaryDialog" aria-labelledby="rcTemporaryTitle">
-      <div class="section-heading">
-        <h2 id="rcTemporaryTitle">临时访问密码</h2>
-        <button id="rcCloseTemporary" class="icon-button" aria-label="关闭">
-          <svg><use href="/static/icons.svg#x"></use></svg>
-        </button>
-      </div>
-      <input
-        id="rcTemporaryValue"
-        readonly
-        aria-label="临时访问密码"
-        class="mono"
-      />
-      <div class="dialog-actions">
-        <button id="rcCopyTemporary" class="primary">复制密码</button>
-      </div>
-    </dialog>
+        </section>
     <dialog id="rcPasswordDialog" aria-labelledby="rcPasswordTitle">
       <form id="rcPasswordForm">
         <div class="section-heading">
@@ -910,6 +739,8 @@ ${RemoteHubNodeBaby.markup()}
     current = check;
     if (!$("#rcRoot")) {
       tab = "network";
+      original = {};
+      effectiveOriginal = {};
       dirty = false;
       tailDirty = false;
       expectedDisconnect = false;
@@ -937,6 +768,7 @@ ${RemoteHubNodeBaby.markup()}
     dirty = false;
     tailDirty = false;
     original = {};
+    effectiveOriginal = {};
     tailOriginal = {};
     RemoteHubNodeBaby.reset();
     state = null;

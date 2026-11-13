@@ -26,6 +26,7 @@ class FakeNative:
     def config(self, name):return {'id':'123456789','permanent-password-set':'Y','temporary-password':'fixture-secret'}[name]
     def request(self, kind):return {'OnlineStatus':[20,True],'VideoConnCount':1}[kind]
     def set_password(self, password):self.password = password
+    def refresh_temporary_password(self):self.refreshed = True
 
 
 @pytest.fixture
@@ -137,7 +138,8 @@ def test_codec_fragmented_reads(length):
     finally:left.close();worker.join()
 
 
-def test_real_unix_socket_read_write_and_ack():
+@pytest.mark.parametrize('refresh', [False, True])
+def test_real_unix_socket_read_write_and_ack(refresh):
     directory=tempfile.TemporaryDirectory(prefix='rdl-',dir='/tmp')
     path=Path(directory.name)/'ipc';server=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     server.bind(str(path));server.listen()
@@ -146,12 +148,17 @@ def test_real_unix_socket_read_write_and_ack():
         connection,_=server.accept()
         with connection:
             captured.append(ipc.receive(connection))
-            connection.sendall(ipc.frame({'t':'Config','c':['permanent-password','Y']}))
+            if refresh:
+                captured.append(ipc.receive(connection))
+            connection.sendall(ipc.frame({'t':'Config','c':['temporary-password','fixture-new']} if refresh else {'t':'Config','c':['permanent-password','Y']}))
     worker=threading.Thread(target=accept);worker.start()
     try:
-        ipc.Native(path).set_password('fixture-in-memory')
+        if refresh:
+            ipc.Native(path).refresh_temporary_password()
+        else:
+            ipc.Native(path).set_password('fixture-in-memory')
         worker.join()
-        assert captured == [{'t':'Config','c':['permanent-password','fixture-in-memory']}]
+        assert captured == ([{'t':'Config','c':['temporary-password','']}, {'t':'Config','c':['temporary-password',None]}] if refresh else [{'t':'Config','c':['permanent-password','fixture-in-memory']}])
     finally:server.close();directory.cleanup()
 
 
@@ -204,3 +211,26 @@ def test_tailscale_control_ack_and_diag_routes(management,monkeypatch):
     assert calls==[['down','--accept-risk=lose-ssh']]
     assert tailscale.operation['state']=='done'
     assert http.post('/api/remote-connect/tailscale/netcheck',json={}).json()=={'output':'native diagnostic result'}
+
+
+def test_live_password_defaults_and_two_way_settings(management):
+    http, native, _ = management
+    value = http.get('/api/remote-connect/rustdesk/live').json()
+    assert value['effective']['approve-mode'] == 'password-click'
+    assert value['effective']['verification-method'] == 'use-both-passwords'
+    assert value['effective']['temporary-password-length'] == '6'
+    assert value['temporary_password'] == 'fixture-secret'
+    assert 'temporary_password' not in http.get('/api/remote-connect').json()['rustdesk']
+    native.values['verification-method'] = 'use-permanent-password'
+    assert not http.get('/api/remote-connect/rustdesk/live').json()['temporary_enabled']
+    before = http.get('/api/remote-connect/rustdesk/live').json()['options']
+    assert http.post('/api/remote-connect/rustdesk/settings',json={
+        'before':before, 'changes':{'verification-method':'use-both-passwords','allow-numeric-one-time-password':'Y'}}).status_code == 200
+    assert native.values['allow-numeric-one-time-password'] == 'Y'
+    assert native.refreshed
+    assert http.get('/api/remote-connect/rustdesk/live').json()['temporary_password'] == 'fixture-secret'
+    config = native.config
+    native.config = lambda name: 'fixture-rotated' if name == 'temporary-password' else config(name)
+    assert http.get('/api/remote-connect/rustdesk/live').json()['temporary_password'] == 'fixture-rotated'
+    native.values['approve-mode'] = 'click'
+    assert http.get('/api/remote-connect/rustdesk/live').json()['temporary_password'] == ''

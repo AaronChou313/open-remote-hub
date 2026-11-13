@@ -30,5 +30,11 @@ OPTIONS = {
     'enable-audio': ('bool', ''),
     'approve-mode': ('choice', ('password', 'click', 'password-click', '')),
     'verification-method': ('choice', ('use-temporary-password', 'use-permanent-password', 'use-both-passwords', '')),
+    'allow-numeric-one-time-password': ('bool', ''),
+    'allow-remote-config-modification': ('bool', ''),
     'temporary-password-length': ('choice', ('6', '8', '10', '')),
 }
+
+# RustDesk 1.5.3 server_model.dart and hbb_common password_security.rs.
+DEFAULTS = {'approve-mode': 'password-click', 'verification-method': 'use-both-passwords',
+            'temporary-password-length': '6', 'direct-access-port': '21118'}

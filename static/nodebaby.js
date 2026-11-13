@@ -4,14 +4,15 @@ window.RemoteHubNodeBaby = (() => {
   let context;
   let group = "";
   let query = "";
-  let probing = false;
-  const results = new Map();
+  let checking = false;
+  let nextCheck = 0;
   const $ = (selector) => document.querySelector(selector);
 
   function markup() {
     return `<section id="rcNodeBaby" hidden>
       <div class="rc-tail-toolbar"><div class="rc-tail-actions">
         <button id="nbOpen" disabled>${icon("external")}在主机打开客户端</button>
+        <button id="nbCheckAll">${icon("diagnose")}全部检测</button><label class="rc-online-filter"><input type="checkbox" id="nbAutoCheck" checked>自动检测</label>
         <button id="nbRefresh">${icon("refresh")}刷新状态</button>
       </div><a class="button" href="https://yc.iepose.com/" target="_blank" rel="noopener">节点小宝管理后台 ${icon("external")}</a></div>
       <p id="nbError" class="rc-error" role="alert" hidden></p>
@@ -25,67 +26,34 @@ window.RemoteHubNodeBaby = (() => {
         <input id="nbSearch" type="search" aria-label="搜索节点小宝映射" placeholder="搜索设备、别名或 IP">
         <label class="rc-node-group">网段<select id="nbGroup" aria-label="节点小宝映射网段"></select></label>
       </div>
-      <div class="rc-peers"><div class="table-wrap"><table><thead><tr><th>设备 / 别名</th><th>组网地址</th><th>数据链路</th><th>服务检测</th><th>操作</th></tr></thead><tbody id="nbRows"></tbody></table></div></div>
-      <p class="muted rc-node-footnote">映射来自本机客户端。数据链路按需建立，服务检测检查指定 TCP 端口。</p>
-      <dialog id="nbProbeDialog"><form id="nbProbeForm"><h2>检测设备服务</h2>
-        <p id="nbProbeTarget" class="mono"></p>
-        <label>服务端口<input id="nbPort" type="number" min="1" max="65535" required value="8765" inputmode="numeric" list="nbPorts"></label>
-        <datalist id="nbPorts"><option value="22">SSH</option><option value="80">HTTP</option><option value="443">HTTPS</option><option value="445">SMB</option><option value="3389">远程桌面</option><option value="8765">RemoteHub</option></datalist>
-        <p id="nbProbeResult" role="status" hidden></p>
-        <div class="dialog-actions"><button type="button" id="nbCloseProbe">关闭</button><button class="primary" type="submit" id="nbTest">检测</button></div>
-      </form></dialog>
+      <div class="rc-peers"><div class="table-wrap"><table><thead><tr><th>设备 / 别名</th><th>组网地址</th><th>状态</th><th>连接</th><th>最近检测</th><th>操作</th></tr></thead><tbody id="nbRows"></tbody></table></div></div>
+      <p class="muted rc-node-footnote">状态每 5 秒刷新，自动检测每 15 秒运行。未连通时可检查设备和节点小宝连接。</p>
     </section>`;
   }
 
   function mount(options) {
     context = options;
-    probing = false;
+    checking = false;
+    nextCheck = 0;
     group = "";
     query = "";
-    results.clear();
     $("#nbSearch").oninput = (event) => {
       query = event.target.value.toLowerCase().trim();
       draw();
     };
     $("#nbGroup").onchange = (event) => {
       group = event.target.value;
+      nextCheck = 0;
       draw();
+      maybeCheck();
     };
+    $("#nbCheckAll").onclick = () => checkDevices(visibleRows().filter((item) => item.prefix === 32).map((item) => item.id));
+    $("#nbAutoCheck").onchange = () => { nextCheck = 0; maybeCheck(); };
     $("#nbRefresh").onclick = () => context.busy($("#nbRefresh"), context.refresh);
     $("#nbOpen").onclick = () => context.busy($("#nbOpen"), async () => {
       await api("/remote-connect/nodebaby/open", {});
       if (context.current()) notify("已在主机打开节点小宝");
     });
-    $("#nbProbeDialog").addEventListener("cancel", (event) => {
-      if (probing) event.preventDefault();
-    });
-    $("#nbCloseProbe").onclick = () => $("#nbProbeDialog").close();
-    $("#nbProbeForm").onsubmit = (event) => {
-      event.preventDefault();
-      const owner = context;
-      const id = $("#nbProbeForm").dataset.target;
-      const port = Number($("#nbPort").value);
-      context.busy($("#nbTest"), async () => {
-        $("#nbProbeResult").hidden = false;
-        $("#nbProbeResult").textContent = "正在连接…";
-        probing = true;
-        $("#nbCloseProbe").disabled = true;
-        try {
-          const result = await api("/remote-connect/nodebaby/probe", { id, port });
-          if (context !== owner || !owner.current()) return;
-          results.set(id, result);
-          $("#nbProbeResult").textContent = result.reachable
-            ? `${result.address}:${result.port} 可连接 · TCP 建连 ${result.latency_ms} ms`
-            : `${result.address}:${result.port} ${result.message}`;
-          draw();
-        } catch (error) {
-          if (context === owner && owner.current()) $("#nbProbeResult").textContent = error.message;
-        } finally {
-          probing = false;
-          if (context === owner && owner.current()) $("#nbCloseProbe").disabled = false;
-        }
-      });
-    };
   }
 
   function update(value) {
@@ -112,43 +80,76 @@ window.RemoteHubNodeBaby = (() => {
       + groups.map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join("");
     $("#nbGroup").value = group;
     draw();
+    maybeCheck();
   }
 
   function draw() {
     if (!state) return;
-    const rows = state.mappings.filter((item) =>
-      (group === "all" || item.group === group)
-      && `${item.name} ${item.address} ${item.target}`.toLowerCase().includes(query));
+    const rows = visibleRows();
     $("#nbRows").innerHTML = rows.map((item) => {
-      const result = results.get(item.id);
+      const connection = item.connection || {state: "unknown", route: "等待检测"};
+      const label = {self: "本机", online: "在线", unreachable: "未连通", unknown: "待检测"}[connection.state];
       return `<tr><td><strong>${esc(item.name)}</strong><small>${item.self ? "本机" : `目标 ${esc(item.target)}`}</small></td>
         <td class="mono">${esc(item.address)}${item.prefix === 32 ? "" : `/${item.prefix}`}</td>
-        <td>${item.self ? "本机映射" : item.link_active ? "链路已建立" : "按需连接"}</td>
-        <td class="${result?.reachable ? "rc-node-success" : "muted"}">${result ? `${result.port} · ${result.reachable ? `${result.latency_ms} ms` : "未连通"}` : "未检测"}</td>
-        <td><div class="rc-peer-actions"><button data-nb-probe="${esc(item.id)}" ${item.prefix !== 32 ? "disabled" : ""}>${icon("diagnose")}检测服务</button><button data-nb-copy="${esc(item.address)}">${icon("copy")}复制 IP</button></div></td></tr>`;
-    }).join("") || '<tr><td colspan="5" class="muted">没有匹配的映射</td></tr>';
+        <td><span class="rc-peer-status ${esc(connection.state)}">${label}</span></td>
+        <td>${esc(connection.route)}${connection.latency_ms == null ? "" : ` · ${connection.latency_ms} ms`}</td>
+        <td>${connection.checked_at ? new Date(connection.checked_at * 1000).toLocaleTimeString() : "—"}</td>
+        <td><div class="rc-peer-actions"><button data-nb-check="${esc(item.id)}" ${checking || item.prefix !== 32 ? "disabled" : ""}>${icon("diagnose")}检测</button><button data-nb-copy="${esc(item.address)}">${icon("copy")}复制 IP</button></div></td></tr>`;
+    }).join("") || '<tr><td colspan="6" class="muted">没有匹配的映射</td></tr>';
+    document.querySelectorAll("[data-nb-check]").forEach((button) => {
+      button.onclick = () => checkDevices([button.dataset.nbCheck]);
+    });
     document.querySelectorAll("[data-nb-copy]").forEach((button) => {
       button.onclick = () => context.busy(button, async () => {
         await context.copy(button.dataset.nbCopy);
         notify("组网地址已复制");
       });
     });
-    document.querySelectorAll("[data-nb-probe]").forEach((button) => {
-      button.onclick = () => {
-        const item = state.mappings.find((item) => item.id === button.dataset.nbProbe);
-        $("#nbProbeForm").dataset.target = item.id;
-        $("#nbProbeTarget").textContent = item.address;
-        $("#nbProbeResult").hidden = true;
-        $("#nbProbeDialog").showModal();
-      };
-    });
+  }
+
+  function visibleRows() {
+    return (state?.mappings || []).filter((item) =>
+      (group === "all" || item.group === group)
+      && `${item.name} ${item.address} ${item.target}`.toLowerCase().includes(query));
+  }
+
+  async function checkDevices(ids) {
+    if (checking || !ids.length) return;
+    const owner = context;
+    checking = true;
+    nextCheck = Date.now() + 15000;
+    $("#nbCheckAll").disabled = true;
+    $("#nbCheckAll").textContent = "正在检测…";
+    draw();
+    try {
+      const result = await api("/remote-connect/nodebaby/check", {ids});
+      if (owner !== context || !owner.current()) return;
+      update(result);
+    } catch (error) {
+      if (owner === context && owner.current()) {
+        $("#nbError").textContent = error.message;
+        $("#nbError").hidden = false;
+      }
+    } finally {
+      if (owner === context) {
+        checking = false;
+        if (owner.current()) {
+          $("#nbCheckAll").disabled = false;
+          $("#nbCheckAll").innerHTML = icon("diagnose") + "全部检测";
+          draw();
+        }
+      }
+    }
+  }
+
+  function maybeCheck() {
+    if (!state?.ready || $("#rcNodeBaby").hidden || checking || !$("#nbAutoCheck").checked || Date.now() < nextCheck) return;
+    checkDevices(visibleRows().filter((item) => item.prefix === 32).map((item) => item.id));
   }
 
   function reset() {
     context = null;
-    probing = false;
     state = null;
-    results.clear();
   }
-  return { markup, mount, update, reset };
+  return { markup, mount, update, reset, maybeCheck };
 })();

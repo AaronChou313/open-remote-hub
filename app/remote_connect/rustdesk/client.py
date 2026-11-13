@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import psutil
 from .ipc import native, NativeError
-from .settings import BINARY, data_dir, OPTIONS
+from .settings import BINARY, data_dir, OPTIONS, DEFAULTS
 
 lock = threading.RLock()
 def autostart_path():
@@ -101,9 +101,31 @@ def status():
     return result
 
 
-def settings():
-    options = native.options()
+def selected_settings(options):
     return {key: options.get(key, '') for key in OPTIONS}
+
+
+def effective_settings(options):
+    result = dict(options)
+    for key, default in DEFAULTS.items():
+        if not result.get(key):
+            result[key] = default
+    return result
+
+
+def settings():
+    return selected_settings(native.options())
+
+
+def live():
+    raw = native.options()
+    options = selected_settings(raw)
+    effective = effective_settings(options)
+    enabled = (raw.get('stop-service') != 'Y' and effective['verification-method'] != 'use-permanent-password'
+               and effective['approve-mode'] != 'click')
+    return dict(options=options, effective=effective,
+                temporary_password=native.config('temporary-password') if enabled else '',
+                temporary_enabled=enabled)
 
 
 def validate(key, value):
@@ -130,6 +152,10 @@ def update_settings(changes, before):
         options = native.options()
         if any(key not in before or options.get(key, '') != before[key] for key in changes):
             raise ValueError('设置已在其他窗口更改，请刷新后再保存')
+        current_effective = effective_settings(selected_settings(options))
+        refresh_password = (changes.get('temporary-password-length', current_effective['temporary-password-length']) != current_effective['temporary-password-length']
+                            or (changes.get('allow-numeric-one-time-password', options.get('allow-numeric-one-time-password')) == 'Y')
+                            != (options.get('allow-numeric-one-time-password') == 'Y'))
         for key, value in changes.items():
             if value:
                 options[key] = value
@@ -137,6 +163,8 @@ def update_settings(changes, before):
                 options.pop(key, None)
         if changes:
             native.set_options(options)
+            if refresh_password:
+                native.refresh_temporary_password()
         result = settings()
         if any(result[key] != value for key, value in changes.items()):
             raise NativeError('RustDesk 设置未完整生效，请刷新核对')

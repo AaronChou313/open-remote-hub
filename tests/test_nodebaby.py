@@ -20,7 +20,10 @@ def native(monkeypatch):
         {'pid': 'remote-id', 'map': '10.77.1.3', 'ipv4': '127.0.0.1', 'prefix': 32, 'domain': 'windows.link'},
         {'pid': 'remote-id', 'map': '--shell', 'ipv4': '127.0.0.1', 'prefix': 32},
     ]}
+    monkeypatch.setattr(nodebaby, 'checks', {})
     def request(path, transport=False):
+        if path.startswith('/glp/peerinfo?'):
+            return {'result':0, 'errcode':0, 'lan':1, 'lan_latency':5}
         return {'/detect/version': info, '/tun/routers': routes, '/glp/sipstate': {'result': 0, 'state': 1},
                 '/glp/peerlist': ['remote-id']}[path]
     monkeypatch.setattr(nodebaby, 'request', request)
@@ -93,3 +96,20 @@ def test_authenticated_nodebaby_actions(management, monkeypatch):
     assert http.post('/api/remote-connect/nodebaby/probe', json={'id':'10.77.1.2/32', 'port':8765}).json()['reachable']
     http.cookies.clear()
     assert http.post('/api/remote-connect/nodebaby/open', json={}).status_code == 401
+
+
+def test_connection_check_verifies_native_transport(native, monkeypatch):
+    class Connection:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    monkeypatch.setattr(nodebaby.socket, 'create_connection', lambda *args, **kwargs: Connection())
+    value = nodebaby.check_connections(['10.77.1.3/32'])
+    assert value['mappings'][1]['connection']['state'] == 'online'
+    assert value['mappings'][1]['connection']['latency_ms'] == 5
+    monkeypatch.setattr(nodebaby, 'connection', lambda peer_id: None)
+    clock = iter([0, 4])
+    monkeypatch.setattr(nodebaby.time, 'monotonic', lambda: next(clock))
+    value = nodebaby.check_connections(['10.77.1.3/32'])
+    assert value['mappings'][1]['connection']['state'] == 'unreachable'
+    assert value['mappings'][1]['connection']['checked_at'] > 0
+    with pytest.raises(ValueError): nodebaby.check_connections(['127.0.0.1/32'])

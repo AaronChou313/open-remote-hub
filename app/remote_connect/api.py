@@ -75,6 +75,11 @@ def settings():
     return dict(options=client.settings())
 
 
+@router.get('/rustdesk/live')
+def rustdesk_live():
+    return client.live()
+
+
 @router.post('/rustdesk/settings')
 def save_settings(value=Depends(body)):
     changes, before = value.get('changes'), value.get('before')
@@ -194,3 +199,8 @@ def nodebaby_open():
 @router.post('/nodebaby/probe')
 def nodebaby_probe(value=Depends(body)):
     return nodebaby.probe(value.get('id'), value.get('port'))
+
+
+@router.post('/nodebaby/check')
+def nodebaby_check(value=Depends(body)):
+    return nodebaby.check_connections(value.get('ids'))

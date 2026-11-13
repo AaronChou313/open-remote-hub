@@ -501,3 +501,18 @@
 .remote-connect #nbProbeTarget,
 .remote-connect #nbProbeResult { overflow-wrap: anywhere; white-space: normal; }
 .remote-connect .rc-tabs { flex-wrap: wrap; }
+
+.remote-connect .rc-auth-panel, .remote-connect .rc-permission-panel { margin-top: 22px; }
+.remote-connect .rc-auth-panel > h2, .remote-connect .rc-permission-panel > h2 { margin-bottom: 20px; font-size: 18px; }
+.remote-connect .rc-auth-panel > select { max-width: 620px; margin-bottom: 20px; }
+.remote-connect .rc-radio-row { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
+.remote-connect input[type="radio"] { width: 18px; height: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
+.remote-connect .rc-password-length { border: 0; margin: 0 0 18px 30px; padding: 0; display: flex; gap: 20px; flex-wrap: wrap; }
+.remote-connect .rc-password-length legend { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+.remote-connect .rc-password-length label { display: flex; align-items: center; gap: 9px; margin: 0; }
+.remote-connect .rc-numeric-password { flex-basis: 100%; }
+.remote-connect .rc-set-password { margin: 0 0 0 30px; }
+.remote-connect fieldset:disabled { opacity: .5; }
+.remote-connect .rc-peer-status.online { color: var(--green); }
+.remote-connect .rc-peer-status.unreachable { color: var(--red); }
+.remote-connect .rc-peer-status.unknown { color: var(--muted); }

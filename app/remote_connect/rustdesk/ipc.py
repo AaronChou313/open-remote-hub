@@ -78,6 +78,21 @@ class Native:
         if self.request('Options', options) is not None:
             raise NativeError('RustDesk 未确认设置更新，请刷新核对')
 
+    def refresh_temporary_password(self):
+        # The native update has no reply. Query on the same stream to wait for it.
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
+                stream.settimeout(3)
+                stream.connect(str(self.path))
+                stream.sendall(frame({'t': 'Config', 'c': ['temporary-password', '']})
+                               + frame({'t': 'Config', 'c': ['temporary-password', None]}))
+                response = receive(stream)
+            value = response.get('c')
+            if response.get('t') != 'Config' or not isinstance(value, list) or len(value) != 2 or value[0] != 'temporary-password':
+                raise NativeError('RustDesk 临时密码更新未完成，请刷新核对')
+        except (OSError, ValueError):
+            raise NativeError('RustDesk 临时密码更新失败，请刷新核对') from None
+
     def set_password(self, password):
         response = self.request('Config', ['permanent-password', password])
         if response != ['permanent-password', 'Y']:
