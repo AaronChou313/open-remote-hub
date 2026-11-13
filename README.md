@@ -60,7 +60,7 @@ ssh -N -L 8765:127.0.0.1:8765 USER@HOST
 ```dotenv
 ORH_HOST=0.0.0.0
 ORH_PORT=8765
-ORH_ALLOWED_HOSTS=192.168.1.20,100.66.1.2,100.66.1.4,server.local
+ORH_ALLOWED_HOSTS=192.168.1.20,10.77.1.2,10.77.1.4,100.66.11.2,server.local
 ORH_ZELLIJ_PORT=8082
 ```
 
@@ -234,7 +234,7 @@ Zellij 0.45.1 官方移动端输入使用 password 控件，并在每次触摸�
 
 ```sshconfig
 Host mac-mini
-    HostName 100.66.1.4
+    HostName 10.77.1.2
     User aaron
     Port 22
 ```

@@ -12,7 +12,7 @@ from app.network import Network
 @pytest.fixture
 def network(tmp_path,monkeypatch):
     monkeypatch.setenv('ORH_HOST','0.0.0.0')
-    monkeypatch.setenv('ORH_ALLOWED_HOSTS','192.168.31.160,100.66.1.2,100.66.1.4,server.local')
+    monkeypatch.setenv('ORH_ALLOWED_HOSTS','192.168.31.160,100.66.1.2,100.66.1.4,10.77.1.2,10.77.1.4,server.local')
     config=Network.load()
     monkeypatch.setattr(main,'NETWORK',config)
     monkeypatch.setattr(main,'DATA',tmp_path)
@@ -41,7 +41,7 @@ def test_reject_ambiguous_or_wildcard_configuration(monkeypatch,bad):
     with pytest.raises(ValueError):Network.load()
 
 
-@pytest.mark.parametrize('address',['192.168.31.160','100.66.1.2','100.66.1.4','server.local'])
+@pytest.mark.parametrize('address',['192.168.31.160','100.66.1.2','100.66.1.4','10.77.1.2','10.77.1.4','server.local'])
 def test_private_network_login_and_terminal_guards(network,address,monkeypatch):
     origin=f'http://{address}:{main.PORT}'
     passwords.save('network-test-password',initial=True)
