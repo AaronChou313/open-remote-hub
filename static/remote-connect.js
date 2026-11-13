@@ -369,32 +369,41 @@ window.RemoteHubRemoteConnect = (() => {
   function markup() {
     return `<div id="rcRoot" class="remote-connect">
 <div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("link")}节点小宝</h2><span class="rc-dot" id="nbState">读取中</span></div><p id="nbAddress" class="mono">—</p><small id="nbSummary" class="muted"></small></article></div>
-<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active">${icon("network")}Tailscale 设备</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active" aria-label="Tailscale 设备">${icon("network")}Tailscale<span class="rc-tab-suffix">设备</span></button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
 ${RemoteHubNodeBaby.markup()}
 <section id="rcNetwork"><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
         <section id="rcOverview" hidden>
-          <div class="overview-grid">
-            <article class="panel identity-panel">
-              <div class="section-heading"><h2>RustDesk</h2><span id="rcVersion" class="version-label">—</span></div>
-              <label for="rcDeviceId">RustDesk ID</label>
-              <div class="device-id-row"><input id="rcDeviceId" readonly value="—" aria-label="RustDesk ID"><button id="rcCopyId" class="icon-button" aria-label="复制 ID">${icon("copy")}</button></div>
-              <label for="rcTemporaryValue">临时密码</label>
-              <div class="device-id-row"><input id="rcTemporaryValue" readonly autocomplete="off" aria-label="临时密码"><button id="rcCopyTemporary" class="icon-button" aria-label="复制临时密码">${icon("copy")}</button></div>
-              <a id="rcConnectHere" class="button" href="#">${icon("external")}在当前设备的 RustDesk 中打开</a>
-              <dl><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
-            </article>
-            <article class="panel">
-              <div class="section-heading"><h2>运行管理</h2><button id="rcOpenNative" class="text-button">在主机打开客户端 ${icon("external")}</button></div>
-              <label class="switch-row"><span>登录主机后自动运行</span><input id="rcAutostart" type="checkbox" role="switch"></label>
-              <div class="service-actions"><button id="rcServiceToggle" class="primary">启动接入服务</button><button id="rcServiceRestart">重新连接接入服务</button></div>
+          <article class="panel rd-connection">
+            <div class="section-heading"><h2>连接信息</h2><span id="rcVersion" class="version-label">—</span></div>
+            <div class="rd-credentials">
+              <div class="rd-credential">
+                <label for="rcDeviceId">RustDesk ID</label>
+                <div class="device-id-row"><input id="rcDeviceId" readonly value="—" aria-label="RustDesk ID"><button id="rcCopyId" class="icon-button" aria-label="复制 ID" title="复制 ID">${icon("copy")}</button></div>
+              </div>
+              <div class="rd-credential">
+                <label for="rcTemporaryValue">临时密码</label>
+                <div class="device-id-row"><input id="rcTemporaryValue" readonly autocomplete="off" aria-label="临时密码"><button id="rcCopyTemporary" class="icon-button" aria-label="复制临时密码" title="复制临时密码">${icon("copy")}</button></div>
+              </div>
+            </div>
+            <div class="rd-connection-bottom">
+              <dl class="rd-facts"><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
+              <a id="rcConnectHere" class="button rd-open-client" href="#">${icon("external")}在当前设备的 RustDesk 中打开</a>
+            </div>
+            <div class="rd-runtime">
+              <div class="rd-runtime-heading"><h3>运行管理</h3><button id="rcOpenNative" class="text-button">在主机打开客户端 ${icon("external")}</button></div>
+              <div class="rd-runtime-controls">
+                <label class="switch-row"><span>登录主机后自动运行</span><input id="rcAutostart" class="rd-toggle" type="checkbox" role="switch"></label>
+                <div class="service-actions"><button id="rcServiceToggle">启动接入服务</button><button id="rcServiceRestart">重新连接接入服务</button></div>
+              </div>
               <p id="rcNativeMessage" class="muted small" hidden></p>
-            </article>
-          </div>
+            </div>
+          </article>
           <form id="rcSettingsForm">
+            <div class="rd-security-grid">
             <article class="panel rc-auth-panel">
-              <h2>密码</h2>
+              <h2>连接验证</h2>
               <label class="sr-only" for="rcApproveMode">连接批准方式</label>
               <select id="rcApproveMode" data-option="approve-mode" data-live-option>
                 <option value="password">允许密码访问</option><option value="click">允许点击访问</option><option value="password-click">允许密码或点击访问</option>
@@ -411,9 +420,10 @@ ${RemoteHubNodeBaby.markup()}
               </div>
             </article>
             <article class="panel rc-permission-panel"><h2>权限</h2><div class="field-grid">
-              ${[["enable-keyboard","键盘与鼠标"],["enable-clipboard","剪贴板同步"],["enable-file-transfer","文件传输"],["enable-audio","音频"],["allow-remote-config-modification","允许远程修改配置"]].map(([key,label]) => `<label class="switch-row"><span>${label}</span><input type="checkbox" data-option="${key}" data-live-option></label>`).join("")}
+              ${[["enable-keyboard","键盘与鼠标"],["enable-clipboard","剪贴板同步"],["enable-file-transfer","文件传输"],["enable-audio","音频"],["allow-remote-config-modification","允许远程修改配置"]].map(([key,label]) => `<label class="switch-row"><span>${label}</span><input type="checkbox" class="rd-toggle" role="switch" data-option="${key}" data-live-option></label>`).join("")}
             </div></article>
-            <details class="panel rc-network-details"><summary>网络设置</summary><div class="field-grid">
+            </div>
+            <details class="panel rc-network-details rd-network"><summary>网络设置 ${icon("chevron")}</summary><div class="field-grid">
               <label>ID 服务器<input data-option="custom-rendezvous-server" placeholder="RustDesk 公共服务" autocomplete="off"></label>
               <label>中继服务器<input data-option="relay-server" autocomplete="off"></label>
               <label>API 服务器<input data-option="api-server" autocomplete="off"></label>

@@ -214,11 +214,6 @@
   margin: 0 10px 6px 0;
   font-size: 12px;
 }
-.remote-connect .overview-grid {
-  display: grid;
-  grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.2fr);
-  gap: 24px;
-}
 .remote-connect .panel {
   padding: 24px;
   margin-bottom: 0;
@@ -241,54 +236,9 @@
 .remote-connect .section-icon {
   color: var(--muted);
 }
-.remote-connect .device-id-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 8px 0 22px;
-}
-.remote-connect .device-id-row input {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: none;
-  font:
-    600 clamp(24px, 3vw, 34px) / 1.4 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-  letter-spacing: -1px;
-  min-width: 0;
-  box-shadow: none;
-}
-.remote-connect .device-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.remote-connect .device dl {
-  margin: 26px 0 0;
-  border-top: 1px solid var(--line);
-  padding-top: 18px;
-}
-.remote-connect .device dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 9px 0;
-  font-size: 12px;
-}
-.remote-connect .device dt {
-  color: var(--muted);
-}
 .remote-connect dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-.remote-connect .right-column {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
 }
 .remote-connect label {
   font-size: 12px;
@@ -296,17 +246,6 @@
 .remote-connect .small {
   font-size: 12px;
   line-height: 1.7;
-}
-.remote-connect .connect-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.remote-connect .mode-select select {
-  width: auto;
-  margin: 0;
 }
 .remote-connect .text-button {
   border: 0;
@@ -333,33 +272,6 @@
 .remote-connect #rcNativeMessage {
   margin-top: 16px;
 }
-.remote-connect .settings-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 6px;
-}
-.remote-connect .settings-heading h2 {
-  font-size: 16px;
-}
-.remote-connect .settings-heading .actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.remote-connect .settings-section {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
-  gap: 26px;
-  padding: 28px 0;
-  border-bottom: 1px solid var(--line);
-}
-.remote-connect .settings-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin-top: 10px;
-}
 .remote-connect .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -371,16 +283,6 @@
 .remote-connect .field-grid input,
 .remote-connect .field-grid select {
   margin-bottom: 0;
-}
-.remote-connect .password-setting {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-}
-.remote-connect .password-setting > span {
-  color: var(--muted);
 }
 .remote-connect #rcPasswordError {
   color: var(--red);
@@ -408,18 +310,6 @@
   padding: 0;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
-}
-@media (max-width: 1000px) {
-  .remote-connect .overview-grid {
-    grid-template-columns: 1fr;
-  }
-  .remote-connect .settings-section {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-  .remote-connect .settings-section h3 {
-    margin: 0;
-  }
 }
 @media (max-width: 640px) {
   .remote-connect .rc-summaries {
@@ -456,10 +346,7 @@
   .remote-connect .panel {
     padding: 20px;
   }
-  .remote-connect .connect-bottom {
-    flex-wrap: wrap;
-  }
-  .remote-connect .section-heading {
+    .remote-connect .section-heading {
     flex-wrap: wrap;
   }
   .remote-connect input,
@@ -474,9 +361,6 @@
   .remote-connect .icon-button {
     width: 44px;
     min-width: 44px;
-  }
-  .remote-connect .service-actions > button {
-    flex: 1;
   }
   .remote-connect .rc-peers td {
     padding: 14px 12px;
@@ -502,17 +386,547 @@
 .remote-connect #nbProbeResult { overflow-wrap: anywhere; white-space: normal; }
 .remote-connect .rc-tabs { flex-wrap: wrap; }
 
-.remote-connect .rc-auth-panel, .remote-connect .rc-permission-panel { margin-top: 22px; }
-.remote-connect .rc-auth-panel > h2, .remote-connect .rc-permission-panel > h2 { margin-bottom: 20px; font-size: 18px; }
-.remote-connect .rc-auth-panel > select { max-width: 620px; margin-bottom: 20px; }
-.remote-connect .rc-radio-row { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
-.remote-connect input[type="radio"] { width: 18px; height: 18px; min-height: 18px; margin: 0; accent-color: var(--accent); }
-.remote-connect .rc-password-length { border: 0; margin: 0 0 18px 30px; padding: 0; display: flex; gap: 20px; flex-wrap: wrap; }
-.remote-connect .rc-password-length legend { margin-bottom: 12px; color: var(--muted); font-size: 13px; }
-.remote-connect .rc-password-length label { display: flex; align-items: center; gap: 9px; margin: 0; }
-.remote-connect .rc-numeric-password { flex-basis: 100%; }
-.remote-connect .rc-set-password { margin: 0 0 0 30px; }
-.remote-connect fieldset:disabled { opacity: .5; }
 .remote-connect .rc-peer-status.online { color: var(--green); }
 .remote-connect .rc-peer-status.unreachable { color: var(--red); }
 .remote-connect .rc-peer-status.unknown { color: var(--muted); }
+
+/* RustDesk uses compact connection facts and native, directly editable settings. */
+#rcOverview {
+  color-scheme: light;
+  --rd-gap: 20px;
+  display: grid;
+  gap: var(--rd-gap);
+}
+
+body.dark #rcOverview {
+  color-scheme: dark;
+}
+
+#rcOverview .panel {
+  padding: 24px;
+}
+
+#rcOverview .section-heading {
+  margin-bottom: 20px;
+}
+
+#rcOverview h2 {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+#rcOverview .version-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#rcOverview .rd-credentials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+#rcOverview .rd-credential {
+  min-width: 0;
+}
+
+#rcOverview .rd-credential > label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#rcOverview .device-id-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+#rcOverview .device-id-row input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font: 600 25px / 1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.025em;
+}
+
+#rcOverview #rcTemporaryValue {
+  font-size: 22px;
+  letter-spacing: .025em;
+}
+
+#rcOverview .device-id-row .icon-button {
+  background: var(--surface);
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 8px;
+}
+
+#rcOverview .rd-connection-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0;
+}
+
+#rcOverview .rd-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 32px;
+  margin: 0;
+}
+
+#rcOverview .rd-facts dt {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+#rcOverview .rd-facts dd {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+  margin: 0;
+}
+
+#rcOverview .rd-open-client {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#rcOverview .rd-runtime {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+#rcOverview .rd-runtime-heading, #rcOverview .rd-runtime-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+#rcOverview .rd-runtime-heading {
+  margin-bottom: 10px;
+}
+
+#rcOverview .rd-runtime-heading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#rcOverview .rd-runtime-controls > label {
+  justify-content: flex-start;
+  gap: 20px;
+  min-height: 40px;
+  margin: 0;
+  font-size: 13px;
+}
+
+#rcOverview .service-actions {
+  margin: 0;
+  gap: 8px;
+}
+
+#rcOverview .service-actions button {
+  min-height: 36px;
+  font-size: 12px;
+}
+
+#rcOverview .rd-security-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--rd-gap);
+}
+
+#rcOverview .rc-auth-panel > h2, #rcOverview .rc-permission-panel > h2 {
+  margin-bottom: 20px;
+}
+
+#rcOverview #rcApproveMode {
+  display: block;
+  width: 100%;
+  margin: 0 0 18px;
+  min-height: 40px;
+  font-size: 13px;
+}
+
+#rcOverview .rc-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  min-height: 42px;
+  font-size: 13px;
+}
+
+#rcOverview input[type="radio"] {
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+#rcOverview .rc-password-length {
+  border: 0;
+  padding: 4px 0 0;
+  margin: 0 0 4px 27px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#rcOverview .rc-password-length legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#rcOverview .rc-password-length label:not(.rc-numeric-password) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 62px;
+  min-height: 34px;
+  margin: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+#rcOverview .rc-password-length label:not(.rc-numeric-password):has(:checked) {
+  background: var(--soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#rcOverview .rc-numeric-password {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-basis: 100%;
+  min-height: 36px;
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+#rcOverview .rc-set-password {
+  margin: 0 0 10px 27px;
+  font-size: 12px;
+  min-height: 36px;
+}
+
+#rcOverview .rc-permission-panel .field-grid {
+  display: block;
+}
+
+#rcOverview .rc-permission-panel .switch-row {
+  margin: 0;
+  min-height: 52px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+#rcOverview .rc-permission-panel .switch-row:last-child {
+  border-bottom: 0;
+}
+
+#rcOverview input.rd-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 34px;
+  min-width: 34px;
+  height: 20px;
+  min-height: 20px;
+  border: 0;
+  border-radius: 10px;
+  padding: 3px;
+  margin: 0;
+  background: var(--line);
+  cursor: pointer;
+}
+
+#rcOverview input.rd-toggle::before {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .15s;
+}
+
+#rcOverview input.rd-toggle:checked {
+  background: var(--accent);
+}
+
+#rcOverview input.rd-toggle:checked::before {
+  background: var(--surface);
+  transform: translateX(14px);
+}
+
+#rcOverview input.rd-toggle:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+#rcOverview fieldset:disabled {
+  opacity: .5;
+}
+
+#rcOverview .rd-network {
+  margin-top: var(--rd-gap);
+  margin-bottom: 0;
+}
+
+#rcOverview .rd-network > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+#rcOverview .rd-network > summary::-webkit-details-marker {
+  display: none;
+}
+
+#rcOverview .rd-network > summary svg {
+  color: var(--muted);
+  width: 16px;
+  height: 16px;
+}
+
+#rcOverview .rd-network[open] > summary {
+  padding-bottom: 22px;
+}
+
+#rcOverview .rd-network[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+#rcOverview .rd-network .field-grid {
+  gap: 18px 24px;
+}
+
+#rcOverview .rd-network label {
+  margin: 0;
+  font-size: 12px;
+}
+
+#rcOverview .rd-network input {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 40px;
+  font-size: 13px;
+}
+
+#rcOverview .rd-network input[type="checkbox"] {
+  width: 16px;
+  min-height: 16px;
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  #rcOverview .rd-connection-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+}
+
+@media (max-width: 850px) {
+  #rcOverview .rd-security-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  #rcOverview {
+    --rd-gap: 16px;
+  }
+  #rcOverview .panel {
+    padding: 20px;
+  }
+  #rcOverview .rd-credentials {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  #rcOverview .device-id-row input {
+    font-size: 26px;
+  }
+  #rcOverview #rcTemporaryValue {
+    font-size: 22px;
+  }
+  #rcOverview .device-id-row .icon-button {
+    min-height: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+  #rcOverview .rd-facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 18px;
+  }
+  #rcOverview .rd-open-client {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+  #rcOverview .rd-runtime-controls {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #rcOverview .rd-runtime-controls > label {
+    justify-content: space-between;
+  }
+  #rcOverview .service-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  #rcOverview .service-actions button {
+    min-height: 44px;
+    padding: 8px;
+  }
+  #rcOverview .rd-runtime-heading {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  #rcOverview .rc-permission-panel .switch-row {
+    min-height: 54px;
+  }
+  #rcOverview .rc-password-length label:not(.rc-numeric-password) {
+    min-height: 40px;
+  }
+  #rcOverview .rc-set-password {
+    min-height: 40px;
+  }
+  #rcOverview #rcApproveMode {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  #rcOverview .rd-network input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #rcOverview input.rd-toggle::before {
+    transition: none;
+  }
+}
+
+.remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.remote-connect:has(#rcOverview:not([hidden])) .rc-summary {
+  padding: 16px 18px;
+}
+
+.remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
+  margin-bottom: 10px;
+}
+
+.remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head h2 {
+  font-size: 14px;
+}
+
+.remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+@media (max-width: 640px) {
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary {
+    padding: 12px 10px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head h2 {
+    font-size: 12px;
+    gap: 5px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head svg {
+    width: 15px;
+    height: 15px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p,
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > small {
+    display: none;
+  }
+  #rcOverview .rc-radio-row, #rcOverview .rc-password-length label:not(.rc-numeric-password) {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs button {
+    padding: 10px 6px;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs svg {
+    width: 16px;
+    height: 16px;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-tab-suffix {
+    display: none;
+  }
+}
+
+#rcOverview #rcTemporaryValue::placeholder {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+@media (min-width: 641px) and (max-width: 1050px) {
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+  }
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p,
+  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > small {
+    display: none;
+  }
+}
