@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
 from .rustdesk import client
 from .rustdesk.ipc import NativeError, native
-from . import tailscale
+from . import tailscale, nodebaby
 
 
 class RemoteRoute(APIRoute):
@@ -21,7 +21,7 @@ class RemoteRoute(APIRoute):
                 return await handler(request)
             except ValueError as error:
                 raise HTTPException(409 if '其他窗口' in str(error) else 400, str(error)) from None
-            except (NativeError, tailscale.TailscaleError) as error:
+            except (NativeError, tailscale.TailscaleError, nodebaby.NodeBabyError) as error:
                 raise HTTPException(503, str(error)) from None
         return guarded
 
@@ -67,7 +67,7 @@ def audit(target, action):
 
 @router.get('')
 def overview():
-    return dict(rustdesk=client.status(), tailscale=tailscale.status(), lan_urls=tailscale.access_urls())
+    return dict(rustdesk=client.status(), tailscale=tailscale.status(), nodebaby=nodebaby.status(), lan_urls=tailscale.access_urls())
 
 
 @router.get('/rustdesk/settings')
@@ -182,3 +182,15 @@ def tailscale_ping(value=Depends(body)):
 @router.post('/tailscale/netcheck')
 def tailscale_netcheck():
     return tailscale.netcheck()
+
+
+@router.post('/nodebaby/open')
+def nodebaby_open():
+    nodebaby.open_client()
+    audit('nodebaby', 'open-client')
+    return dict(ok=True)
+
+
+@router.post('/nodebaby/probe')
+def nodebaby_probe(value=Depends(body)):
+    return nodebaby.probe(value.get('id'), value.get('port'))

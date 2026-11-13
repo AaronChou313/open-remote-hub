@@ -108,6 +108,7 @@ window.RemoteHubRemoteConnect = (() => {
       const request = api("/remote-connect").then((data) => {
         if (!owner()) return;
         updateStatus(data.rustdesk);
+        RemoteHubNodeBaby.update(data.nodebaby);
         updateNetwork(data.tailscale, data.lan_urls);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
       });
@@ -291,6 +292,7 @@ window.RemoteHubRemoteConnect = (() => {
           tailDirty = false;
           tab = next;
           $("#rcNetwork").hidden = next !== "network";
+          $("#rcNodeBaby").hidden = next !== "nodebaby";
           $("#rcOverview").hidden = next !== "overview";
           $("#rcSettings").hidden = next !== "settings";
           document
@@ -354,8 +356,9 @@ window.RemoteHubRemoteConnect = (() => {
 
   function markup() {
     return `<div id="rcRoot" class="remote-connect">
-<div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article></div>
-<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active">${icon("network")}组网设备</button><button data-rc-tab="overview">${icon("server")}RustDesk</button><button data-rc-tab="settings">${icon("settings")}RustDesk 设置</button></div>
+<div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("link")}节点小宝</h2><span class="rc-dot" id="nbState">读取中</span></div><p id="nbAddress" class="mono">—</p><small id="nbSummary" class="muted"></small></article></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active">${icon("network")}Tailscale 设备</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button><button data-rc-tab="settings">${icon("settings")}RustDesk 设置</button></div>
+${RemoteHubNodeBaby.markup()}
 <section id="rcNetwork"><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
@@ -913,6 +916,7 @@ window.RemoteHubRemoteConnect = (() => {
       $("#content").innerHTML = markup();
       controller = bindRustdesk();
       bindNetwork();
+      RemoteHubNodeBaby.mount({busy, copy, current: () => current(), refresh: () => controller.refresh()});
       window.scrollTo?.(0, 0);
     }
     if (!operation) await controller.refresh();
@@ -934,6 +938,7 @@ window.RemoteHubRemoteConnect = (() => {
     tailDirty = false;
     original = {};
     tailOriginal = {};
+    RemoteHubNodeBaby.reset();
     state = null;
     network = null;
     document

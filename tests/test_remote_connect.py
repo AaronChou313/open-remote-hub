@@ -38,6 +38,7 @@ def management(monkeypatch,tmp_path,workspace):
     monkeypatch.setattr(client,'data_dir',lambda:data)
     monkeypatch.setattr(client,'autostart_path',lambda:data/'autostart.json')
     monkeypatch.setattr(tailscale,'status',lambda:dict(available=True,state='Running',peers=[]))
+    monkeypatch.setattr(web.nodebaby,'status',lambda:dict(available=False,mappings=[],addresses=[]))
     audit=[]
     monkeypatch.setattr(web,'audit',lambda *args:audit.append(args))
     http=workspace[0]

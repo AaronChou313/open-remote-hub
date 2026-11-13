@@ -14,7 +14,7 @@
 }
 .remote-connect .rc-summaries {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 20px;
   margin-bottom: 28px;
 }
@@ -482,3 +482,22 @@
     padding: 14px 12px;
   }
 }
+
+.remote-connect .rc-node-identity {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 22px;
+}
+.remote-connect .rc-node-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.remote-connect .rc-node-group select { margin: 0; }
+.remote-connect .rc-node-footnote { margin-top: 14px; font-size: 12px; }
+.remote-connect .rc-node-success { color: var(--green); }
+.remote-connect #nbProbeTarget,
+.remote-connect #nbProbeResult { overflow-wrap: anywhere; white-space: normal; }
+.remote-connect .rc-tabs { flex-wrap: wrap; }
