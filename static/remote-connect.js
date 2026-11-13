@@ -5,7 +5,9 @@ window.RemoteHubRemoteConnect = (() => {
   let state;
   let original = {};
   let effectiveOriginal = {};
-  let tab = "network";
+  let tab = "lan";
+  let requestedTab;
+  let proxyVersion = 0;
   let operation = false;
   let dirty = false;
   let loadingSettings = false;
@@ -49,6 +51,10 @@ window.RemoteHubRemoteConnect = (() => {
     const copied = document.execCommand("copy");
     input.remove();
     if (!copied) throw Error("复制未成功，请手动选中内容复制");
+  }
+  async function renderProxy() {
+    const version = ++proxyVersion;
+    return RemoteHubProxy.render(() => current() && tab === "proxy" && version === proxyVersion, "#rcNetworkProxy");
   }
   function bindRustdesk() {
     let statusRequest;
@@ -114,6 +120,7 @@ window.RemoteHubRemoteConnect = (() => {
         updateNetwork(data.tailscale, data.lan_urls);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
         if (tab === "overview" && data.rustdesk.ready) return loadSettings();
+        if (tab === "lan") return RemoteHubLAN.refresh();
       });
       statusRequest = request;
       try {
@@ -279,11 +286,11 @@ window.RemoteHubRemoteConnect = (() => {
       const patch = changes();
       if (Object.keys(patch).length) busy($("#rcSaveSettings"), () => saveSettings(patch));
     };
-    document.querySelectorAll("[data-rc-tab]").forEach((button) => {
-      button.onclick = () =>
-        busy(button, async () => {
-          const next = button.dataset.rcTab;
+    async function selectTab(next, button) {
+      return busy(button, async () => {
           if (next === tab) return;
+          if (tab === "proxy" && !await RemoteHubProxyManager.canLeave()) return;
+          if (tab === "proxy") proxyVersion++;
           if (
             (dirty || tailDirty) &&
             !(await confirm(
@@ -302,6 +309,8 @@ window.RemoteHubRemoteConnect = (() => {
             fillTailPreferences(network.preferences);
           tailDirty = false;
           tab = next;
+          $("#rcLAN").hidden = next !== "lan";
+          $("#rcNetworkProxy").hidden = next !== "proxy";
           $("#rcNetwork").hidden = next !== "network";
           $("#rcNodeBaby").hidden = next !== "nodebaby";
           if (next === "nodebaby") RemoteHubNodeBaby.maybeCheck();
@@ -312,8 +321,13 @@ window.RemoteHubRemoteConnect = (() => {
             .forEach((item) =>
               item.classList.toggle("active", item.dataset.rcTab === next),
             );
+          if (next === "lan") await RemoteHubLAN.refresh();
+          if (next === "proxy") await renderProxy();
           window.scrollTo?.(0, 0);
-        });
+      });
+    }
+    document.querySelectorAll("[data-rc-tab]").forEach((button) => {
+      button.onclick = () => selectTab(button.dataset.rcTab, button);
     });
     $("#rcChangePassword").onclick = () => {
       $("#rcPasswordForm").reset();
@@ -363,15 +377,17 @@ window.RemoteHubRemoteConnect = (() => {
         await refresh();
       });
 
-    return { refresh, settle: () => statusRequest || Promise.resolve() };
+    return { refresh, selectTab, settle: () => statusRequest || Promise.resolve() };
   }
 
   function markup() {
     return `<div id="rcRoot" class="remote-connect">
 <div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("link")}节点小宝</h2><span class="rc-dot" id="nbState">读取中</span></div><p id="nbAddress" class="mono">—</p><small id="nbSummary" class="muted"></small></article></div>
-<div class="workspace-tabs rc-tabs" role="group" aria-label="远程连接管理"><button data-rc-tab="network" class="active" aria-label="Tailscale 设备">${icon("network")}Tailscale<span class="rc-tab-suffix">设备</span></button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="network" aria-label="Tailscale 设备">${icon("network")}Tailscale<span class="rc-tab-suffix">设备</span></button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+${RemoteHubLAN.markup()}
+<section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork"><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
+<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
         <section id="rcOverview" hidden>
@@ -748,7 +764,7 @@ ${RemoteHubNodeBaby.markup()}
   async function render(check) {
     current = check;
     if (!$("#rcRoot")) {
-      tab = "network";
+      tab = "lan";
       original = {};
       effectiveOriginal = {};
       dirty = false;
@@ -757,10 +773,16 @@ ${RemoteHubNodeBaby.markup()}
       $("#content").innerHTML = markup();
       controller = bindRustdesk();
       bindNetwork();
+      RemoteHubLAN.mount({copy, current: () => current()});
       RemoteHubNodeBaby.mount({busy, copy, current: () => current(), refresh: () => controller.refresh()});
       window.scrollTo?.(0, 0);
     }
     if (!operation) await controller.refresh();
+    if (requestedTab) {
+      const next = requestedTab;
+      requestedTab = null;
+      await controller.selectTab(next, document.querySelector(`[data-rc-tab="${next}"]`));
+    } else if (tab === "proxy") await renderProxy();
   }
   async function canLeave() {
     if (operation) return false;
@@ -780,6 +802,8 @@ ${RemoteHubNodeBaby.markup()}
     original = {};
     effectiveOriginal = {};
     tailOriginal = {};
+    RemoteHubLAN.reset();
+    proxyVersion++;
     RemoteHubNodeBaby.reset();
     state = null;
     network = null;
@@ -796,6 +820,7 @@ ${RemoteHubNodeBaby.markup()}
       current() &&
       !document.hidden &&
       !operation &&
+      tab !== "proxy" &&
       !document.querySelector(".remote-connect dialog[open]") &&
       !$("#outputDialog").open &&
       !$("#confirmDialog").open
@@ -813,6 +838,7 @@ ${RemoteHubNodeBaby.markup()}
   });
   return {
     render,
+    openTab: (next) => { requestedTab = next; },
     canLeave,
     reset,
     isOpen: () =>

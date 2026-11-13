@@ -166,3 +166,38 @@ def software_inventory():
         return dict(manager='Homebrew',available=bool(binary),**(run([binary,'list','--versions'],timeout=15) if binary else {'output':'未发现 Homebrew','truncated':False}))
     binary=shutil.which('dpkg-query')
     return dict(manager='APT / dpkg',available=bool(binary),**(run([binary,'-W','-f=${binary:Package}\t${Version}\n'],timeout=10) if binary else {'output':'此平台未发现 dpkg-query；未执行安装','truncated':False}))
+
+
+def lan_details():
+    """Read host routing and DNS through the platform's system utilities."""
+    system = platform.system()
+    if system == 'Darwin':
+        routes = command(['/usr/sbin/netstat', '-rn', '-f', 'inet'], timeout=4)
+        gateways = [dict(address=parts[1], interface=parts[-1]) for line in routes.splitlines()
+                    if (parts := line.split()) and parts[0] == 'default' and len(parts) >= 4
+                    and re.fullmatch(r'\d+\.\d+\.\d+\.\d+', parts[1])]
+        dns = re.findall(r'nameserver\[\d+\]\s*:\s*(\S+)', command(['/usr/sbin/scutil', '--dns'], timeout=4))
+    else:
+        routes = json.loads(command(['ip', '-j', 'route', 'show', 'default'], timeout=4))
+        gateways = [dict(address=row['gateway'], interface=row.get('dev', '')) for row in routes if row.get('gateway')]
+        from pathlib import Path
+        dns = re.findall(r'^nameserver\s+(\S+)', Path('/etc/resolv.conf').read_text(), re.M)
+    return dict(gateways=gateways, dns=list(dict.fromkeys(dns)))
+
+
+def lan_neighbors():
+    if platform.system() == 'Darwin':
+        output = command(['/usr/sbin/arp', '-an'], timeout=4)
+        return [dict(ip=match[1], mac=':'.join(part.zfill(2) for part in match[2].lower().split(':')), interface=match[3])
+                for match in re.finditer(r'\((\d+\.\d+\.\d+\.\d+)\) at ([0-9a-f:]+) on (\S+)', output, re.I)]
+    rows = json.loads(command(['ip', '-j', 'neigh', 'show'], timeout=4))
+    return [dict(ip=row['dst'], mac=row['lladdr'].lower(), interface=row.get('dev', ''))
+            for row in rows if row.get('lladdr') and ':' not in row['dst']]
+
+
+def lan_ping(address):
+    args = ['ping', '-n', '-c', '1', '-W', '700' if platform.system() == 'Darwin' else '1', address]
+    try:
+        return subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.3).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False

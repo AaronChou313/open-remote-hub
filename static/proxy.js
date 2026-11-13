@@ -1,7 +1,8 @@
 'use strict';
 window.RemoteHubProxy=(()=>{
  let tab='profiles';
- async function render(check){
+ async function render(check,target='#content'){
+  const container=$(target);
   const [data,manager]=await Promise.all([api('/proxy'),api('/proxy/manager')]);if(!check())return;
   const admin=me.role==='admin';
   const system=data.system;
@@ -9,9 +10,9 @@ window.RemoteHubProxy=(()=>{
   const systemText=system.vpn?`${esc(system.vpn.name)} VPN · ${system.vpn.state==='Connected'?'已连接':esc(system.vpn.state)}`:esc(system.note||'未发现 Clash VPN 连接');
   const systemPanel=panel('系统网络',`<div class="proxy-system"><span>${systemText}</span>${systemRows}</div>`);
   const managerPanel=manager.managed?RemoteHubProxyManager.markup(manager,admin):'';
-  const bindManager=()=>manager.managed?RemoteHubProxyManager.bind(manager,check,()=>render(check),()=>tab,value=>{tab=value}):undefined;
-  if(!data.available){$('#content').innerHTML=managerPanel+'<div id="proxyRuntime">'+systemPanel+empty(esc(data.error))+'</div>';await bindManager();return}
-  $('#content').innerHTML=managerPanel+`<div id="proxyRuntime"><div class="proxy-heading"><div><strong>${manager.managed?'Mihomo':'Clash / Mihomo'} ${esc(data.version||'')}</strong><span class="proxy-runtime-state">TUN ${data.tun_enabled?'已启用':'未启用'}</span></div><button id="proxyConnections">活跃连接 ${data.connection_count}</button></div><details class="proxy-network-details"><summary>网络与资源${system.vpn?' · '+systemText:''}</summary><div class="proxy-totals"><span>内存 <strong>${bytes(data.memory)}</strong></span><span>累计上传 <strong>${bytes(data.upload_total)}</strong></span><span>累计下载 <strong>${bytes(data.download_total)}</strong></span></div>${systemPanel}</details><div id="proxyNodeControls"></div><div id="proxyGroups"></div></div>`;
+  const bindManager=()=>manager.managed?RemoteHubProxyManager.bind(manager,check,()=>render(check,target),()=>tab,value=>{tab=value}):undefined;
+  if(!data.available){container.innerHTML=managerPanel+'<div id="proxyRuntime">'+systemPanel+empty(esc(data.error))+'</div>';await bindManager();return}
+  container.innerHTML=managerPanel+`<div id="proxyRuntime"><div class="proxy-heading"><div><strong>${manager.managed?'Mihomo':'Clash / Mihomo'} ${esc(data.version||'')}</strong><span class="proxy-runtime-state">TUN ${data.tun_enabled?'已启用':'未启用'}</span></div><button id="proxyConnections">活跃连接 ${data.connection_count}</button></div><details class="proxy-network-details"><summary>网络与资源${system.vpn?' · '+systemText:''}</summary><div class="proxy-totals"><span>内存 <strong>${bytes(data.memory)}</strong></span><span>累计上传 <strong>${bytes(data.upload_total)}</strong></span><span>累计下载 <strong>${bytes(data.download_total)}</strong></span></div>${systemPanel}</details><div id="proxyNodeControls"></div><div id="proxyGroups"></div></div>`;
   const guarded=fn=>async()=>{try{await fn()}catch(error){if(check())showError(error)}};
   await RemoteHubProxyNodes.mount(data,check,{scope:manager.managed?manager.engine.config_revision:undefined,concurrency:manager.managed&&!(manager.engine.network_revision>=2)?1:4});
   async function showConnections(){

@@ -204,3 +204,21 @@ def nodebaby_probe(value=Depends(body)):
 @router.post('/nodebaby/check')
 def nodebaby_check(value=Depends(body)):
     return nodebaby.check_connections(value.get('ids'))
+
+
+@router.get('/lan')
+def lan_status():
+    from . import lan
+    return lan.status()
+
+
+@router.post('/lan/scan')
+def lan_scan():
+    from . import lan
+    return lan.scan()
+
+
+@router.post('/lan/note')
+def lan_note(value=Depends(body)):
+    from . import lan
+    return lan.save_note(value.get('id'), value.get('note'))

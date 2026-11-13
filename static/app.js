@@ -3,9 +3,9 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=typeof location!=='undefined'&&['#proxy','#remote'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={remote:'远程连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'代理与网络',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
+const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
 function updateSidebar(){
  document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
@@ -15,6 +15,7 @@ function updateSidebar(){
 }
 updateSidebar();
 $('#sidebarToggle').onclick=()=>{sidebarCollapsed=!sidebarCollapsed;localStorage.setItem('orh-sidebar-collapsed',String(sidebarCollapsed));updateSidebar()};
+if(view==='network')view='remote';
 if(view==='tasks')view='services';
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
 async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?((path.startsWith('/environments')||path.startsWith('/local-services')||path.startsWith('/remote-connect'))?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
@@ -25,6 +26,7 @@ async function withBusy(button,key,label,work){
  try{return await work()}finally{pendingOperations.delete(key);if(button?.isConnected){button.disabled=false;if(markup!==undefined)button.innerHTML=markup;else button.textContent=text;button.removeAttribute('aria-busy')}}
 }
 async function switchView(target){
+ if(target==='proxy'){target='remote';RemoteHubRemoteConnect.openTab('proxy')}
  if(target==='tasks')target='services';
  if(view!==target&&window.RemoteHubRemoteConnect&&!await RemoteHubRemoteConnect.canLeave())return;
  if(view!==target&&window.RemoteHubApplications&&!RemoteHubApplications.canLeave())return;
@@ -43,10 +45,10 @@ function showLogin(){window.RemoteHubRemoteConnect?.reset();window.RemoteHubAppl
 function notify(text){$('#toast').textContent=text;$('#toast').hidden=false;setTimeout(()=>$('#toast').hidden=true,3500)}
 function showError(e,operation=true){$('#error').textContent=e.message;$('#error').dataset.kind=operation?'operation':'load';$('#error').hidden=false;if(!operation)$('#connection').textContent='更新失败 · 保留最近数据'}
 async function confirmAction(title,message){if($('#confirmDialog').open)return false;$('#confirmTitle').textContent=title;$('#confirmMessage').textContent=message;$('#confirmDialog').returnValue='cancel';$('#confirmDialog').showModal();return new Promise(resolve=>$('#confirmDialog').addEventListener('close',()=>resolve($('#confirmDialog').returnValue==='confirm'),{once:true}))}
-function requestName(title,value='',submit='保存',limit=80){
+function requestName(title,value='',submit='保存',limit=80,allowEmpty=false){
  const dialog=$('#nameDialog');if(dialog.open)return Promise.resolve(null);
- $('#nameTitle').textContent=title;$('#nameInput').value=value;$('#nameInput').maxLength=limit;$('#saveName').textContent=submit;dialog.returnValue='cancel';dialog.showModal();$('#nameInput').focus();$('#nameInput').select();
- return new Promise(resolve=>{dialog.onclose=()=>resolve(dialog.returnValue==='save'?$('#nameInput').value.trim():null);$('#nameForm').onsubmit=e=>{e.preventDefault();if($('#nameInput').value.trim())dialog.close('save')}});
+ $('#nameTitle').textContent=title;$('#nameInput').value=value;$('#nameInput').maxLength=limit;$('#nameInput').required=!allowEmpty;$('#saveName').textContent=submit;dialog.returnValue='cancel';dialog.showModal();$('#nameInput').focus();$('#nameInput').select();
+ return new Promise(resolve=>{dialog.onclose=()=>resolve(dialog.returnValue==='save'?$('#nameInput').value.trim():null);$('#nameForm').onsubmit=e=>{e.preventDefault();if(allowEmpty||$('#nameInput').value.trim())dialog.close('save')}});
 }
 function output(title,text){if(stream){stream.close();stream=null}$('#outputTitle').textContent=title;$('#output').textContent=text;$('#outputDialog').showModal()}
 function panel(title,body,extra='',desc=''){return `<section class="panel"><div class="panel-head"><div><h2>${title}</h2>${desc?`<p>${desc}</p>`:''}</div>${extra}</div>${body}</section>`}
@@ -117,3 +119,8 @@ function updateThemeControl(){const dark=document.body.classList.contains('dark'
 updateThemeControl();
 window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubSSH?.isDirty()||window.RemoteHubWorkspace?.isDirty()||window.RemoteHubProxyManager?.isDirty()){e.preventDefault();e.returnValue=''}});
 enter();
+
+window.addEventListener?.('hashchange',()=>{
+ const target={'#network':'remote','#remote':'remote','#proxy':'proxy'}[location.hash];
+ if(target&&!$('#shell').hidden)switchView(target);
+});

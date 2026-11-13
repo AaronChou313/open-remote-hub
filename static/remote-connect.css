@@ -930,3 +930,31 @@ body.dark #rcOverview {
     display: none;
   }
 }
+/* Local network facts share the console's existing network surfaces. */
+.lan-interfaces { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,280px),1fr)); gap: 16px; }
+.lan-interface { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.lan-interface-title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.lan-interface-title h2 { display:flex; align-items:center; gap:8px; font-size:15px; }
+.lan-address { font-size:24px; font-weight:600; margin:20px 0; letter-spacing:-.025em; }
+.lan-interface dl { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:0; }
+.lan-interface dt { color:var(--muted); font-size:11px; margin-bottom:5px; }
+.lan-interface dd { font-size:12px; overflow-wrap:anywhere; }
+.lan-traffic { display:flex; gap:24px; border-top:1px solid var(--line); margin-top:20px; padding-top:14px; font-size:12px; color:var(--muted); }
+.lan-dns { margin:18px 0 24px; color:var(--muted); font-size:12px; }
+.lan-dns summary { cursor:pointer; }
+#lanDNS { padding-top:12px; overflow-wrap:anywhere; }
+.lan-toolbar { display:flex; align-items:center; gap:14px; }
+.lan-toolbar > input { flex:1; min-width:0; max-width:420px; margin:0 auto 0 0; }
+#lanMessage { font-size:12px; margin:14px 0; }
+.remote-connect #rcNetworkProxy .panel { padding:0; }
+#rcRoot.remote-connect > .workspace-tabs.rc-tabs { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:6px; }
+#rcRoot.remote-connect > .workspace-tabs.rc-tabs > button { flex-shrink:0; white-space:nowrap; }
+@media(max-width:640px) {
+ .lan-toolbar { flex-wrap:wrap; gap:12px; }
+ .lan-toolbar > input { flex-basis:100%; max-width:none; }
+ .lan-toolbar .rc-online-filter { margin-right:auto; }
+ .lan-interface { padding:18px; }
+ .lan-interface dl { gap:14px; }
+}
+.remote-connect:has(#rcLAN:not([hidden])) > .rc-summaries,
+.remote-connect:has(#rcNetworkProxy:not([hidden])) > .rc-summaries { display:none; }
