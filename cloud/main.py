@@ -305,6 +305,12 @@ def unbind(identifier: str, user=Depends(account)):
     return {'ok':True}
 
 
+def console_callback(address, identifier):
+    parsed = urlsplit(address)
+    return (parsed.scheme == 'http' and parsed.hostname == f'orh-{identifier}.localhost'
+            and parsed.port is not None and 1024 <= parsed.port <= 65535)
+
+
 class TicketRequest(BaseModel):
     address: str = Field(max_length=2048)
     state: str = Field(default='',max_length=128)
@@ -319,7 +325,7 @@ def issue_ticket(identifier: str, body: TicketRequest, user=Depends(account)):
         row = db.execute('SELECT * FROM devices WHERE instance_id=? AND owner_id=?',(identifier,user['id'])).fetchone()
         if not row:
             raise HTTPException(404,'设备不存在')
-        if address not in effective_addresses(row):
+        if address not in effective_addresses(row) and not console_callback(address,identifier):
             raise HTTPException(422,'请先将该访问地址添加到设备')
         db.execute('DELETE FROM tickets WHERE expires<?',(time.time(),))
         db.execute('INSERT INTO tickets VALUES (?,?,?,?,0,?)',(digest(ticket),identifier,user['session_digest'],time.time()+90,body.state))

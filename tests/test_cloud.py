@@ -199,3 +199,13 @@ def test_cloud_manual_address_is_applied_to_agent_host_check(tmp_path,monkeypatc
     cloud_agent.synchronize()
     assert main.NETWORK.allows('mac.example.com:8765',8765)
     assert not main.NETWORK.allows('mac.example.com:9999',8765)
+
+
+def test_orn_console_ticket_is_bound_to_its_device_origin(cloud):
+    owner,_=signup(cloud,'console-owner')
+    metadata,agent,_=bind_device(cloud,owner)
+    identifier=metadata['instance_id']
+    address=f'http://orh-{identifier}.localhost:47890'
+    assert cloud.post('/api/devices/'+identifier+'/ticket',headers=owner,json={'address':address}).status_code==200
+    for invalid in [f'http://orh-{uuid.uuid4()}.localhost:47890',f'http://orh-{identifier}.localhost:80','http://attacker.localhost:47890']:
+        assert cloud.post('/api/devices/'+identifier+'/ticket',headers=owner,json={'address':invalid}).status_code==422
