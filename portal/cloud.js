@@ -213,7 +213,7 @@ async function bindingDialog(code = '') {
 }
 
 function editDevice(device) {
-  const element = dialog('编辑设备',`<form id="deviceEditForm"><label for="deviceName">名称</label><input id="deviceName" required maxlength="160" value="${escapeHTML(device.name)}"><label for="deviceAddresses">访问地址</label><textarea id="deviceAddresses" rows="5" ${device.kind==='orn' ? '' : 'required'}>${escapeHTML(device.addresses.join('\n'))}</textarea><label for="devicePreferred">首选地址</label><select id="devicePreferred"><option value="">自动选择可达地址</option>${device.addresses.map(url => `<option value="${escapeHTML(url)}" ${url===device.preferred?'selected':''}>${escapeHTML(url)}</option>`).join('')}</select><div class="dialog-actions"><button class="primary" id="deviceSave">保存</button></div></form>`);
+  const element = dialog('编辑设备',`<form id="deviceEditForm"><label for="deviceName">名称</label><input id="deviceName" required maxlength="160" value="${escapeHTML(device.name)}"><label for="deviceAddresses">访问地址</label><textarea id="deviceAddresses" rows="5" ${['orn','mesh'].includes(device.kind) ? '' : 'required'}>${escapeHTML(device.addresses.join('\n'))}</textarea><label for="devicePreferred">首选地址</label><select id="devicePreferred"><option value="">自动选择可达地址</option>${device.addresses.map(url => `<option value="${escapeHTML(url)}" ${url===device.preferred?'selected':''}>${escapeHTML(url)}</option>`).join('')}</select><div class="dialog-actions"><button class="primary" id="deviceSave">保存</button></div></form>`);
   $('#deviceAddresses').oninput = () => {
     const selected = $('#devicePreferred').value;
     const urls = $('#deviceAddresses').value.split('\n').map(value=>value.trim()).filter(Boolean);

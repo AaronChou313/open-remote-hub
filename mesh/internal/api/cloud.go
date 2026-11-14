@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	cloudclient "github.com/AaronChou313/open-remote-hub/mesh/internal/cloud"
@@ -326,4 +327,77 @@ func (s *Server) cloudAdopt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, s.publicCloud())
+}
+
+type cloudLoginInput struct {
+	CloudURL string `json:"cloud_url"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// cloudLogin registers this node with an account session: one login, no code.
+func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
+	var input cloudLoginInput
+	if err := body(w, r, &input); err != nil {
+		fail(w, 400, fmt.Errorf("请输入 Cloud 账号与密码"))
+		return
+	}
+	base, err := cloudclient.Base(input.CloudURL)
+	if err != nil {
+		fail(w, 400, err)
+		return
+	}
+	if strings.TrimSpace(input.Username) == "" || input.Password == "" {
+		fail(w, 400, fmt.Errorf("请输入 Cloud 账号与密码"))
+		return
+	}
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	s.cloudMu.RLock()
+	bound, deviceID, hostname := s.Config.Cloud.Bound, s.Config.Cloud.DeviceID, s.Config.Hostname
+	s.cloudMu.RUnlock()
+	if bound {
+		fail(w, 409, fmt.Errorf("设备已经绑定，请先在 Cloud 设备目录解绑"))
+		return
+	}
+	var login struct {
+		Token string `json:"token"`
+		User  struct {
+			ID       string `json:"id"`
+			Username string `json:"username"`
+		} `json:"user"`
+	}
+	if err = cloudclient.Call(r.Context(), base, "/api/login", "", map[string]string{"username": input.Username, "password": input.Password}, &login); err != nil {
+		fail(w, 503, err)
+		return
+	}
+	if login.Token == "" {
+		fail(w, 502, fmt.Errorf("Cloud 登录响应无效"))
+		return
+	}
+	if deviceID == "" {
+		var id [16]byte
+		rand.Read(id[:])
+		id[6] = (id[6] & 15) | 64
+		id[8] = (id[8] & 63) | 128
+		value := hex.EncodeToString(id[:])
+		deviceID = value[:8] + "-" + value[8:12] + "-" + value[12:16] + "-" + value[16:20] + "-" + value[20:]
+	}
+	metadata := map[string]any{"kind": "mesh", "instance_id": deviceID, "name": hostname, "os": runtime.GOOS, "addresses": []string{}, "port": 4789}
+	var enrolled struct {
+		DeviceToken string `json:"device_token"`
+	}
+	if err = cloudclient.Call(r.Context(), base, "/api/devices/enroll", login.Token, metadata, &enrolled); err != nil {
+		fail(w, 503, err)
+		return
+	}
+	s.cloudMu.Lock()
+	s.Config.Cloud = state.Cloud{BaseURL: base, DeviceID: deviceID, DeviceToken: enrolled.DeviceToken, Bound: true}
+	err = state.Save(s.ConfigPath, s.Config)
+	s.cloudMu.Unlock()
+	if err != nil {
+		fail(w, 500, err)
+		return
+	}
+	reply(w, map[string]any{"ok": true, "instance_id": deviceID, "username": login.User.Username, "cloud_url": base})
 }

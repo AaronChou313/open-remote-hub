@@ -26,6 +26,8 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout page, binding;
     private TextView status, message, selfDetail, selfChip, selfDot, updateBanner, powerNotice;
+    private EditText cloudAddress, cloudUser, cloudPassword;
+    private Button cloudLoginButton;
     private String latestUpdateUrl = "";
     private boolean boundBefore;
     private Button backgroundButton;
@@ -143,29 +145,58 @@ public final class MainActivity extends Activity {
             else info("新版本 " + release.version + " 可用");
         });
     }
-    private void renderBinding(JSONObject cloud, boolean bound) {
-        binding.removeAllViews();
-        binding.setVisibility(bound ? View.GONE : View.VISIBLE);
-        if (bound) return;
-        binding.addView(text("连接 Cloud 账号", 20, true));
-        binding.addView(muted("绑定后可在其他设备打开这台设备的控制台与远程桌面。"));
-        JSONObject pending = cloud == null ? null : cloud.optJSONObject("pending");
-        if (pending != null) {
-            binding.addView(muted("在 Cloud 输入绑定码"));
-            TextView code = text(pending.optString("user_code"), 30, true);
-            code.setTextColor(color(R.color.accent)); code.setLetterSpacing(0.12f);
-            code.setPadding(0, dp(6), 0, dp(2));
-            binding.addView(code);
-            long left = (long) pending.optDouble("expires", 0) - System.currentTimeMillis() / 1000;
-            binding.addView(muted(left > 0 ? "约 " + Math.max(1, left / 60) + " 分钟内有效，确认后自动完成绑定。" : "绑定码已过期，请重新获取。"));
-            LinearLayout row = new LinearLayout(this);
-            row.addView(primary("前往 Cloud 确认", () -> onUI(() -> open(pending.optString("verification_url")))));
-            row.addView(secondary("复制绑定码", () -> copy(pending.optString("user_code"))));
-            binding.addView(row);
-        } else {
-            binding.addView(primary("绑定账号", () -> api("/cloud/bind",
-                new JSONObject().put("cloud_url", "https://cloud.openremotehub.top"), "POST")));
-        }
+    private EditText field(String hint, boolean secret) {
+        EditText input = new EditText(this);
+        input.setHint(hint); input.setTextSize(14); input.setSingleLine(true);
+        if (secret) input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color(R.color.surface)); background.setCornerRadius(dp(9));
+        background.setStroke(dp(1), color(R.color.outline));
+        input.setBackground(background); input.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1,-2); params.bottomMargin = dp(8);
+        input.setLayoutParams(params);
+        return input;
+    }
+    private void buildLoginCard() {
+        binding.addView(text("登录 Cloud 账号", 20, true));
+        binding.addView(muted("登录后自动注册这台设备并接入组网，不再需要绑定码。"));
+        cloudAddress = field("Cloud 服务地址", false);
+        cloudAddress.setText("https://cloud.openremotehub.top");
+        cloudUser = field("账号", false);
+        cloudPassword = field("密码", true);
+        binding.addView(cloudAddress); binding.addView(cloudUser); binding.addView(cloudPassword);
+        LinearLayout row = new LinearLayout(this);
+        cloudLoginButton = primary("登录并绑定", this::loginCloud);
+        row.addView(cloudLoginButton);
+        row.addView(secondary("注册账号", () -> {
+            String base = cloudAddress.getText().toString().trim().replaceAll("/+$", "");
+            if (!base.isEmpty()) open(base + "/");
+        }));
+        binding.addView(row);
+    }
+    private void loginCloud() {
+        if (busy) return;
+        String base = cloudAddress.getText().toString().trim();
+        String user = cloudUser.getText().toString().trim();
+        String password = cloudPassword.getText().toString();
+        if (base.isEmpty() || user.isEmpty() || password.isEmpty()) { info("请输入 Cloud 地址、账号与密码"); return; }
+        busy = true; cloudLoginButton.setEnabled(false);
+        Diagnostics.log("cloud", "登录 " + base + " · " + user);
+        worker.execute(() -> {
+            try {
+                JSONObject result = (JSONObject) api("/cloud/login",
+                    new JSONObject().put("cloud_url", base).put("username", user).put("password", password), "POST");
+                onUI(() -> {
+                    cloudPassword.setText("");
+                    info("已登录 " + result.optString("username") + "，正在入网…");
+                    previous = ""; refresh();
+                });
+            } catch (Exception error) {
+                onUI(() -> info(error.getMessage()));
+            } finally {
+                onUI(() -> { busy = false; cloudLoginButton.setEnabled(true); });
+            }
+        });
     }
     private void build() {
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true);
@@ -217,7 +248,7 @@ public final class MainActivity extends Activity {
         page.addView(self);
 
         message = text("",13,false); message.setTextColor(color(R.color.muted)); page.addView(message);
-        binding = card(); page.addView(binding);
+        binding = card(); page.addView(binding); buildLoginCard();
         page.addView(section("设备"));
         devices = new GridLayout(this); page.addView(devices);
 
@@ -355,7 +386,7 @@ public final class MainActivity extends Activity {
         boolean bound=cloud!=null&&cloud.optBoolean("bound");
         if (bound&&!boundBefore) info("已绑定 Cloud 账号");
         boundBefore=bound;
-        renderBinding(cloud,bound);
+        binding.setVisibility(bound?View.GONE:View.VISIBLE);
         if (cloud!=null&&!cloud.optString("error").isEmpty()) info(cloud.optString("error"));
         devices.removeAllViews();
         int columns=getResources().getConfiguration().screenWidthDp>=720?2:1;

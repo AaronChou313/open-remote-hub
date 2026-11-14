@@ -41,7 +41,7 @@ func Start(directory, hostname string) error {
 			return err
 		}
 	}
-	app, err := agentapp.Start(path, "0.3.0", "", "", false)
+	app, err := agentapp.Start(path, "0.4.0", "", "", false)
 	if err != nil {
 		return err
 	}

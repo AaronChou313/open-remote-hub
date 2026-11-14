@@ -88,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/diagnostics", s.diagnostics)
 	mux.HandleFunc("GET /api/v1/cloud", s.cloudStatus)
 	mux.HandleFunc("POST /api/v1/cloud/bind", s.cloudBind)
+	mux.HandleFunc("POST /api/v1/cloud/login", s.cloudLogin)
 	mux.HandleFunc("POST /api/v1/cloud/adopt", s.cloudAdopt)
 	assets, _ := fs.Sub(web.Files, ".")
 	mux.Handle("/", http.FileServer(http.FS(assets)))

@@ -194,7 +194,7 @@ def logout(user=Depends(account)):
 
 
 class Metadata(BaseModel):
-    kind: str = Field(default='orh',pattern=r'^(orh|orn)$')
+    kind: str = Field(default='orh',pattern=r'^(orh|orn|mesh)$')
     instance_id: uuid.UUID
     name: str = Field(min_length=1,max_length=160)
     os: str = Field(max_length=160)
