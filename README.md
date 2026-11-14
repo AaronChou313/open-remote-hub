@@ -18,6 +18,23 @@
 .venv/bin/python scripts/password.py # 本机隐藏输入重设密码
 ```
 
+## 服务组成
+
+核心控制台是一个宿主机 Python 进程，运行 FastAPI / Uvicorn、原生 HTML/CSS/JS、认证、系统采样和管理 API，数据保存在本地 SQLite / JSON。前端无需 Node.js 构建，数据库随 Python 提供。基础安装需要 Python 3.11+，克隆和更新代码需要 Git。
+
+| 组件 | 用途与部署关系 | 本机入口 |
+| --- | --- | --- |
+| RemoteHub | 必需，macOS 由 `local.openremotehub` 用户 LaunchAgent 启动，Linux 提供用户 systemd 模板 | `8765` |
+| Zellij | Web 终端需要，官方 Web 服务与终端会话独立运行，进入终端时自动检查并启动 Web 服务 | 回环 `8082` |
+| 系统 OpenSSH | SSH 管理需要 `ssh`、`ssh-keygen`、`ssh-keyscan`，交互连接运行在 Zellij 中；VS Code Remote SSH 编辑本机项目另需启用宿主机 SSH 服务 | 出站目标端口，按需入站 `22` |
+| Docker | 容器管理需要 CLI 和可访问的 Docker Engine，本机使用 OrbStack；Linux 可使用 Docker Engine | 当前用户的 Docker context / Socket |
+| DeepSeek Harness | DSH 工作台按需启用，原生 DSH 按需启动；认证网关与 RemoteHub 使用同一 Python 进程 | 网关 `8767`，原生回环 `9741` |
+| Mihomo + Python broker | 网络代理按需安装的独立特权服务，本机为 `local.openremotehub.proxy`；Linux 安装器使用 systemd | 用户 Unix Socket，内核端口仅回环 |
+| Tailscale、节点小宝、RustDesk | 分别独立安装、登录和运行，RemoteHub 接入各自 CLI / 本地接口；按需选择 | 由原生客户端管理 |
+| “我的应用”中的其他 Web 服务 | 各项目自行部署，控制台保存入口并发现监听状态 | 各服务自己的端口 |
+
+当前 Mac 使用 RemoteHub + Zellij 0.45.1 + OrbStack/Docker + Mihomo，并接入 Tailscale、节点小宝和 RustDesk。DSH 已启用网关，其原生进程按需运行。文件、知识库、项目、开发环境、SSH 管理和本地服务页面均属于核心控制台，Codex 可在普通终端中自行运行。
+
 ## 功能
 
 - **系统概览**：真实 CPU、内存、磁盘、网络和进程；SQLite 保留 7 天轻量历史。
@@ -47,7 +64,7 @@ Codex、编辑器和开发服务器都只是用户在普通终端内启动的程
 
 Zellij 网关只访问固定的本机端口（默认 8082）。内部 Zellij Token/Cookie 不会发送给浏览器，不提供任意 URL 或 RPC 转发。WebSocket 只转发官方原生客户端，不提供额外 Shell 或自建 PTY。
 
-管理员的交互终端及任务具备当前本机账户权限。支持显式开启局域网/私有组网访问；不内置 TLS/MFA 或多用户隔离。保持默认本机监听时，也可使用已配置的 SSH 转发：
+管理员的交互终端及任务具备当前本机账户权限。支持显式开启局域网/私有组网访问；支持通过 `ORH_TLS_CERT_FILE` / `ORH_TLS_KEY_FILE` 配置原生 TLS，MFA 和多用户隔离尚未实现。保持默认本机监听时，也可使用已配置的 SSH 转发：
 
 ```sh
 ssh -N -L 8765:127.0.0.1:8765 USER@HOST
@@ -255,18 +272,74 @@ git clone <仓库地址> src/<仓库目录>
 
 ## 部署与维护
 
-配置见 `.env.example`。安装只创建项目虚拟环境、配置和运行目录，不执行 sudo/brew，也不下载容器镜像。
+### 新设备适用范围
+
+| 目标设备 | 当前部署方式与验证范围 |
+| --- | --- |
+| macOS arm64 / amd64 | 原生 Python + launchd；已在 Apple Silicon Mac 实机使用，Intel Mac 待实机验收 |
+| Linux amd64 / arm64 | 原生 Python + systemd，优先 Ubuntu 24.04+；已有 Linux 适配和 Ubuntu amd64 CI，完整部署及 arm64 待实机验收 |
+| Windows amd64 / arm64 | 当前通过 WSL2 Ubuntu 部署，按 Linux 流程安装；Windows 原生适配尚未实现，WSL2 部署待实机验收 |
+
+新主机的基础安装只有虚拟环境、配置和启动几步。完整启用所有模块还需安装相应原生软件、完成账户登录及系统授权，现有 `install.sh` 只安装 Python 依赖。各架构需使用对应的 Python、Zellij、DSH、Docker 和代理二进制，并现场核对其可用版本。
+
+Windows 先在管理员 PowerShell 执行 `wsl --install -d Ubuntu-24.04`，按提示重启并创建 Linux 用户，再让 AI 在 WSL 的 `~/Projects` 内部署。当前代码使用 Unix PTY、文件锁、UID 和 Unix Socket。WSL 中的进程、网卡、systemd 与 RustDesk IPC 按 Linux 环境读取，Windows 原生服务和桌面客户端尚无直接管理适配。访问 Windows 文件需配置 `/mnt/c/...` 等授权目录。WSL 的局域网访问、Windows 防火墙、发行版随 Windows 启动均需单独配置和验证，Windows 11 支持的镜像网络可简化访问。[WSL 安装](https://learn.microsoft.com/en-us/windows/wsl/install) · [WSL 网络](https://learn.microsoft.com/en-us/windows/wsl/networking) · [WSL systemd](https://learn.microsoft.com/en-us/windows/wsl/systemd)
+
+### 基础安装与配置
+
+先由 AI 检查系统、架构、Python 3.11+、Git 和端口占用，再执行以下步骤。Ubuntu 的 venv、OpenSSH、iproute2 和 Ping 工具按需通过系统包管理器补齐。终端需安装含官方 Web Client 的 Zellij，当前适配基线为 `0.45.1`，升级版本要验证原生 Web 终端。[Zellij 安装](https://zellij.dev/documentation/installation)
+
+```sh
+git clone https://github.com/AaronChou313/open-remote-hub.git
+cd open-remote-hub
+cp .env.example .env
+./scripts/install.sh
+```
+
+按新主机实际情况编辑 `.env`，保留已有安装的本机配置。
+
+```dotenv
+ORH_HOST=0.0.0.0
+ORH_PORT=8765
+ORH_ALLOWED_HOSTS=192.168.1.20,server.local
+ORH_FILE_ROOTS=["/"]
+ORH_FILE_POLICY=unrestricted
+# ORH_PROJECTS_DIR=/home/your-user/Projects
+ORH_DSH_ENABLED=0
+```
+
+将地址替换为目标设备实际入口，文件范围按用户选择配置。DSH、Docker、组网、桌面和代理按需启用，细节见本文相应章节。执行 `./scripts/start.sh`，首次由用户通过本机页面或 `.venv/bin/python scripts/password.py` 设置管理员密码，再从其他设备访问 `http://目标地址:8765/`。只使用核心控制台时开放 `8765` 即可，启用 DSH 后还需 `8767`，Zellij / DSH 的原生回环端口由网关转发。
+
+### 自动启动
+
+macOS 在安装目录执行下列命令，安装用户登录后的自动启动。
 
 ```sh
 .venv/bin/python scripts/launchd.py install
-.venv/bin/python scripts/launchd.py uninstall
+# 移除自动启动时使用
+# .venv/bin/python scripts/launchd.py uninstall
 ```
 
-macOS 使用用户级 launchd，在用户登录后启动控制台。Ubuntu 有 `deploy/openremotehub.service` 用户 systemd 模板；平台边界已区分，Ubuntu 尚未实机验收。
+Linux 由 AI 将 `deploy/openremotehub.service` 中的 `/ABSOLUTE/PATH/open-remote-hub` 替换为正确引用的项目绝对路径，保存到 `~/.config/systemd/user/openremotehub.service`。先停止用脚本启动的控制台，再切换到 systemd。
 
-`.runtime/` 存放密码哈希、认证/历史数据库、任务定义、日志和会话删除备份；必须保持私有，不能提交。日志没有完整在线轮换，持续高输出任务应自行配置轮换。会话删除备份默认保留，按需由用户归档或清理。
+```sh
+./scripts/stop.sh
+systemctl --user daemon-reload
+systemctl --user enable --now openremotehub.service
+```
 
-旧版专用 `codex-agent` 会话保留为普通会话，本次不打断它的已有进程；旧进程原先的启动参数直到它退出前仍然有效。兼容入口 `scripts/agent_run.py` 仅用于旧保存布局再次启动时执行普通 Codex（可继续原历史），不添加权限参数。旧 AI 数据只保留在本机私有运行目录，不再被控制台加载或自动恢复。
+Linux 后续用 `systemctl --user start/stop/restart/status openremotehub` 管理，日志用 `journalctl --user -u openremotehub -n 100`。如需开机后无需登录即启动，由 AI 为服务账户设置 `loginctl enable-linger 用户名`，可能需要管理员授权。WSL 还需确认发行版自身能随 Windows 启动。
+
+### 交给 AI 部署
+
+在新设备上运行具备本机终端权限的 AI，将下面这段指令交给它即可。AI 应读取当前仓库和实际环境，安装过程中的系统授权、原生客户端登录及管理员密码由用户完成。
+
+> 请在本机部署 https://github.com/AaronChou313/open-remote-hub ，先读 README.md、.env.example 和现有脚本，检查操作系统、amd64/arm64、Python、Git、Zellij Web 能力、端口和已有服务。Windows 使用 WSL2 Ubuntu，明确实际管理范围。先运行核心控制台及原生终端，再按我的需求接入 Docker、DSH、代理、组网和远程桌面。沿用已有软件、配置、项目和登录信息，按实际账户、路径、IP 设置 .env，配置 launchd 或 systemd 与必要的网络访问。用户自行输入密码和完成系统授权。通过真实登录、文件读写、终端新建/重连、重启恢复及另一台设备的访问验证已启用功能，报告缺少的软件和未验收场景，给出访问地址、启停与更新方式。说明需要我完成的具体操作。
+
+### 更新与迁移
+
+在工作区干净且已确认远端更新后使用 `git pull --ff-only`，再运行 `.venv/bin/python -m pip install -r requirements.txt` 并通过当前服务管理器重启。跨主机重新创建 `.venv`，按新设备调整 `.env` 的账户路径、地址及软件路径。
+
+`.runtime/` 保存管理员密码哈希、SQLite 数据、项目 / 应用 / 知识库关联、日志、任务记录和代理配置等私有状态。迁移时先停控制台再备份，可按需恢复元数据，需校正绝对路径和重建认证会话 / 本机 Zellij 网关凭据。Zellij 会话与历史、SSH 密钥、DSH 工作区、Docker 数据及原生客户端配置各有自己的存储位置，由 AI 分别处理；进程和活跃连接需在新设备重新启动。代理 broker 按目标系统重新安装。日志暂未完整轮换，持续高输出任务需配置轮换。
 
 ## 开发与验证
 
@@ -310,7 +383,7 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 
 ## 网络连接
 
-侧栏进入“网络连接”，或访问 `http://主机地址:8765/#network`。内部包含本地局域网、Tailscale、节点小宝、网络代理和 RustDesk 五个标签。原 `#remote` 和 `#proxy` 入口继续可用。沿用控制台的管理员登录、Host / Origin 和 CSRF 检查。
+侧栏进入“网络连接”，或访问 `http://主机地址:8765/#network`。默认进入状态总览，集中展示本地局域网、Tailscale、节点小宝、网络代理和 RustDesk；各详情标签只显示自己的状态和操作。原 `#remote` 和 `#proxy` 入口继续可用。沿用控制台的管理员登录、Host / Origin 和 CSRF 检查。
 
 Tailscale 使用本机官方 CLI。实际接入版本为 1.104.7，读取 `status --json` 与 `get --json`，设置使用 `tailscale set` 的指定字段，连接使用保留已有配置的 `tailscale up`。支持设备搜索、在线筛选、组网地址复制、单设备 Ping、原生 `netcheck`，以及 DNS、子网路由、入站拦截和出口节点设置。全网账户与访问策略可通过“组网管理后台”进入官方管理页面。
 
