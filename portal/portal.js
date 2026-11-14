@@ -196,7 +196,9 @@ $('#theme').onclick = () => {
 };
 
 async function start() {
+  let resumeDetection = false;
   try {
+    resumeDetection = localStorage.getItem('openremotehub.portal.detect') === '1';
     setTheme((localStorage.getItem('openremotehub.portal.theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark');
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
@@ -239,10 +241,12 @@ async function start() {
           notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
         }
       });
-      if (permission.state === 'granted' && hosts.length) check();
+      // A successful manual connection opts into checks on later visits,
+      // including browsers whose legacy permission query stays at 'prompt'.
+      if (hosts.length && permission.state !== 'denied' && (permission.state === 'granted' || resumeDetection)) check();
       else if (permission.state === 'denied' && hosts.length) notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
     } else {
-      try { if (hosts.length && localStorage.getItem('openremotehub.portal.detect') === '1') check(); } catch {}
+      if (hosts.length && resumeDetection) check();
     }
   }
 }
