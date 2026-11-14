@@ -30,7 +30,7 @@
 | Docker | 容器管理需要 CLI 和可访问的 Docker Engine，本机使用 OrbStack；Linux 可使用 Docker Engine | 当前用户的 Docker context / Socket |
 | DeepSeek Harness | DSH 工作台按需启用，原生 DSH 按需启动；认证网关与 RemoteHub 使用同一 Python 进程 | 网关 `8767`，原生回环 `9741` |
 | Mihomo + Python broker | 网络代理按需安装的独立特权服务，本机为 `local.openremotehub.proxy`；Linux 安装器使用 systemd | 用户 Unix Socket，内核端口仅回环 |
-| ORN（内置） | 组网数据面。安装脚本把 `bin/orn-agent` 与控制台一起部署，由 ORH 启停和监护；也可接管既有独立服务 | 回环 `4789` |
+| 组网（内置） | 组网数据面。安装脚本把 `bin/orh-mesh` 与控制台一起部署，由 ORH 启停和监护；也可接管既有独立服务 | 回环 `4789` |
 | Tailscale、节点小宝、RustDesk | 分别独立安装、登录和运行，RemoteHub 接入各自 CLI / 本地接口；按需选择 | 由原生客户端管理 |
 | “我的应用”中的其他 Web 服务 | 各项目自行部署，控制台保存入口并发现监听状态 | 各服务自己的端口 |
 
@@ -326,13 +326,13 @@ git clone <仓库地址> src/<仓库目录>
 | --- | --- |
 | macOS arm64 / amd64 | 原生 Python + launchd；已在 Apple Silicon Mac 实机使用，Intel Mac 待实机验收 |
 | Linux amd64 / arm64 | 原生 Python + systemd，优先 Ubuntu 24.04+；已有 Linux 适配和 Ubuntu amd64 CI，完整部署及 arm64 待实机验收 |
-| Windows amd64 / arm64 | 原生**预览版**：Python 控制台 + 登录计划任务，内置 ORN；终端 / SSH / 文件 / DSH / 项目 / 开发环境在 Windows 上隐藏，RustDesk 设置页不可用（远程桌面仍由 ORN 调用已安装的 RustDesk）。需要完整功能可改用 WSL2 Ubuntu |
+| Windows amd64 / arm64 | 原生**预览版**：Python 控制台 + 登录计划任务，内置 ORN；终端 / SSH / 文件 / DSH / 项目 / 开发环境在 Windows 上隐藏，RustDesk 设置页不可用（远程桌面仍由 组网 调用已安装的 RustDesk）。需要完整功能可改用 WSL2 Ubuntu |
 
 新主机的基础安装只有虚拟环境、配置和启动几步。完整启用所有模块还需安装相应原生软件、完成账户登录及系统授权，现有 `install.sh` 只安装 Python 依赖。各架构需使用对应的 Python、Zellij、DSH、Docker 和代理二进制，并现场核对其可用版本。
 
 ### Windows 预览版（原生）
 
-需要 Python 3.11+（安装时勾选 Add to PATH）、已安装 RustDesk，以及 `orn-agent-windows-amd64.exe`（Release 里 `orn-windows-amd64.zip` 解压后的 `dist/orn-agent-windows-amd64.exe`）。把它放在与本仓库同级的 `open-remote-net\dist\`，或设置 `ORH_ORN_SOURCE` 指向它。
+需要 Python 3.11+（安装时勾选 Add to PATH）、已安装 RustDesk，以及 `orh-mesh-windows-amd64.exe`（Release 里 `orn-windows-amd64.zip` 解压后的 `dist/orh-mesh-windows-amd64.exe`）。把它放在与本仓库同级的 `open-remote-net\dist\`，或设置 `ORH_MESH_SOURCE` 指向它。
 
 ```powershell
 git clone https://github.com/AaronChou313/open-remote-hub.git
@@ -340,11 +340,11 @@ cd open-remote-hub
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-安装脚本会创建 `.venv`、安装依赖、生成 `.env`（自动把本机 IPv4 写入 `ORH_ALLOWED_HOSTS`）、把 ORN 放到 `bin\orn-agent.exe`、注册登录时启动的计划任务 `OpenRemoteHub`，并打开 `http://127.0.0.1:8765/`。首次使用需设置管理员密码并绑定 Cloud；ORN 随之启动并出现在设备列表中。
+安装脚本会创建 `.venv`、安装依赖、生成 `.env`（自动把本机 IPv4 写入 `ORH_ALLOWED_HOSTS`）、把 组网 放到 `bin\orh-mesh.exe`、注册登录时启动的计划任务 `OpenRemoteHub`，并打开 `http://127.0.0.1:8765/`。首次使用需设置管理员密码并绑定 Cloud；ORN 随之启动并出现在设备列表中。
 
 - 启停：开始菜单「OpenRemoteHub」打开控制台，「OpenRemoteHub 停止」停止控制台与内置 ORN；也可用 `scripts\start.cmd`、`scripts\stop.cmd`。
-- 可用：系统概览、我的应用、容器（需 Docker CLI）、网络连接（设备列表 / 对端控制台 / 远程桌面 / ORN 管理）、知识库、本地服务。
-- 暂不可用：终端（Zellij 无 Windows 原生版）、SSH、文件管理、DSH、项目、开发环境——这些入口在 Windows 上隐藏；RustDesk 设置页依赖 Unix Socket，同样不可用，但远程桌面仍由 ORN 调用已安装的 RustDesk。
+- 可用：系统概览、我的应用、容器（需 Docker CLI）、网络连接（设备列表 / 对端控制台 / 远程桌面 / 组网 管理）、知识库、本地服务。
+- 暂不可用：终端（Zellij 无 Windows 原生版）、SSH、文件管理、DSH、项目、开发环境——这些入口在 Windows 上隐藏；RustDesk 设置页依赖 Unix Socket，同样不可用，但远程桌面仍由 组网 调用已安装的 RustDesk。
 - 卸载：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Uninstall`（保留 `.runtime` 数据）。
 - 首次启动若出现 Windows 防火墙提示，请允许专用网络访问；其他设备用 `http://<本机IP>:8765/` 访问，需要额外主机名时补充 `ORH_ALLOWED_HOSTS`。
 
@@ -449,16 +449,16 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 
 ## 网络连接
 
-控制台沿用状态总览、本地局域网、ORN、节点小宝、网络代理、RustDesk 页面。ORN 状态、检测和连接控制读取本机 `127.0.0.1:4789` LocalAPI，使用 `ORH_ORN_API_URL` 与 `ORH_ORN_API_TOKEN_FILE` 配置入口。安装包与 Go / Android 源码位于 [open-remote-net](https://github.com/AaronChou313/open-remote-net)。
+控制台沿用状态总览、本地局域网、ORN、节点小宝、网络代理、RustDesk 页面。ORN 状态、检测和连接控制读取本机 `127.0.0.1:4789` LocalAPI，使用 `ORH_MESH_API_URL` 与 `ORH_MESH_API_TOKEN_FILE` 配置入口。安装包与 Go / Android 源码位于 [open-remote-net](https://github.com/AaronChou313/open-remote-net)。
 
-### ORN 与 Cloud
+### 组网与 Cloud
 
-1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 ORN 二进制放到 `bin/orn-agent` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护 ORN。ORH 绑定 Cloud 后自动把设备 UUID、凭据和发布端口交给本机 ORN，共用一个 Cloud 设备条目：ORH 负责地址和心跳，ORN 负责入网与节点对账。日志为 `.runtime/orn.log`。
-2. 已有独立 ORN 安装（`orn-agent open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → ORN”点“由 ORH 托管 ORN”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
-3. 任一 ORH 都能作为控制端：网络连接 → ORN 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。设备列表读取 Cloud 目录中的发布服务：只提供远程桌面的设备（例如只装了 ORN 的 Windows）标记为“仅远程桌面”，控制台按钮禁用，不会点击后才报错。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
+1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 组网组件放到 `bin/orh-mesh` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护 ORN。ORH 绑定 Cloud 后自动把设备 UUID、凭据和发布端口交给本机 ORN，共用一个 Cloud 设备条目：ORH 负责地址和心跳，ORN 负责入网与节点对账。日志为 `.runtime/mesh.log`。
+2. 已有独立 组网 安装（`orh-mesh open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → 组网”点“由 ORH 托管 ORN”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
+3. 任一 ORH 都能作为控制端：网络连接 → 组网 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。设备列表读取 Cloud 目录中的发布服务：只提供远程桌面的设备（例如只装了 组网 的 Windows）标记为“仅远程桌面”，控制台按钮禁用，不会点击后才报错。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
 4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
-5. “网络连接 → ORN → ORN 设备管理”可以修改本机设备名称、控制服务和发布到组网的端口，保存后自动重启 ORN；也可以单独重启 ORN，或解绑本机设备（删除 Cloud 设备条目与组网身份，需重新绑定）。组网 IP 由控制服务按顺序分配，不支持手动修改；其他设备的改名 / 解绑在 Cloud 设备目录完成。
-6. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 ORN 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 ORN 节点。
+5. “网络连接 → 组网 → 组网管理”可以修改本机设备名称、控制服务和发布到组网的端口，保存后自动重启 ORN；也可以单独重启 ORN，或解绑本机设备（删除 Cloud 设备条目与组网身份，需重新绑定）。组网 IP 由控制服务按顺序分配，不支持手动修改；其他设备的改名 / 解绑在 Cloud 设备目录完成。
+6. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 组网 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 组网节点。
 
 Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 
@@ -471,7 +471,7 @@ docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.y
 
 注册为邀请码制。headscale 策略使用 `{"acls":[{"action":"accept","src":["*"],"dst":["autogroup:self:*"]}]}`，通过 `headscale policy set --file <policy.hujson>` 应用。一个 Cloud 账号对应一个 headscale user，设备解绑同步删除节点。迁移前需在线备份 Cloud 与 headscale SQLite 数据库，并保存配置。
 
-VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接地址。仅运行 userspace ORN 的控制端可通过端口转发访问这些额外服务。不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
+VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接地址。仅运行 userspace 组网 的控制端可通过端口转发访问这些额外服务。不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
 
 ### 节点小宝
 

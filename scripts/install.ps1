@@ -40,13 +40,13 @@ if (-not (Test-Path ".env")) {
     Write-Host "已生成 .env（允许的主机：$allowed）"
 }
 
-if (-not $env:ORH_ORN_SOURCE) {
-    $Candidate = Join-Path $Repo "..\open-remote-net\dist\orn-agent-windows-amd64.exe"
-    if (Test-Path $Candidate) { $env:ORH_ORN_SOURCE = (Resolve-Path $Candidate).Path }
+if (-not $env:ORH_MESH_SOURCE) {
+    $Candidate = Join-Path $Repo "dist\orh-mesh-windows-amd64.exe"
+    if (Test-Path $Candidate) { $env:ORH_MESH_SOURCE = (Resolve-Path $Candidate).Path }
 }
-& .venv\Scripts\python.exe scripts\orn_setup.py
-if (-not (Test-Path "bin\orn-agent.exe")) {
-    throw "缺少 ORN 二进制。请把 orn-agent-windows-amd64.exe 放到 ..\open-remote-net\dist\ 或设置 ORH_ORN_SOURCE 后重试。"
+& .venv\Scripts\python.exe scripts\mesh_setup.py
+if (-not (Test-Path "bin\orh-mesh.exe")) {
+    throw "缺少组网组件。请把 orh-mesh-windows-amd64.exe 放到 dist\ 或设置 ORH_MESH_SOURCE 后重试。"
 }
 
 $Action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$Repo\scripts\server.cmd`"" -WorkingDirectory $Repo

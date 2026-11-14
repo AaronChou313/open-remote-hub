@@ -43,10 +43,10 @@ def target():
 
 
 def binary():
-    name = 'orn-agent.exe' if sys.platform == 'win32' else 'orn-agent'
-    candidates = [os.environ.get('ORH_ORN_BIN'), str(ROOT / 'bin' / name),
-                  str(ROOT.parent / 'open-remote-net' / 'dist' / f'orn-agent-{target()[0]}-{target()[1]}'),
-                  shutil.which('orn-agent')]
+    name = 'orh-mesh.exe' if sys.platform == 'win32' else 'orh-mesh'
+    candidates = [os.environ.get('ORH_MESH_BIN'), str(ROOT / 'bin' / name),
+                  str(ROOT / 'dist' / f'orh-mesh-{target()[0]}-{target()[1]}'),
+                  shutil.which('orh-mesh')]
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return Path(candidate)
@@ -60,11 +60,11 @@ def default_config():
         base = Path(os.environ.get('APPDATA') or Path.home() / 'AppData' / 'Roaming')
     else:
         base = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home() / '.config')
-    return base / 'orn-agent' / 'config.json'
+    return base / 'orh-mesh' / 'config.json'
 
 
 def config_path():
-    return Path(os.environ.get('ORH_ORN_CONFIG', str(default_config()))).expanduser()
+    return Path(os.environ.get('ORH_MESH_CONFIG', str(default_config()))).expanduser()
 
 
 def token_path():
@@ -74,15 +74,15 @@ def token_path():
 def log_path():
     # Kept independent from app.main so CLI helpers can stop the agent without
     # importing the whole console (and its platform shims).
-    return ROOT / '.runtime' / 'orn.log'
+    return ROOT / '.runtime' / 'mesh.log'
 
 
 def pid_path():
-    return log_path().parent / 'orn.pid'
+    return log_path().parent / 'mesh.pid'
 
 
 def enabled():
-    value = os.environ.get('ORH_ORN_ENABLED', 'auto').strip().lower()
+    value = os.environ.get('ORH_MESH_ENABLED', 'auto').strip().lower()
     if value in ('0', 'false', 'off', 'no'):
         return False
     return binary() is not None
@@ -130,11 +130,11 @@ def ensure_config():
     if path.exists():
         return False
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    value = dict(control_url=os.environ.get('ORH_ORN_CONTROL_URL', 'https://hs.openremotehub.top'),
-                 hostname=(platform.node() or 'openremotehub') + '-orn',
+    value = dict(control_url=os.environ.get('ORH_MESH_CONTROL_URL', 'https://hs.openremotehub.top'),
+                 hostname=(platform.node() or 'openremotehub') + '-mesh',
                  state_dir=str(path.parent / 'state'),
-                 api_addr=os.environ.get('ORH_ORN_API_ADDR', '127.0.0.1:4789'),
-                 cloud=dict(base_url=os.environ.get('ORH_ORN_CLOUD_URL', 'https://cloud.openremotehub.top')),
+                 api_addr=os.environ.get('ORH_MESH_API_ADDR', '127.0.0.1:4789'),
+                 cloud=dict(base_url=os.environ.get('ORH_MESH_CLOUD_URL', 'https://cloud.openremotehub.top')),
                  publish=published())
     temporary = path.with_suffix('.tmp')
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -152,7 +152,7 @@ def owner():
         if abs(process.create_time() - value['created']) > .01:
             return None
         command = process.cmdline()
-        if not command or not os.path.basename(command[0]).startswith('orn-agent'):
+        if not command or not os.path.basename(command[0]).startswith('orh-mesh'):
             return None
         if str(config_path()) not in command:
             return None
@@ -183,7 +183,7 @@ def _spawn():
     global ERROR, RESTARTS
     executable = binary()
     if not executable:
-        raise RuntimeError('未找到 ORN Agent 二进制，请设置 ORH_ORN_BIN')
+        raise RuntimeError('未找到 ORN Agent 二进制，请设置 ORH_MESH_BIN')
     with SPAWN:
         if probe():
             return owner()
@@ -300,7 +300,7 @@ def standalone_service():
             found = None
     else:
         try:
-            result = _systemctl('is-enabled', 'orn-agent')
+            result = _systemctl('is-enabled', 'orh-mesh')
             found = ('systemd', None) if result.stdout.strip() == 'enabled' else None
         except (OSError, subprocess.SubprocessError):
             found = None
@@ -323,7 +323,7 @@ def disable_standalone():
         subprocess.run(['schtasks', '/End', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
         subprocess.run(['schtasks', '/Change', '/TN', 'OpenRemoteHub ORN', '/DISABLE'], capture_output=True, timeout=30)
         return '已停止并禁用独立 ORN 计划任务'
-    _systemctl('disable', '--now', 'orn-agent')
+    _systemctl('disable', '--now', 'orh-mesh')
     return '已停止并禁用独立 ORN systemd 服务'
 
 
@@ -331,7 +331,7 @@ def takeover():
     """Adopt an existing standalone ORN install without re-enrolling the device."""
     global TAKEOVER, NOTE, ERROR, SERVICE_CACHE
     if not binary():
-        raise RuntimeError('未找到 ORN Agent 二进制，请先安装或设置 ORH_ORN_BIN')
+        raise RuntimeError('未找到 ORN Agent 二进制，请先安装或设置 ORH_MESH_BIN')
     previous = disable_standalone()
     SERVICE_CACHE = (0.0, None)
     for _ in range(40):
@@ -415,7 +415,7 @@ def _restart_standalone():
         subprocess.run(['schtasks', '/End', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
         subprocess.run(['schtasks', '/Run', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
     else:
-        _systemctl('restart', 'orn-agent')
+        _systemctl('restart', 'orh-mesh')
 
 
 def restart():

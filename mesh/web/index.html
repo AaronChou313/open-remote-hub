@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ORN · 网络连接</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ORH · 组网</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
 <body><header><a href="/" class="brand">ORH <span>网络连接</span></a><button id="theme" aria-label="切换外观">☾</button></header><main>
 <div class="heading"><h1>我的网络</h1><div class="actions"><button id="refresh">刷新</button><button id="reconnect">重新连接</button></div></div>
 <p id="notice" role="status" hidden></p>
-<section id="tokenPanel" hidden><h2>打开本地页面</h2><p>使用 ORN 启动入口打开，或输入本机 api.token 中的访问凭据。</p><form id="tokenForm"><label for="tokenInput">本地访问凭据</label><input id="tokenInput" type="password" required><button>进入</button></form></section>
+<section id="tokenPanel" hidden><h2>打开本地页面</h2><p>使用 ORH 启动入口打开，或输入本机 api.token 中的访问凭据。</p><form id="tokenForm"><label for="tokenInput">本地访问凭据</label><input id="tokenInput" type="password" required><button>进入</button></form></section>
 <section class="summary" id="self"><span>正在读取本机状态…</span></section>
 <section id="binding" hidden><h2>绑定账号</h2><form id="bindForm"><label for="cloudURL">Cloud 地址</label><input id="cloudURL" type="url" value="https://cloud.openremotehub.top" required><button class="primary">绑定设备</button></form><div id="bindingCode"></div></section>
 <section><div class="section-heading"><h2>设备</h2><input id="search" type="search" aria-label="搜索设备" placeholder="搜索名称或 IP"></div><div id="devices" class="devices"></div></section>

@@ -8,7 +8,7 @@ decoder = json.JSONDecoder()
 modules = {}
 for system in ["darwin", "windows", "linux"]:
     text = subprocess.check_output(
-        [go, "list", "-deps", "-json", "./agent/cmd/orn-agent"],
+        [go, "list", "-deps", "-json", "./cmd/orh-mesh"],
         env=dict(
             os.environ,
             GOOS=system,
@@ -29,7 +29,7 @@ mobile = json.loads(
     )
 )
 modules[mobile["Path"]] = Path(mobile["Dir"])
-parts = ["Third-party notices for OpenRemoteHub ORN\n\n"]
+parts = ["Third-party notices for OpenRemoteHub Mesh\n\n"]
 parts.append(
     "Go standard library\n"
     + (

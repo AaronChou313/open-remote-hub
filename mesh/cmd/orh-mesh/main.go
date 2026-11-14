@@ -14,7 +14,7 @@ import (
 	"github.com/AaronChou313/open-remote-hub/mesh/internal/state"
 )
 
-var version = "0.2.1"
+var version = "0.3.0"
 
 func main() {
 	path := flag.String("config", state.DefaultPath(), "配置文件")
@@ -48,7 +48,7 @@ func main() {
 	if *openPage {
 		go launcher.OpenURL("http://" + cfg.APIAddr + "/#token=" + token)
 	}
-	log.Printf("ORN %s · http://%s", version, cfg.APIAddr)
+	log.Printf("ORH 组网 %s · http://%s", version, cfg.APIAddr)
 	<-ctx.Done()
 
 }

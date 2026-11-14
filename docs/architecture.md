@@ -6,8 +6,8 @@ FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入
 | --- | --- |
 | app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
 | app/remote_connect/api.py / tailscale.py | 统一远程连接 API、ORN LocalAPI 适配、状态及受控网络操作 |
-| app/orn_runtime.py | 内置 ORN 数据面的进程生命周期、独立服务接管、健康探测与日志 |
-| scripts/orn_setup.py | 安装时定位并固化 ORN 二进制、生成缺省配置、识别独立服务 |
+| app/mesh_runtime.py | 内置 组网 数据面的进程生命周期、独立服务接管、健康探测与日志 |
+| scripts/mesh_setup.py | 安装时定位并固化 组网组件、生成缺省配置、识别独立服务 |
 | app/remote_connect/rustdesk | RustDesk 本机 IPC、后台复用恢复及客户端设置 |
 | app/remote_connect/nodebaby.py | 节点小宝回环状态接口、原生入口和映射服务检测 |
 | static/nodebaby.js | 节点小宝状态、映射筛选与服务检测界面 |
@@ -39,13 +39,13 @@ Zellij 有可能在 socket 已消失、所有子任务均结束后留下继续�
 
 平台扩展通过宿主适配层和通用 Zellij/Docker CLI 接口实现。尚未引入多设备代理或集群抽象。
 
-## ORN 数据面
+## 组网 数据面
 
-主机只安装一个 ORH。`scripts/install.sh` 调用 `scripts/orn_setup.py` 把 ORN 二进制放入 `bin/`，缺省配置写入 ORN 标准目录并复用已有设备身份。`scripts/server.py` 在前台入口启动 `orn_runtime` 监督线程：先探测本机 ORN LocalAPI，已有独立服务时只观察、不重复启动；没有时以子进程方式启动并在退出后按退避重启。ORH 停止时回收自己启动的子进程，独立服务保持不动。
+主机只安装一个 ORH。`scripts/install.sh` 调用 `scripts/mesh_setup.py` 把 组网组件放入 `bin/`，缺省配置写入 组网 标准目录并复用已有设备身份。`scripts/server.py` 在前台入口启动 `mesh_runtime` 监督线程：先探测本机 组网 LocalAPI，已有独立服务时只观察、不重复启动；没有时以子进程方式启动并在退出后按退避重启。ORH 停止时回收自己启动的子进程，独立服务保持不动。
 
-已有独立 ORN 安装（macOS LaunchAgent、Linux systemd 用户服务、Windows 计划任务）可在“网络连接 → ORN”中显式接管：停止并禁用独立单元，改由 ORH 子进程运行，设备身份、账号绑定与本地端口保持不变。接管会短暂重启组网。
+已有独立 组网 安装（macOS LaunchAgent、Linux systemd 用户服务、Windows 计划任务）可在“网络连接 → 组网”中显式接管：停止并禁用独立单元，改由 ORH 子进程运行，设备身份、账号绑定与本地端口保持不变。接管会短暂重启组网。
 
-设备列表来自本机 ORN 的 peer 视图，操作通过 LocalAPI 完成：`/console` 建立每设备 `.localhost` 来源的控制台转发，`/connect` 建立 21118 转发并拉起本机 RustDesk，`/forwards` 提供任意端口转发。目标设备仍需其自身 ORH 接受组网地址作为 Host；已绑定 Cloud 的设备会在心跳中同步自己的组网 IP。
+设备列表来自本机 组网 的 peer 视图，操作通过 LocalAPI 完成：`/console` 建立每设备 `.localhost` 来源的控制台转发，`/connect` 建立 21118 转发并拉起本机 RustDesk，`/forwards` 提供任意端口转发。目标设备仍需其自身 ORH 接受组网地址作为 Host；已绑定 Cloud 的设备会在心跳中同步自己的组网 IP。
 
 
 网关保持浏览器到 Zellij 的原生消息转发。剪贴板层为 Windows Ctrl+V 放行浏览器真实粘贴事件，文本通过 xterm.paste 发送。图片经管理员鉴权、同源检查和大小 / 格式检查后写入私有附件目录，再把路径粘贴到终端。移动端补丁仅替换已识别的 password 输入捕获及默认键盘状态，同时更新 app.js 的 SRI；其他终端库保持上游字节。网关到 Zellij 不发送库默认的定时 Ping，避免 0.45.1 对不支持帧的报错；这项兼容处理不被视为旧会话所有黑屏情况的根因修复。

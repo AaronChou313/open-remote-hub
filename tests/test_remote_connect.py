@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.remote_connect.rustdesk import client, ipc
 from app.remote_connect import api as web, tailscale
-from app import main, access, orn_runtime
+from app import main, access, mesh_runtime
 from test_files import workspace
 import time
 
@@ -39,7 +39,7 @@ def management(monkeypatch,tmp_path,workspace):
     monkeypatch.setattr(client,'data_dir',lambda:data)
     monkeypatch.setattr(client,'autostart_path',lambda:data/'autostart.json')
     monkeypatch.setattr(tailscale,'status',lambda:dict(available=True,state='Running',peers=[]))
-    monkeypatch.setattr(orn_runtime,'status',lambda:dict(available=True,enabled=True,running=True,managed=True))
+    monkeypatch.setattr(mesh_runtime,'status',lambda:dict(available=True,enabled=True,running=True,managed=True))
     monkeypatch.setattr(web,'_directory',(0.0,{}))
     monkeypatch.setattr(web.nodebaby,'status',lambda:dict(available=False,mappings=[],addresses=[]))
     audit=[]
@@ -257,12 +257,12 @@ def test_peer_console_desktop_and_forward(management,monkeypatch):
     assert calls[-1]==('/forwards',{'peer_ip':'100.64.0.9','remote_port':8765,'local_port':0})
     assert http.post('/api/remote-connect/peers/console',json={'peer_ip':'not-an-address'}).status_code==400
     assert http.post('/api/remote-connect/peers/forward',json={'peer_ip':'100.64.0.9','remote_port':0}).status_code==400
-    assert [item[1] for item in audit]==['orn-console','orn-desktop','orn-forward']
+    assert [item[1] for item in audit]==['mesh-console','mesh-desktop','mesh-forward']
 
-def test_overview_embeds_orn_runtime(management):
+def test_overview_embeds_mesh_runtime(management):
     http,_,_=management
     value=http.get('/api/remote-connect').json()
-    assert value['orn']['managed'] is True
+    assert value['mesh']['managed'] is True
 
 
 def test_overview_marks_console_availability(management,monkeypatch):
@@ -283,19 +283,19 @@ def test_overview_marks_console_availability(management,monkeypatch):
 
 def test_orn_management_routes(management,monkeypatch):
     http,_,audit = management
-    monkeypatch.setattr(orn_runtime,'binary',lambda:'/fake/orn')
-    monkeypatch.setattr(orn_runtime,'config_view',lambda:dict(hostname='mac',control_url='https://hs.example',publish={'8765':'127.0.0.1:8765'}))
-    assert http.get('/api/remote-connect/orn/config').json()['hostname']=='mac'
+    monkeypatch.setattr(mesh_runtime,'binary',lambda:'/fake/orn')
+    monkeypatch.setattr(mesh_runtime,'config_view',lambda:dict(hostname='mac',control_url='https://hs.example',publish={'8765':'127.0.0.1:8765'}))
+    assert http.get('/api/remote-connect/mesh/config').json()['hostname']=='mac'
     saved={}
-    monkeypatch.setattr(orn_runtime,'save_config',lambda value:saved.update(value) or dict(managed=True))
+    monkeypatch.setattr(mesh_runtime,'save_config',lambda value:saved.update(value) or dict(managed=True))
     body=dict(hostname='mac-2',control_url='https://hs.example',publish={'8765':'127.0.0.1:8765'})
-    assert http.post('/api/remote-connect/orn/config',json=body).status_code==200
+    assert http.post('/api/remote-connect/mesh/config',json=body).status_code==200
     assert saved==body
-    monkeypatch.setattr(orn_runtime,'restart',lambda:dict(running=True))
-    assert http.post('/api/remote-connect/orn/restart',json={}).json()=={'running':True}
+    monkeypatch.setattr(mesh_runtime,'restart',lambda:dict(running=True))
+    assert http.post('/api/remote-connect/mesh/restart',json={}).json()=={'running':True}
     calls=[]
     monkeypatch.setattr(tailscale,'request',lambda path,body=None,timeout=10: calls.append((path,body)) or {'ok':True})
-    assert http.post('/api/remote-connect/orn/leave',json={}).status_code==400
-    assert http.post('/api/remote-connect/orn/leave',json={'confirm':True}).json()=={'ok':True}
+    assert http.post('/api/remote-connect/mesh/leave',json={}).status_code==400
+    assert http.post('/api/remote-connect/mesh/leave',json={'confirm':True}).json()=={'ok':True}
     assert calls==[('/leave',{'confirm':True})]
     assert [item[1] for item in audit]==['config','restart','leave']

@@ -48,7 +48,7 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 	response.Body.Close()
 	if err != nil || response.StatusCode != 200 || identity.Service != "openremotehub" || !devicePattern.MatchString(identity.InstanceID) || expectedDevice != "" && expectedDevice != identity.InstanceID {
 		transport.CloseIdleConnections()
-		return Entry{}, fmt.Errorf("目标控制台身份不匹配（可能是旧组网节点；请确认目标设备只保留 ORN 节点且 ORH 已绑定）")
+		return Entry{}, fmt.Errorf("目标控制台身份不匹配（可能是旧组网节点；请确认目标设备只保留组网节点且 ORH 已绑定）")
 	}
 	// Reuse an existing browser origin for this device while this process lives.
 	m.mu.Lock()
@@ -142,7 +142,7 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 				return nil
 			},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-				http.Error(w, "控制台连接中断，请返回 ORN 重新连接", http.StatusBadGateway)
+				http.Error(w, "控制台连接中断，请返回组网页面重新连接", http.StatusBadGateway)
 			},
 		}
 		server := &http.Server{ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}

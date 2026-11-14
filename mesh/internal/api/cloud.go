@@ -276,7 +276,7 @@ func (s *Server) cloudAdopt(w http.ResponseWriter, r *http.Request) {
 	s.cloudMu.RUnlock()
 	if current.Bound {
 		if current.BaseURL != base || current.DeviceID != input.DeviceID || current.DeviceToken != input.DeviceToken {
-			fail(w, 409, fmt.Errorf("ORN 已绑定其他设备身份，请先解绑"))
+			fail(w, 409, fmt.Errorf("组网已绑定其他设备身份，请先解绑"))
 			return
 		}
 	}

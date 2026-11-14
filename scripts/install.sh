@@ -14,5 +14,5 @@ if not p.exists():
 Path('.runtime').mkdir(mode=0o700,exist_ok=True)
 print('Installed. Start: ./scripts/start.sh ; choose your password on the local login page.')
 PY
-.venv/bin/python scripts/orn_setup.py
+.venv/bin/python scripts/mesh_setup.py
 PY

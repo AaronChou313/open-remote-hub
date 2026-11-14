@@ -1,6 +1,6 @@
 """Minimal Unix compatibility shims so the console can start on Windows.
 
-The Windows edition keeps the portable console and the ORN data plane. Unix-only
+The Windows edition keeps the portable console and the mesh data plane. Unix-only
 features (PTY terminals, SSH, fd-relative file operations) are hidden in the UI
 and fail explicitly if called, instead of preventing the server from starting.
 """

@@ -41,7 +41,7 @@ func TestForwardRoundTripAndClose(t *testing.T) {
 	}
 	defer connection.Close()
 	connection.SetDeadline(time.Now().Add(3 * time.Second))
-	expected := []byte("ORN真实双向转发")
+	expected := []byte("ORH真实双向转发")
 	if _, err = connection.Write(expected); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestForwardStatsAndEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := []byte("ORN诊断字节计数")
+	payload := []byte("ORH诊断字节计数")
 	if _, err = connection.Write(payload); err != nil {
 		t.Fatal(err)
 	}

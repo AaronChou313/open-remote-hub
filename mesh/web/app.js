@@ -65,7 +65,7 @@ $('#forwardDialog').addEventListener('cancel',event=>{if(busy)event.preventDefau
 $('#forwardForm').onsubmit=event=>{event.preventDefault();action($('#submitForward'),async()=>{try {await connect(selected,connecting,Number($('#remotePort').value),Number($('#localPort').value));$('#forwardDialog').close();} catch(error){$('#formError').textContent=error.message;}});};
 $('#tokenForm').onsubmit=event=>{event.preventDefault();token=$('#tokenInput').value.trim();localStorage.setItem('orn-api-token',token);refresh().then(()=>notice('')).catch(error=>notice(error.message,true));};
 $('#reconnect').onclick=event=>action(event.currentTarget,async()=>{await api('/control',{action:'reconnect'});await refresh();});
-$('#disconnect').onclick=event=>{if(confirm('断开此设备的 ORN 网络？'))action(event.currentTarget,async()=>{await api('/control',{action:'disconnect'});await refresh();});};
+$('#disconnect').onclick=event=>{if(confirm('断开此设备的组网？'))action(event.currentTarget,async()=>{await api('/control',{action:'disconnect'});await refresh();});};
 $('#leave').onclick=event=>{if(confirm(sharedWithORH?'退出网络并解绑此设备的 Cloud 账号？ORH 统一登录也将失效，重新加入需要绑定。':'退出网络并解绑此设备？重新加入需要绑定。'))action(event.currentTarget,async()=>{await api('/leave',{confirm:true});await refresh();});};
 $('#netcheck').onclick=event=>action(event.currentTarget,async()=>{$('#diagnostic').textContent=JSON.stringify(await api('/netcheck',{}),null,2);});
 $('#bindForm').onsubmit=event=>{event.preventDefault();action(event.submitter,async()=>{await api('/cloud/bind',{cloud_url:$('#cloudURL').value.trim()});await refresh();});};
@@ -74,9 +74,9 @@ async function openIntent() {
  if(!mode) return;
  const directory=await api('/directory');
  const device=directory.find(row=>row.instance_id===fragment.get(mode));
- if(!device) throw Error('该设备不属于此 ORN 绑定的账号。请在 Cloud 和 ORN 使用相同账号。');
+ if(!device) throw Error('该设备不属于当前组网账号。请在 Cloud 和组网页面使用相同账号。');
  const ip=device.mesh?.ips?.find(value=>!value.includes(':'));
- if(!ip) throw Error('目标设备尚未加入 ORN。');
+ if(!ip) throw Error('目标设备尚未加入组网。');
  const result=await api('/'+mode,{peer_ip:ip,...(mode==='console'?{device_id:device.instance_id}:{remote_port:21118})});
  history.replaceState(null,'',location.pathname);
  if(mode==='console') location.assign(result.url);

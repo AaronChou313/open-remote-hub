@@ -12,7 +12,7 @@ import (
 // This opt-in check intentionally uses Dial without the LocalAPI PeerIP check.
 // Run it only against isolated QA nodes to verify control-plane ACL isolation.
 func TestCrossAccountDial(t *testing.T) {
-	path := os.Getenv("ORN_E2E_CONFIG")
+	path := os.Getenv("ORH_MESH_E2E_CONFIG")
 	if path == "" {
 		t.Skip("requires an isolated, enrolled QA node")
 	}
@@ -31,14 +31,14 @@ func TestCrossAccountDial(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Establish the same-account service first, then attempt the known foreign IP.
-	connection, err := node.Dial(ctx, "tcp", net.JoinHostPort(os.Getenv("ORN_E2E_ALLOWED"), "19001"))
+	connection, err := node.Dial(ctx, "tcp", net.JoinHostPort(os.Getenv("ORH_MESH_E2E_ALLOWED"), "19001"))
 	if err != nil {
 		t.Fatal("same-account dial", err)
 	}
 	connection.Close()
 	blocked, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
-	connection, err = node.Dial(blocked, "tcp", net.JoinHostPort(os.Getenv("ORN_E2E_FORBIDDEN"), "19001"))
+	connection, err = node.Dial(blocked, "tcp", net.JoinHostPort(os.Getenv("ORH_MESH_E2E_FORBIDDEN"), "19001"))
 	if err == nil {
 		connection.Close()
 		t.Fatal("cross-account dial unexpectedly succeeded")

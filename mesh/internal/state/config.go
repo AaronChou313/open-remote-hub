@@ -32,11 +32,11 @@ type Config struct {
 
 func DefaultPath() string {
 	dir, _ := os.UserConfigDir()
-	return filepath.Join(dir, "orn-agent", "config.json")
+	return filepath.Join(dir, "orh-mesh", "config.json")
 }
 func Load(path string) (Config, string, error) {
 	hostname, _ := os.Hostname()
-	cfg := Config{ControlURL: "https://hs.openremotehub.top", Hostname: hostname + "-orn", StateDir: filepath.Join(filepath.Dir(path), "state"), APIAddr: "127.0.0.1:4789", Cloud: Cloud{BaseURL: "https://cloud.openremotehub.top"}, Publish: map[int]string{21118: "127.0.0.1:21118"}}
+	cfg := Config{ControlURL: "https://hs.openremotehub.top", Hostname: hostname + "-mesh", StateDir: filepath.Join(filepath.Dir(path), "state"), APIAddr: "127.0.0.1:4789", Cloud: Cloud{BaseURL: "https://cloud.openremotehub.top"}, Publish: map[int]string{21118: "127.0.0.1:21118"}}
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var saved struct {

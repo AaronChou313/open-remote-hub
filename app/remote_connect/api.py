@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
 from .rustdesk import client
 from .rustdesk.ipc import NativeError, native
-from app import orn_runtime
+from app import mesh_runtime
 from . import tailscale, nodebaby
 
 
@@ -101,7 +101,7 @@ def overview():
             peer['services'] = sorted(known)
             peer['console'] = 8765 in known
     return dict(rustdesk=client.status(), tailscale=status, nodebaby=nodebaby.status(),
-                lan_urls=tailscale.access_urls(), orn=orn_runtime.status())
+                lan_urls=tailscale.access_urls(), mesh=mesh_runtime.status())
 
 
 @router.get('/rustdesk/settings')
@@ -213,43 +213,43 @@ def tailscale_control(background: BackgroundTasks, value=Depends(body)):
     return result
 
 
-@router.post('/orn/takeover')
-def orn_takeover():
-    result = orn_runtime.takeover()
-    audit('orn', 'takeover')
+@router.post('/mesh/takeover')
+def mesh_takeover():
+    result = mesh_runtime.takeover()
+    audit('mesh', 'takeover')
     return result
 
 
-@router.get('/orn/config')
-def orn_config():
-    if not orn_runtime.binary():
-        raise HTTPException(503, '未发现 ORN Agent')
+@router.get('/mesh/config')
+def mesh_config():
+    if not mesh_runtime.binary():
+        raise HTTPException(503, '未发现组网组件')
     try:
-        return orn_runtime.config_view()
+        return mesh_runtime.config_view()
     except (OSError, ValueError):
-        raise HTTPException(503, '无法读取 ORN 配置') from None
+        raise HTTPException(503, '无法读取组网配置') from None
 
 
-@router.post('/orn/config')
-def orn_save_config(value=Depends(body)):
-    result = orn_runtime.save_config(value)
-    audit('orn', 'config')
+@router.post('/mesh/config')
+def mesh_save_config(value=Depends(body)):
+    result = mesh_runtime.save_config(value)
+    audit('mesh', 'config')
     return result
 
 
-@router.post('/orn/restart')
-def orn_restart():
-    result = orn_runtime.restart()
-    audit('orn', 'restart')
+@router.post('/mesh/restart')
+def mesh_restart():
+    result = mesh_runtime.restart()
+    audit('mesh', 'restart')
     return result
 
 
-@router.post('/orn/leave')
-def orn_leave(value=Depends(body)):
+@router.post('/mesh/leave')
+def mesh_leave(value=Depends(body)):
     if value.get('confirm') is not True:
         raise ValueError('请确认解绑本机设备')
     result = tailscale.request('/leave', {'confirm': True}, timeout=25)
-    audit('orn', 'leave')
+    audit('mesh', 'leave')
     return result
 
 
@@ -267,7 +267,7 @@ def peer_address(value):
 def peer_console(value=Depends(body)):
     address = peer_address(value)
     result = tailscale.request('/console', {'peer_ip': address, 'device_id': value.get('device_id') or ''}, timeout=30)
-    audit(address, 'orn-console')
+    audit(address, 'mesh-console')
     return result
 
 
@@ -275,7 +275,7 @@ def peer_console(value=Depends(body)):
 def peer_desktop(value=Depends(body)):
     address = peer_address(value)
     result = tailscale.request('/connect', {'peer_ip': address, 'remote_port': 21118, 'local_port': 0}, timeout=40)
-    audit(address, 'orn-desktop')
+    audit(address, 'mesh-desktop')
     return result
 
 
@@ -286,7 +286,7 @@ def peer_forward(value=Depends(body)):
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError('请输入 1–65535 的目标端口')
     result = tailscale.request('/forwards', {'peer_ip': address, 'remote_port': port, 'local_port': 0}, timeout=30)
-    audit(f'{address}:{port}', 'orn-forward')
+    audit(f'{address}:{port}', 'mesh-forward')
     return result
 
 

@@ -40,8 +40,8 @@ if sys.platform=='darwin':
             loaded=subprocess.run(['launchctl','print',label],capture_output=True).returncode==0
             if cmd=='stop':
                 if loaded:subprocess.run(['launchctl','bootout',target,str(job)],check=True)
-                from app import orn_runtime
-                if orn_runtime.stop():print('ORN stopped with the console.')
+                from app import mesh_runtime
+                if mesh_runtime.stop():print('ORN stopped with the console.')
                 print('Console stopped; existing terminal sessions and tasks remain running.')
             elif cmd=='start':
                 if not loaded:subprocess.run(['launchctl','bootstrap',target,str(job)],check=True)
@@ -80,8 +80,8 @@ elif cmd=='stop':
         try:p.wait(20)
         except psutil.TimeoutExpired:raise SystemExit('Still stopping; not force-killed')
         state.unlink(missing_ok=True)
-        from app import orn_runtime
-        if orn_runtime.stop():print('ORN stopped with the console.')
+        from app import mesh_runtime
+        if mesh_runtime.stop():print('ORN stopped with the console.')
         print('Stopped console. Existing tasks and terminal sessions remain running.')
     else:print('No console process owned by this script')
 else:print(f'PID {p.pid}' if p else 'Stopped')

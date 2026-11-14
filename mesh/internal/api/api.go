@@ -113,7 +113,7 @@ func (s *Server) Handler() http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			given := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if subtle.ConstantTimeCompare([]byte(given), []byte(s.Token)) != 1 {
-				fail(w, 401, fmt.Errorf("请通过 ORN 启动入口打开本地页面"))
+				fail(w, 401, fmt.Errorf("请通过 ORH 启动入口打开本地页面"))
 				return
 			}
 		}
