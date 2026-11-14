@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer">
+<title>OpenRemoteHub · 我的主机</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./portal.css">
+<script src="./portal.js" type="module"></script>
+</head>
+<body>
+<header><a class="brand" href="./"><span class="brandmark" aria-hidden="true"><svg><use href="./icons.svg#server"></use></svg></span>OpenRemoteHub</a><button id="theme" class="icon-button" aria-label="切换外观" title="切换外观"><svg aria-hidden="true"><use href="./icons.svg#sun"></use></svg></button></header>
+<main>
+<div class="heading"><h1>我的主机</h1><button id="addHost" class="primary"><svg aria-hidden="true"><use href="./icons.svg#plus"></use></svg>添加主机</button></div>
+<div class="toolbar"><input id="search" type="search" placeholder="搜索主机或地址" aria-label="搜索主机或地址"><div class="actions"><button id="checkAll"><svg aria-hidden="true"><use href="./icons.svg#refresh-cw"></use></svg><span>检测连接</span></button><button id="importHosts">导入</button><button id="exportHosts">导出</button></div></div>
+<p id="notice" class="notice" role="status" hidden></p>
+<div class="list-meta"><span id="count"></span><span id="checked" aria-live="polite"></span></div>
+<div id="hosts" class="host-grid"></div>
+<div id="empty" class="empty" hidden><svg aria-hidden="true"><use href="./icons.svg#server"></use></svg><h2>添加第一台主机</h2><p>输入 RemoteHub 地址，或从主机控制台右上角打开“主机入口”。</p><button id="emptyAdd">添加主机</button></div>
+</main>
+<footer><span>OpenRemoteHub</span><span>主机列表保存在当前浏览器</span></footer>
+<dialog id="hostDialog"><form id="hostForm"><div class="dialog-heading"><h2 id="dialogTitle">添加主机</h2><button id="closeDialog" class="icon-button" type="button" aria-label="关闭"><svg aria-hidden="true"><use href="./icons.svg#x"></use></svg></button></div><label for="hostName">名称 <span class="muted">可选</span></label><input id="hostName" maxlength="120" placeholder="例如 Mac mini"><label for="hostUrls">访问地址</label><textarea id="hostUrls" required rows="4" placeholder="192.168.1.20:8765&#10;http://主机名:8765" spellcheck="false"></textarea><small>每行一个地址。同一主机的局域网和组网地址可一起添加。</small><p id="formError" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="cancelDialog">取消</button><button class="primary" type="submit">保存并检测</button></div></form></dialog>
+<input id="importFile" type="file" accept="application/json,.json" hidden>
+</body></html>

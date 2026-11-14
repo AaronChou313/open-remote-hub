@@ -129,6 +129,8 @@ async def lifespan(app):
     stop_sampling.set();thread.join(5)
 
 app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
+from app import discovery
+app.include_router(discovery.router)
 
 @app.middleware('http')
 async def security(request:Request, call_next):
@@ -137,7 +139,8 @@ async def security(request:Request, call_next):
     if not NETWORK.allows(authority,PORT,scheme):
         return JSONResponse({'detail':'Invalid host'},400)
     origin=request.headers.get('origin')
-    if origin and not NETWORK.same_origin(authority,origin,PORT,scheme):
+    discovery_read = request.url.path == discovery.PATH and request.method in ('GET', 'HEAD', 'OPTIONS')
+    if origin and not NETWORK.same_origin(authority,origin,PORT,scheme) and not (discovery_read and discovery.allowed_origin(origin)):
         return JSONResponse({'detail':'Cross-origin request denied'},403)
     native=request.url.path.startswith('/terminal/')
     if native and request.method not in ('GET','HEAD') and not NETWORK.same_origin(authority,origin,PORT,scheme):

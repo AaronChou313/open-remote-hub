@@ -48,3 +48,7 @@ nav{max-height:none;min-height:0;overflow-y:auto}.workspace:has(#dshFrame) main{
  body.sidebar-collapsed aside nav button .orh-icon{width:20px;height:20px}
 }
 @media(max-width:760px){.nav-caption,#sidebarToggle{display:none}}
+
+.account-actions #portalLink {display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;padding:8px;border-radius:7px;font-size:13px;white-space:nowrap}
+.account-actions #portalLink:hover {color:var(--accent);background:var(--soft)}
+@media(max-width:760px){.account-actions #portalLink span {display:none}}

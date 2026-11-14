@@ -35,6 +35,18 @@
 
 当前 Mac 使用 RemoteHub + Zellij 0.45.1 + OrbStack/Docker + Mihomo，并接入 Tailscale、节点小宝和 RustDesk。DSH 已启用网关，其原生进程按需运行。文件、知识库、项目、开发环境、SSH 管理和本地服务页面均属于核心控制台，Codex 可在普通终端中自行运行。
 
+## 统一主机入口
+
+访问 [我的主机](https://aaronchou313.github.io/open-remote-hub/)，添加 RemoteHub 地址即可检测并打开控制台。可同时填写同一主机的局域网、Tailscale、节点小宝地址，检测后按持久主机标识合并，进入时选择可达地址。主机列表支持搜索、编辑、移除和 JSON 导入 / 导出，保存在当前浏览器。
+
+已登录控制台的右上角“主机入口”会将本机可用配置地址带入入口页，首次登记后无需反复输入 IP。地址通过 URL fragment 传递，GitHub Pages 托管文件中不包含本机地址、密码、代理订阅或运行数据。新浏览器可从控制台重新登记或导入导出的列表；当前版本的主机列表使用浏览器本地存储。
+
+首次点击“检测连接”时，请允许浏览器访问本地网络；支持权限查询的浏览器授权后可自动检测，页面运行期间每 30 秒更新。实际连接由访问者的浏览器发起，目标设备需在局域网或已连接的虚拟组网内可达。纯网页检测使用已登记地址，首次未知设备需添加地址或通过控制台登记。浏览器限制导致检测失败时，卡片仍可“直接打开”目标控制台。
+
+后端 `GET /.well-known/openremotehub` 提供最小的服务标识、协议版本、主机名称和持久 UUID。默认允许 `https://aaronchou313.github.io` 跨域读取该接口，其他管理接口继续使用原有认证和同源规则。可通过 `ORH_INSTANCE_NAME` 设置显示名，通过 `ORH_DISCOVERY_ORIGINS` 设置其他入口 Origin，多个值用逗号分隔。UUID 保存在 `.runtime/instance-id`，克隆部署到另一台主机时应生成自己的 UUID。
+
+入口前端源文件在 `portal/`，无 npm 构建依赖。`python3 scripts/build_portal.py` 生成 `.runtime/portal-site/`，可用 `python3 -m http.server 8878 --directory .runtime/portal-site` 本机预览；联调时将相应预览 Origin 加入后端 `ORH_DISCOVERY_ORIGINS`。推送入口相关修改到 `main` 后，GitHub Actions 自动构建并发布 Pages，仓库 Pages 来源使用 GitHub Actions。
+
 ## 功能
 
 - **系统概览**：真实 CPU、内存、磁盘、网络和进程；SQLite 保留 7 天轻量历史。
@@ -333,7 +345,7 @@ Linux 后续用 `systemctl --user start/stop/restart/status openremotehub` 管�
 
 在新设备上运行具备本机终端权限的 AI，将下面这段指令交给它即可。AI 应读取当前仓库和实际环境，安装过程中的系统授权、原生客户端登录及管理员密码由用户完成。
 
-> 请在本机部署 https://github.com/AaronChou313/open-remote-hub ，先读 README.md、.env.example 和现有脚本，检查操作系统、amd64/arm64、Python、Git、Zellij Web 能力、端口和已有服务。Windows 使用 WSL2 Ubuntu，明确实际管理范围。先运行核心控制台及原生终端，再按我的需求接入 Docker、DSH、代理、组网和远程桌面。沿用已有软件、配置、项目和登录信息，按实际账户、路径、IP 设置 .env，配置 launchd 或 systemd 与必要的网络访问。用户自行输入密码和完成系统授权。通过真实登录、文件读写、终端新建/重连、重启恢复及另一台设备的访问验证已启用功能，报告缺少的软件和未验收场景，给出访问地址、启停与更新方式。说明需要我完成的具体操作。
+> 请在本机部署 https://github.com/AaronChou313/open-remote-hub ，先读 README.md、.env.example 和现有脚本，检查操作系统、amd64/arm64、Python、Git、Zellij Web 能力、端口和已有服务。Windows 使用 WSL2 Ubuntu，明确实际管理范围。先运行核心控制台及原生终端，再按我的需求接入 Docker、DSH、代理、组网和远程桌面。沿用已有软件、配置、项目和登录信息，按实际账户、路径、IP 设置 .env，配置 launchd 或 systemd 与必要的网络访问。用户自行输入密码和完成系统授权。通过真实登录、文件读写、终端新建/重连、重启恢复及另一台设备的访问验证已启用功能，报告缺少的软件和未验收场景，给出访问地址、启停与更新方式，并通过控制台右上角“主机入口”登记新主机。说明需要我完成的具体操作。
 
 ### 更新与迁移
 

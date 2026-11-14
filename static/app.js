@@ -103,7 +103,24 @@ async function refresh(force=false){
 }
 let needsSetup=false;
 async function loadAuth(){try{const status=await api('/auth/status');needsSetup=status.needs_setup;$('#setupConfirm').hidden=!needsSetup;$('#password').autocomplete=needsSetup?'new-password':'current-password';$('#passwordLabel').textContent=needsSetup?'设置登录密码':'登录密码';$('#loginSubmit').textContent=needsSetup?'设置密码并进入 →':'进入控制台 →';$('#loginHelp').textContent=needsSetup?'首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。'}catch(e){$('#loginError').textContent=e.message}}
-async function enter(){try{if((await api('/auth/status')).needs_setup){showLogin();await loadAuth();return}me=await api('/me');$('#role').textContent=me.role==='admin'?'管理员':'只读';$('#login').hidden=true;$('#shell').hidden=false;switchView(view)}catch(e){if(!$('#login').hidden)$('#loginError').textContent=e.message;else showError(e)}}
+async function enter() {
+ try {
+  if ((await api('/auth/status')).needs_setup) {showLogin(); await loadAuth(); return;}
+  me = await api('/me');
+  $('#role').textContent = me.role === 'admin' ? '管理员' : '只读';
+  $('#login').hidden = true;
+  $('#shell').hidden = false;
+  const portal = $('#portalLink');
+  portal.href = 'https://aaronchou313.github.io/open-remote-hub/#add=' + encodeURIComponent(JSON.stringify({urls:[location.origin]}));
+  api('/discovery').then(data => {portal.href = data.portal_url;}).catch(() => {
+   portal.title = '使用当前访问地址添加本机';
+  });
+  switchView(view);
+ } catch (error) {
+  if (!$('#login').hidden) $('#loginError').textContent = error.message;
+  else showError(error);
+ }
+}
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubmit');button.disabled=true;try{if(needsSetup&&$('#password').value!==$('#passwordConfirm').value)throw Error('两次输入的密码不一致');await api(needsSetup?'/auth/setup':'/login',{password:$('#password').value});$('#loginForm').reset();$('#loginError').textContent='';needsSetup=false;await enter()}catch(e){$('#loginError').textContent=e.message;await loadAuth()}finally{button.disabled=false}};
 $('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError').textContent='';$('#passwordDialog').showModal()};$('#cancelPassword').onclick=()=>$('#passwordDialog').close();$('#passwordForm').onsubmit=async e=>{e.preventDefault();try{if($('#newPassword').value!==$('#newPasswordConfirm').value)throw Error('两次输入的新密码不一致');await api('/auth/password',{password:$('#newPassword').value});$('#passwordForm').reset();$('#passwordDialog').close();notify('密码已更新，其他登录已失效')}catch(e){$('#passwordError').textContent=e.message}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});
