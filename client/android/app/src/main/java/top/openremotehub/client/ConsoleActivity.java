@@ -82,7 +82,7 @@ public final class ConsoleActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri target = request.getUrl();
-                if (isLocal(target)) return false;
+                if (isLocal(target) || isCloud(target)) return false;
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, target));
                 } catch (ActivityNotFoundException error) {
@@ -148,6 +148,10 @@ public final class ConsoleActivity extends Activity {
         return button;
     }
 
+    private static boolean isCloud(Uri target) {
+        String host = target.getHost();
+        return host != null && (host.equals("cloud.openremotehub.top") || host.endsWith(".openremotehub.top"));
+    }
     private static boolean isLocal(Uri target) {
         String host = target.getHost();
         return host != null && (host.endsWith(".localhost") || host.equals("localhost") || host.equals("127.0.0.1"));
