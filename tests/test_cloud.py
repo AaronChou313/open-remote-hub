@@ -169,3 +169,20 @@ def test_cgnat_address_classification():
     assert not cloud_agent.local_address(ipaddress.ip_address('100.128.0.1'))
     assert not cloud_agent.local_address(ipaddress.ip_address('127.0.0.1'))
     assert not cloud_agent.local_address(ipaddress.ip_address('198.18.0.1'))
+
+
+def test_metadata_keeps_direct_local_entry_and_new_tailscale_address(monkeypatch):
+    from app.network import Network
+    from app.remote_connect import tailscale
+    monkeypatch.setenv('ORH_HOST','0.0.0.0')
+    monkeypatch.setenv('ORH_ALLOWED_HOSTS','192.168.1.20')
+    monkeypatch.setattr(main,'NETWORK',Network.load())
+    monkeypatch.setattr(main,'PORT',8765)
+    monkeypatch.setattr(cloud_agent.psutil,'net_if_stats',lambda:{})
+    monkeypatch.setattr(tailscale,'json_command',lambda argv:{'Self':{'TailscaleIPs':['100.66.11.2'],'DNSName':'mac.example.ts.net.'}})
+    value=cloud_agent.metadata()
+    assert value['addresses'][0] != 'http://127.0.0.1:8765'
+    assert 'http://127.0.0.1:8765' in value['addresses']
+    assert 'http://localhost:8765' in value['addresses']
+    assert 'http://100.66.11.2:8765' in value['addresses']
+    assert '100.66.11.2' in main.NETWORK.hosts

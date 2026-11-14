@@ -92,8 +92,9 @@ def local_address(address):
 
 def metadata():
     from app import main
+    from app.network import Network
     value = discovery.identity()
-    hosts = set(main.NETWORK.hosts) - {'localhost','127.0.0.1','::1'}
+    hosts = set(Network.load().hosts) - {'localhost','127.0.0.1','::1'}
     if main.NETWORK.bind not in ('127.0.0.1','::1','localhost'):
         stats = psutil.net_if_stats()
         for name, items in psutil.net_if_addrs().items():
@@ -117,8 +118,9 @@ def metadata():
         main.NETWORK = replace(main.NETWORK, hosts=frozenset(set(main.NETWORK.hosts) | hosts))
         scheme = 'https' if os.environ.get('ORH_TLS_CERT_FILE') else 'http'
         urls = [f'{scheme}://{f"[{host}]" if ":" in host else host}:{main.PORT}' for host in sorted(hosts)]
+        urls.extend([f'{scheme}://localhost:{main.PORT}',main.NETWORK.local_url(main.PORT)])
     else:
-        urls = []
+        urls = [main.NETWORK.local_url(main.PORT)]
     return dict(instance_id=value['instance_id'],name=value['name'],os=platform.system()+' '+platform.release(),
                 addresses=urls,port=main.PORT)
 

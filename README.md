@@ -70,6 +70,8 @@ docker compose --env-file cloud/.env -f cloud/compose.yml logs --tail=100 cloud 
 
 Cloud 和 HTTPS 网关配置了自动重启。更新代码后执行相同 `up -d --build` 命令。备份应在停止 Cloud 容器后复制 `cloud-data` 数据卷，保留 `caddy-data` 可延续证书状态。Cloud 只存元数据和令牌摘要，设备凭据与 Ticket 不以明文入库。账号不支持邮件验证、密码找回、MFA 或公共账号配额，当前为 MVP。
 
+本次 ECS 部署目录为 `/opt/openremotehub-cloud`，Cloud 健康检查为 `https://cloud.openremotehub.top/api/health`，公网仅发布 Caddy 的 80 / 443 端口。Mac Agent 继续由原有 `local.openremotehub` launchd 作业启动。
+
 本次部署实例为杭州 ECS，`cloud.openremotehub.top` 指向 `121.43.119.168`。Agent 只需能出站访问 Cloud HTTPS，浏览器仍需具备到 Agent 的局域网 / 虚拟组网路由。
 
 ### 前端发布与独立模式
