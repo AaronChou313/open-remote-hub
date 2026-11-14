@@ -1,10 +1,10 @@
-"""Embedded ORN data plane: one ORH install, one user service.
+"""Embedded mesh data plane: one ORH install, one user service.
 
 The Go networking agent stays a separate process for crash isolation, but ORH
 owns its lifecycle. Ownership survives an ORH restart through a pidfile, so a
 hard-killed console never leaves an unmanaged mesh process behind. The standard
-ORN config path is reused, keeping the existing enrollment, device UUID and API
-token. When a standalone ORN service is running, ORH observes it instead of
+mesh config path is reused, keeping the existing enrollment, device UUID and API
+token. When a standalone mesh service is running, ORH observes it instead of
 starting a duplicate until an explicit takeover.
 """
 import ipaddress
@@ -107,7 +107,7 @@ def api_base():
 
 
 def probe(timeout=2):
-    """True when an ORN process for this config answers its loopback API."""
+    """True when a mesh process for this config answers its loopback API."""
     from app.remote_connect import tailscale
     if not token():
         return False
@@ -145,7 +145,7 @@ def ensure_config():
 
 
 def owner():
-    """The ORN process this install started, validated by pid, start time and argv."""
+    """The mesh process this install started, validated by pid, start time and argv."""
     try:
         value = json.loads(pid_path().read_text())
         process = psutil.Process(value['pid'])
@@ -183,7 +183,7 @@ def _spawn():
     global ERROR, RESTARTS
     executable = binary()
     if not executable:
-        raise RuntimeError('未找到 ORN Agent 二进制，请设置 ORH_MESH_BIN')
+        raise RuntimeError('未找到组网组件二进制，请设置 ORH_MESH_BIN')
     with SPAWN:
         if probe():
             return owner()
@@ -199,14 +199,14 @@ def _spawn():
         for _ in range(40):
             if child.poll() is not None:
                 _forget()
-                raise RuntimeError(f'ORN 进程退出，请查看 {log}')
+                raise RuntimeError(f'组网组件退出，请查看 {log}')
             if probe():
                 ERROR = ''
                 return child
             time.sleep(.25)
         child.terminate()
         _forget()
-        raise RuntimeError(f'ORN 未在 10 秒内就绪，请查看 {log}')
+        raise RuntimeError(f'组网组件未在 10 秒内就绪，请查看 {log}')
 
 
 def start():
@@ -279,7 +279,7 @@ def _systemctl(*arguments):
 
 
 def standalone_service():
-    """Describe the standalone ORN unit, if the host still has one and we did not take over."""
+    """Describe the standalone mesh unit, if the host still has one and we did not take over."""
     global SERVICE_CACHE
     if TAKEOVER:
         return None
