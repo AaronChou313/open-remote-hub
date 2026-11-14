@@ -1,4 +1,4 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import android.app.*;
 import android.content.*;
@@ -12,10 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import org.json.*;
-import top.openremotehub.orn.core.mobile.Mobile;
+import top.openremotehub.client.core.mobile.Mobile;
 
 /** Owns the Go runtime while the Activity or RustDesk is in the foreground. */
-public final class OrnService extends Service {
+public final class MeshService extends Service {
     static volatile String error = "";
     static volatile long heartbeat = 0;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -51,10 +51,10 @@ public final class OrnService extends Service {
                 if (connected || SystemClock.elapsedRealtime() < desktopStartingUntil) {
                     holdLocks();
                     getSharedPreferences("desktop", MODE_PRIVATE).edit().putLong("until", System.currentTimeMillis() + 300_000).apply();
-                    notice(connected ? "远程桌面转发中，收尾时请返回 ORN 断开" : "ORN 正在运行，点击管理设备");
+                    notice(connected ? "远程桌面转发中，收尾时请返回 ORH 断开" : "ORH 正在运行，点击管理设备");
                 } else {
                     releaseLocks();
-                    notice("ORN 正在运行，点击管理设备");
+                    notice("ORH 正在运行，点击管理设备");
                 }
                 main.postDelayed(maintainConnection, 15000);
             });
@@ -117,7 +117,7 @@ public final class OrnService extends Service {
         Diagnostics.log("service", "服务创建");
         go.Seq.setContext(getApplicationContext());
         notifications = getSystemService(NotificationManager.class);
-        notifications.createNotificationChannel(new NotificationChannel("orn", "ORN 连接", NotificationManager.IMPORTANCE_LOW));
+        notifications.createNotificationChannel(new NotificationChannel("mesh", "组网连接", NotificationManager.IMPORTANCE_LOW));
         if (Build.VERSION.SDK_INT >= 29) {
             startForeground(1, notification("正在启动设备网络"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         } else {
@@ -141,8 +141,8 @@ public final class OrnService extends Service {
 
     private Notification notification(String status) {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, "orn")
-            .setSmallIcon(R.drawable.ic_orn).setContentTitle("ORH · 设备网络")
+        return new Notification.Builder(this, "mesh")
+            .setSmallIcon(R.drawable.ic_orh).setContentTitle("ORH · 设备网络")
             .setContentText(status).setContentIntent(open).setOngoing(true).build();
     }
 
@@ -218,31 +218,31 @@ public final class OrnService extends Service {
             Mobile.updateNetwork(lastNetwork);
             boolean fresh = Mobile.token().isEmpty();
             if (fresh) Diagnostics.log("core", "启动组网内核 " + networkSummary(lastNetwork));
-            Mobile.start(new File(getFilesDir(), "orn").getAbsolutePath(), Build.MANUFACTURER + " " + Build.MODEL);
+            Mobile.start(new File(getFilesDir(), "mesh").getAbsolutePath(), Build.MANUFACTURER + " " + Build.MODEL);
             error = "";
             heartbeat = SystemClock.elapsedRealtime();
             if (fresh) {
                 Diagnostics.log("core", "组网内核已启动");
-                if (pendingRestore) new Thread(this::restoreSession, "orn-restore").start();
+                if (pendingRestore) new Thread(this::restoreSession, "mesh-restore").start();
             }
             pendingRestore = false;
-            notice("ORN 正在运行，点击管理设备");
+            notice("ORH 正在运行，点击管理设备");
             main.post(() -> {
                 if (destroyed) return;
                 main.removeCallbacks(maintainConnection);
                 main.post(maintainConnection);
             });
         } catch (Exception e) {
-            error = "ORN 启动失败：" + e.getMessage();
+            error = "组网启动失败：" + e.getMessage();
             Diagnostics.log("core", error);
-            android.util.Log.e("ORN", error);
+            android.util.Log.e("ORH", error);
             notice("启动失败，点击重试");
         }
     }
 
     /**
      * Re-creates the last desktop endpoint after a process restart. The saved
-     * loopback port is stable, so RustDesk can reconnect without visiting ORN.
+     * loopback port is stable, so RustDesk can reconnect without visiting the console.
      */
     private void restoreSession() {
         SharedPreferences saved = getSharedPreferences("desktop", MODE_PRIVATE);
@@ -291,8 +291,8 @@ public final class OrnService extends Service {
 
     private void notifyRestored(String address) {
         Intent open = new Intent(Intent.ACTION_VIEW, MainActivity.rustDeskURI(address)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        Notification notification = new Notification.Builder(this, "orn")
-            .setSmallIcon(R.drawable.ic_orn).setContentTitle("远程桌面已恢复")
+        Notification notification = new Notification.Builder(this, "mesh")
+            .setSmallIcon(R.drawable.ic_orh).setContentTitle("远程桌面已恢复")
             .setContentText("点击重新连接 " + address).setContentIntent(PendingIntent.getActivity(this, 2, open, PendingIntent.FLAG_IMMUTABLE))
             .setAutoCancel(true).build();
         notifications.notify(2, notification);

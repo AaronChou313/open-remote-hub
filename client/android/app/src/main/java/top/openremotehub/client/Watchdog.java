@@ -1,4 +1,4 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -13,7 +13,7 @@ public final class Watchdog extends BroadcastReceiver {
     private static final int CODE = 7;
     private static final long ACTIVE = 60_000;
     private static final long IDLE = 10 * 60_000;
-    private static final String ACTION = "top.openremotehub.orn.WATCHDOG";
+    private static final String ACTION = "top.openremotehub.client.WATCHDOG";
 
     static void schedule(Context context, long delay) {
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
@@ -27,16 +27,16 @@ public final class Watchdog extends BroadcastReceiver {
     }
 
     @Override public void onReceive(Context context, Intent intent) {
-        boolean active = OrnService.desktopActive(context);
-        if (!OrnService.alive()) {
+        boolean active = MeshService.desktopActive(context);
+        if (!MeshService.alive()) {
             Diagnostics.log("watchdog", "运行中心已停止，请求重启");
             try {
-                context.startForegroundService(new Intent(context, OrnService.class).putExtra("restore", true));
+                context.startForegroundService(new Intent(context, MeshService.class).putExtra("restore", true));
             } catch (RuntimeException error) {
                 Diagnostics.log("watchdog", "无法重启服务: " + error);
             }
         } else {
-            Diagnostics.log("watchdog", "运行中心正常，心跳 " + (SystemClock.elapsedRealtime() - OrnService.heartbeat) / 1000 + " 秒前");
+            Diagnostics.log("watchdog", "运行中心正常，心跳 " + (SystemClock.elapsedRealtime() - MeshService.heartbeat) / 1000 + " 秒前");
         }
         schedule(context, active ? ACTIVE : IDLE);
     }

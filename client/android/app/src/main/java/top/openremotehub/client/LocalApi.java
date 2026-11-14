@@ -1,10 +1,10 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import org.json.*;
-import top.openremotehub.orn.core.mobile.Mobile;
+import top.openremotehub.client.core.mobile.Mobile;
 
 /** Loopback client for the Go core's LocalAPI, using the in-app bearer token. */
 final class LocalApi {
@@ -12,7 +12,7 @@ final class LocalApi {
 
     static Object call(String path, JSONObject body, String method) throws Exception {
         String token = Mobile.token();
-        if (token.isEmpty()) throw new IOException(OrnService.error.isEmpty() ? "ORH 正在启动，请稍候" : OrnService.error);
+        if (token.isEmpty()) throw new IOException(MeshService.error.isEmpty() ? "ORH 正在启动，请稍候" : MeshService.error);
         HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:4789/api/v1" + path).openConnection();
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(20000);

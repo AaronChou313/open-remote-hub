@@ -1,4 +1,4 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import android.Manifest;
 import android.app.*;
@@ -15,7 +15,7 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.*;
-import top.openremotehub.orn.core.mobile.Mobile;
+import top.openremotehub.client.core.mobile.Mobile;
 
 /** Native phone/tablet management UI, backed by the desktop's identical LocalAPI. */
 public final class MainActivity extends Activity {
@@ -42,7 +42,7 @@ public final class MainActivity extends Activity {
         Diagnostics.attach(this);
         Diagnostics.log("ui","页面创建");
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},1);
-        startForegroundService(new Intent(this,OrnService.class));
+        startForegroundService(new Intent(this,MeshService.class));
         build();
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
@@ -74,9 +74,9 @@ public final class MainActivity extends Activity {
         scroll.setBackgroundColor(color(R.color.surface));
         page = column(); page.setPadding(dp(20),dp(24),dp(20),dp(24)); scroll.addView(page);
         page.addView(text("ORH",14,true)); page.addView(text("设备网络",30,true));
-        LinearLayout self = card(); status = text("正在启动 ORN…",17,true); self.addView(status);
+        LinearLayout self = card(); status = text("正在启动组网…",17,true); self.addView(status);
         LinearLayout controls = new LinearLayout(this);
-        controls.addView(button("重新连接",() -> {Mobile.start(new File(getFilesDir(),"orn").getAbsolutePath(),Build.MANUFACTURER+" "+Build.MODEL); api("/control",new JSONObject().put("action","reconnect"),"POST"); onUI(() -> info("已请求重新连接"));}));
+        controls.addView(button("重新连接",() -> {Mobile.start(new File(getFilesDir(),"mesh").getAbsolutePath(),Build.MANUFACTURER+" "+Build.MODEL); api("/control",new JSONObject().put("action","reconnect"),"POST"); onUI(() -> info("已请求重新连接"));}));
         controls.addView(button("刷新",() -> {}));
         self.addView(controls); page.addView(self);
         backgroundButton=button("允许后台连接",() -> onUI(() -> requestBackground(null)));
@@ -317,12 +317,12 @@ public final class MainActivity extends Activity {
     private void openDesktop(String address) {
         Diagnostics.log("desktop","发起远程桌面 "+address);
         getSharedPreferences("desktop",MODE_PRIVATE).edit().putLong("until",System.currentTimeMillis()+600000).apply();
-        startForegroundService(new Intent(this,OrnService.class).putExtra("desktop",true));
+        startForegroundService(new Intent(this,MeshService.class).putExtra("desktop",true));
         Uri uri=rustDeskURI(address);
         try { startActivity(new Intent(Intent.ACTION_VIEW,uri)); }
         catch (ActivityNotFoundException error) {
             Diagnostics.log("desktop","未安装 RustDesk，已复制地址");
-            getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("ORN 连接地址",address));
+            getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("组网连接地址",address));
             new AlertDialog.Builder(this).setTitle("打开 RustDesk").setMessage("请安装 RustDesk。连接地址已复制："+address).setPositiveButton("关闭",null).show();
         }
     }
@@ -345,7 +345,7 @@ public final class MainActivity extends Activity {
         try {
             startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));
         } catch (Exception error) {
-            info("请在系统设置中允许 ORN 后台运行与高耗电");
+            info("请在系统设置中允许 ORH 后台运行与高耗电");
         }
     }
     private void diagnose() {
@@ -357,7 +357,7 @@ public final class MainActivity extends Activity {
                 JSONObject value=(JSONObject)api("/diagnostics",null,"GET");
                 JSONArray forwards=value.optJSONArray("forwards");
                 JSONArray peers=value.optJSONArray("peers");
-                report.append("ORN ").append(value.optString("version")).append(" · ").append(value.optString("platform")).append("\n");
+                report.append("组网 ").append(value.optString("version")).append(" · ").append(value.optString("platform")).append("\n");
                 report.append("内核运行 ").append(duration(value.optLong("uptime_seconds",0))).append(" · 协程 ").append(value.optInt("goroutines")).append("\n");
                 report.append("组网 ").append(value.optString("backend_state")).append(value.optString("mesh_error").isEmpty()?"":" · "+value.optString("mesh_error")).append("\n");
                 if (peers!=null) for (int index=0;index<peers.length();index++) {
@@ -381,7 +381,7 @@ public final class MainActivity extends Activity {
                 busy=false;
                 new AlertDialog.Builder(this).setTitle("连接诊断").setMessage(body)
                     .setPositiveButton("复制",(dialog,which) -> {
-                        getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("ORN 连接诊断",body));
+                        getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("组网连接诊断",body));
                         info("诊断信息已复制");
                     }).setNegativeButton("关闭",null).show();
             });

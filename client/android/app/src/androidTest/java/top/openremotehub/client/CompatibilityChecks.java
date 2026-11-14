@@ -1,4 +1,4 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import android.app.Activity;
 import android.app.Instrumentation;
@@ -10,7 +10,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.io.DataInputStream;
 import java.io.OutputStream;
-import top.openremotehub.orn.core.mobile.Mobile;
+import top.openremotehub.client.core.mobile.Mobile;
 
 /** Runs against Android's actual Uri implementation, without an external test framework. */
 public final class CompatibilityChecks extends Instrumentation {
@@ -54,7 +54,7 @@ public final class CompatibilityChecks extends Instrumentation {
             }
         }
         if (!address.equals(activity.desktopAddress(peer))) throw new AssertionError("Repeated entry changed the desktop port");
-        getTargetContext().startForegroundService(new Intent(getTargetContext(),OrnService.class).putExtra("desktop",true));
+        getTargetContext().startForegroundService(new Intent(getTargetContext(),MeshService.class).putExtra("desktop",true));
         int port=Integer.parseInt(address.substring(address.lastIndexOf(':')+1));
         try (Socket socket=new Socket("127.0.0.1",port)) {
             socket.setSoTimeout(12000);
@@ -80,7 +80,7 @@ public final class CompatibilityChecks extends Instrumentation {
         if (Mobile.activeForwards()!=0) throw new AssertionError("Closed connection retained activity");
         // A restarted core must reuse the saved local port and existing binding.
         Mobile.stop();
-        Mobile.start(new java.io.File(getTargetContext().getFilesDir(),"orn").getAbsolutePath(),"ORN background QA");
+        Mobile.start(new java.io.File(getTargetContext().getFilesDir(),"mesh").getAbsolutePath(),"ORN background QA");
         String restored;
         readyUntil=SystemClock.elapsedRealtime()+60000;
         while (true) {

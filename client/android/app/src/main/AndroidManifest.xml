@@ -7,12 +7,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <application android:theme="@style/OrnTheme" android:label="ORH" android:icon="@drawable/ic_orn" android:allowBackup="false" android:dataExtractionRules="@xml/backup_rules" android:usesCleartextTraffic="true" android:supportsRtl="true">
+    <application android:theme="@style/OrhTheme" android:label="ORH" android:icon="@drawable/ic_orh" android:allowBackup="false" android:dataExtractionRules="@xml/backup_rules" android:usesCleartextTraffic="true" android:supportsRtl="true">
         <activity android:name=".ConsoleActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
-        <service android:name=".OrnService" android:foregroundServiceType="connectedDevice" android:exported="false" android:stopWithTask="false" />
+        <service android:name=".MeshService" android:foregroundServiceType="connectedDevice" android:exported="false" android:stopWithTask="false" />
         <receiver android:name=".Watchdog" android:exported="false" />
     </application>
 </manifest>

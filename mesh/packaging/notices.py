@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess, json, os, re
 
 root = Path(__file__).resolve().parents[2]
-os.chdir(root)
+os.chdir(root / 'mesh')
 go = "go"
 decoder = json.JSONDecoder()
 modules = {}

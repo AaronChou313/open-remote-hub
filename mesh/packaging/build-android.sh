@@ -10,8 +10,8 @@ go install "golang.org/x/mobile/cmd/gobind@$mobile_version"
 PATH="$(go env GOPATH)/bin:$PATH"
 export PATH
 mkdir -p client/android/app/libs client/android/app/src/main/assets dist
-python3 agent/packaging/notices.py
+python3 mesh/packaging/notices.py
 cp dist/THIRD_PARTY_NOTICES.txt client/android/app/src/main/assets/THIRD_PARTY_NOTICES.txt
-gomobile bind -target=android/arm64 -androidapi=26 -trimpath -ldflags='-s -w' -javapkg=top.openremotehub.orn.core -o client/android/app/libs/orn.aar ./mesh/mobile
+(cd mesh && gomobile bind -target=android/arm64 -androidapi=26 -trimpath -ldflags='-s -w' -javapkg=top.openremotehub.client.core -o ../client/android/app/libs/orh-client.aar ./mobile)
 (cd client/android && ./gradlew --no-daemon clean assembleDebug assembleDebugAndroidTest lintDebug)
-cp client/android/app/build/outputs/apk/debug/app-debug.apk dist/orn-android-arm64-debug.apk
+cp client/android/app/build/outputs/apk/debug/app-debug.apk dist/orh-client-android-debug.apk

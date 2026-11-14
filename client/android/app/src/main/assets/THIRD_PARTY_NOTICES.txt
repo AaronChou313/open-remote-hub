@@ -1,4 +1,4 @@
-Third-party notices for OpenRemoteHub ORN
+Third-party notices for OpenRemoteHub Mesh
 
 Go standard library
 Copyright 2009 The Go Authors.

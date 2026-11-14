@@ -1,4 +1,4 @@
-package top.openremotehub.orn;
+package top.openremotehub.client;
 
 import android.app.Activity;
 import android.content.*;
@@ -156,7 +156,7 @@ public final class ConsoleActivity extends Activity {
     private void fail(String message) {
         Diagnostics.log("console", message);
         if (error == null) return;
-        status.setText(message + "\n\n请返回设备列表重新打开，或检查 ORH / ORN 是否在线。");
+        status.setText(message + "\n\n请返回设备列表重新打开，或检查 ORH / 组网是否在线。");
         error.setVisibility(View.VISIBLE);
     }
 
@@ -181,7 +181,7 @@ public final class ConsoleActivity extends Activity {
             } catch (Exception failure) {
                 runOnUiThread(() -> fail("重新连接失败：" + failure.getMessage()));
             }
-        }, "orn-console").start();
+        }, "mesh-console").start();
     }
 
     private void openExternally() {
