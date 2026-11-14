@@ -1,0 +1,8 @@
+<resources>
+<style name="OrnTheme" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:fontFamily">sans</item><item name="android:colorAccent">#A89AF7</item>
+    <item name="android:windowLightStatusBar">false</item><item name="android:statusBarColor">#101114</item>
+    <item name="android:navigationBarColor">#101114</item><item name="android:windowActionModeOverlay">true</item>
+</style>
+<color name="surface">#101114</color><color name="card">#1A1C21</color><color name="text">#EEEEF2</color><color name="muted">#AAADB9</color><color name="outline">#30323C</color>
+</resources>

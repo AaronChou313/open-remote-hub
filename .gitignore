@@ -23,3 +23,7 @@ docs/*
 
 /cloud/bin/
 /bin/
+/client/android/app/build/
+/client/android/.gradle/
+/client/android/local.properties
+*.aar
