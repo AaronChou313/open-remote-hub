@@ -205,14 +205,32 @@ async function start() {
     }
   } catch (error) { notice('添加链接无效。' + error.message, true); }
   render();
-  // An initial permission prompt must originate from a user gesture.
+  // Query both current and older Chrome permission names. A grant can arrive
+  // after the initial request timed out while the user read the browser prompt.
   if (hosts.length && navigator.permissions) {
-    try {
-      const permission = await navigator.permissions.query({name:'local-network'});
+    let permission = null;
+    for (const name of ['local-network', 'local-network-access']) {
+      try { permission = await navigator.permissions.query({name}); break; }
+      catch { /* Try the permission name supported by this browser. */ }
+    }
+    if (permission) {
+      permission.addEventListener('change', async () => {
+        if (permission.state === 'granted') {
+          if (request) {
+            const previous = request;
+            previous.abort();
+            await previous.done;
+          }
+          check();
+        } else if (permission.state === 'denied') {
+          autoCheck = false;
+          request?.abort();
+          notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
+        }
+      });
       if (permission.state === 'granted') check();
       else if (permission.state === 'denied') notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
-    } catch {
-      // Restore a previously successful user-initiated check on older browsers.
+    } else {
       try { if (localStorage.getItem('openremotehub.portal.detect') === '1') check(); } catch {}
     }
   }
