@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 import hmac
 import json
 import os
@@ -40,8 +40,14 @@ latest = {}
 children = {}
 
 
+@contextmanager
 def db():
-    return sqlite3.connect(DB, timeout=10)
+    connection = sqlite3.connect(DB, timeout=10)
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def read_tasks():

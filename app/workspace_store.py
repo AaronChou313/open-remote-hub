@@ -1,4 +1,5 @@
 """Private metadata, separate from metrics and user project contents."""
+from contextlib import contextmanager
 import json
 import os
 import secrets
@@ -6,13 +7,18 @@ import sqlite3
 from fastapi import HTTPException
 
 
+@contextmanager
 def connection():
     from app.main import DATA
     path=DATA/'workspace.sqlite3'
     c=sqlite3.connect(path,timeout=10)
-    os.chmod(path,0o600)
-    c.execute('CREATE TABLE IF NOT EXISTS workspace (kind TEXT, id TEXT, value TEXT, revision TEXT, PRIMARY KEY(kind,id))')
-    return c
+    try:
+        os.chmod(path,0o600)
+        with c:
+            c.execute('CREATE TABLE IF NOT EXISTS workspace (kind TEXT, id TEXT, value TEXT, revision TEXT, PRIMARY KEY(kind,id))')
+            yield c
+    finally:
+        c.close()
 
 
 def rows(kind):

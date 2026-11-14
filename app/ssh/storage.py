@@ -41,13 +41,18 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+@contextlib.contextmanager
 def connect():
     from app.main import DATA
     path = DATA / 'ssh.sqlite3'
     db = sqlite3.connect(path, timeout=15)
-    os.chmod(path, 0o600)
-    db.execute('CREATE TABLE IF NOT EXISTS records (kind TEXT, id TEXT, value TEXT, PRIMARY KEY(kind,id))')
-    return db
+    try:
+        os.chmod(path, 0o600)
+        with db:
+            db.execute('CREATE TABLE IF NOT EXISTS records (kind TEXT, id TEXT, value TEXT, PRIMARY KEY(kind,id))')
+            yield db
+    finally:
+        db.close()
 
 
 def rows(kind):
