@@ -196,7 +196,7 @@ async function bindingDialog(code = '') {
         intent = null; sessionStorage.removeItem('orh-cloud-intent');
         element.close();
         await loadDevices();
-        message('设备已绑定，等待 Agent 上报首次心跳。');
+        message('设备已绑定。');
       } catch (error) {
         $('#cloudDialogError').textContent = error.message; $('#cloudDialogError').hidden = false;
       }
@@ -234,6 +234,7 @@ function unbindDevice(device, button) {
 }
 
 async function start() {
+  document.title = 'OpenRemoteHub Cloud · 我的设备';
   try {
     const config = await fetch('./cloud-config.json',{cache:'no-store'}).then(response=>response.json());
     base = config.url || base;
