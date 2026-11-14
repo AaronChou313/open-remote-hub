@@ -207,7 +207,7 @@ async function start() {
   render();
   // Query both current and older Chrome permission names. A grant can arrive
   // after the initial request timed out while the user read the browser prompt.
-  if (hosts.length && navigator.permissions) {
+  if (navigator.permissions) {
     let permission = null;
     for (const name of ['local-network', 'local-network-access']) {
       try { permission = await navigator.permissions.query({name}); break; }
@@ -216,6 +216,7 @@ async function start() {
     if (permission) {
       permission.addEventListener('change', async () => {
         if (permission.state === 'granted') {
+          if (!hosts.length) return;
           if (request) {
             const previous = request;
             previous.abort();
@@ -228,10 +229,10 @@ async function start() {
           notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
         }
       });
-      if (permission.state === 'granted') check();
-      else if (permission.state === 'denied') notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
+      if (permission.state === 'granted' && hosts.length) check();
+      else if (permission.state === 'denied' && hosts.length) notice('本地网络访问被浏览器阻止，请在站点设置中允许后重新检测。');
     } else {
-      try { if (localStorage.getItem('openremotehub.portal.detect') === '1') check(); } catch {}
+      try { if (hosts.length && localStorage.getItem('openremotehub.portal.detect') === '1') check(); } catch {}
     }
   }
 }
