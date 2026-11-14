@@ -49,9 +49,19 @@ def initialize():
           digest TEXT PRIMARY KEY, instance_id TEXT NOT NULL REFERENCES devices(instance_id) ON DELETE CASCADE,
           session_digest TEXT NOT NULL REFERENCES sessions(digest) ON DELETE CASCADE,
           expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS mesh_users (
+          account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, hs_id INTEGER UNIQUE NOT NULL);
+        CREATE TABLE IF NOT EXISTS mesh_nodes (
+          device_id TEXT PRIMARY KEY REFERENCES devices(instance_id) ON DELETE CASCADE,
+          hs_node_id INTEGER UNIQUE NOT NULL, node_key TEXT NOT NULL, ips TEXT NOT NULL, services TEXT NOT NULL DEFAULT '[]', paths TEXT NOT NULL DEFAULT '[]');
+        CREATE TABLE IF NOT EXISTS invitations (digest TEXT PRIMARY KEY, expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS attempts (key TEXT NOT NULL, at REAL NOT NULL);
         CREATE INDEX IF NOT EXISTS attempts_key_time ON attempts(key,at);
         ''')
+        if 'paths' not in {row[1] for row in db.execute('PRAGMA table_info(mesh_nodes)')}:
+            db.execute("ALTER TABLE mesh_nodes ADD COLUMN paths TEXT NOT NULL DEFAULT '[]'")
+        if 'kind' not in {row[1] for row in db.execute('PRAGMA table_info(devices)')}:
+            db.execute("ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT 'orh'")
 
 
 def password_hash(password, salt):

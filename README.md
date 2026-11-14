@@ -430,20 +430,27 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 
 ## 网络连接
 
-侧栏进入“网络连接”，或访问 `http://主机地址:8765/#network`。默认进入状态总览，集中展示本地局域网、Tailscale、节点小宝、网络代理和 RustDesk；各详情标签只显示自己的状态和操作。原 `#remote` 和 `#proxy` 入口继续可用。沿用控制台的管理员登录、Host / Origin 和 CSRF 检查。
+控制台沿用状态总览、本地局域网、ORN、节点小宝、网络代理、RustDesk 页面。ORN 状态、检测和连接控制读取本机 `127.0.0.1:4789` LocalAPI，使用 `ORH_ORN_API_URL` 与 `ORH_ORN_API_TOKEN_FILE` 配置入口。安装包与 Go / Android 源码位于 [open-remote-net](https://github.com/AaronChou313/open-remote-net)。
 
-Tailscale 使用本机官方 CLI。实际接入版本为 1.104.7，读取 `status --json` 与 `get --json`，设置使用 `tailscale set` 的指定字段，连接使用保留已有配置的 `tailscale up`。支持设备搜索、在线筛选、组网地址复制、单设备 Ping、原生 `netcheck`，以及 DNS、子网路由、入站拦截和出口节点设置。全网账户与访问策略可通过“组网管理后台”进入官方管理页面。
+### ORN 与 Cloud
 
-断开或重连组网前确认一次，断开请求先返回应答再执行 CLI。通过 Tailscale 访问时，这会中断当前入口，页面提供已有局域网入口。操作结果可在局域网入口刷新查看。组网断开时，设备列表等待重新连接后更新。入站拦截和出口路由更改会提示其对当前远程访问的影响。
+1. 在主机安装 ORN 用户服务并启动 ORH。ORH 已绑定 Cloud 时，自动把现有设备 UUID 和绑定交给本机 ORN，共用一个 Cloud 设备条目。ORH 负责地址和心跳，ORN 负责网络入网与节点对账。
+2. 仅安装 ORN 的电脑运行 `orn-agent open`，点击绑定账号，在 Cloud 确认绑定码。Windows 安装包使用当前用户登录计划任务，macOS 使用 LaunchAgent，Linux 使用用户 systemd。配置和网络身份持久化，重启后恢复。
+3. 控制端也需运行 ORN。Cloud 设备卡片的“ORN 控制台”打开本机 ORN，再经 userspace 网络打开目标控制台。每台目标设备使用独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换。Zellij HTTP / WebSocket 与 DSH 独立入口随该通道转发。
+4. “远程桌面”创建本地 loopback 转发并调用 RustDesk，保留原生密码和桌面权限。RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。
 
-RustDesk 适配本机 1.5.3 的内部 Unix IPC，源码依据见 [官方 IPC](https://github.com/rustdesk/rustdesk/blob/1.5.3/src/ipc.rs)。消息帧依据 [hbb_common BytesCodec fae47e0](https://github.com/rustdesk/hbb_common/blob/fae47e024dd83cef6aaecde0aa7d11731df11649/src/bytes_codec.rs)。支持原生 ID、在线/接入状态、活动远程控制连接数、网络与权限设置、临时密码查看/复制和固定密码设置/清除。固定密码只在请求及 IPC 内存中传递，由原生客户端保存。设置按目标字段比较并合并，保留其他原生选项。
+Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 
-“在当前设备的 RustDesk 中打开”调用当前设备安装的客户端。RustDesk 状态、运行管理、密码、权限和网络设置合并在同一页。临时密码直接显示，每 5 秒从原生 IPC 更新。密码验证与权限选项修改后立即同步，原生客户端的修改也会回显；网络文本设置保存后同步。一次性密码长度和数字选项更改时，由原生客户端生成新的临时密码。用户登录后的后台恢复由控制台生命周期中的守护检查负责，复用已运行的客户端，退出后通过原生 `--server` 启动。自动运行状态保存在 `.runtime/remote-connect/rustdesk-autostart.json`。独立 rustdesk-live 的自动运行选择已迁移至这里。
+```sh
+# 在 ECS 的 ORH 目录执行，group id 按目标主机实际配置。
+# 既有账号迁移另设 ORH_HEADSCALE_LEGACY_ACCOUNT 与 ORH_HEADSCALE_LEGACY_USER_ID。
+docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.yml up -d --build cloud
+docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.yml exec cloud python -m cloud.invite --days 7
+```
 
-本机原独立 `8788` 管理服务及其“我的应用”入口已迁入本模块。原项目目录保留作为迁移备份。当前服务入口统一使用控制台的 `8765` 端口。
+注册为邀请码制。headscale 策略使用 `{"acls":[{"action":"accept","src":["*"],"dst":["autogroup:self:*"]}]}`，通过 `headscale policy set --file <policy.hujson>` 应用。一个 Cloud 账号对应一个 headscale user，设备解绑同步删除节点。迁移前需在线备份 Cloud 与 headscale SQLite 数据库，并保存配置。
 
-可在 `.env` 通过 `ORH_RUSTDESK_BIN`、`ORH_TAILSCALE_BIN` 指定程序路径。当前服务账户需要有相应 CLI 操作权限。RustDesk 版本更新后需验证内部 IPC 兼容性。原生界面的屏幕、键鼠和 FileVault 权限遵循操作系统流程，完整重启后的恢复以用户登录为起点。
-
+不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
 
 ### 节点小宝
 

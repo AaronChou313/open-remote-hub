@@ -19,3 +19,5 @@ __pycache__/
 docs/*
 !docs/architecture.md
 !docs/validation.md
+
+/cloud/bin/

@@ -422,10 +422,10 @@ window.RemoteHubRemoteConnect = (() => {
   }
   function markup() {
     return `<div id="rcRoot" class="remote-connect" data-tab="status">
-<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="status" class="active">${icon("overview")}状态总览</button><button data-rc-tab="lan">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}Tailscale</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="status" class="active">${icon("overview")}状态总览</button><button data-rc-tab="lan">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}ORN</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
 <div class="rc-summaries">
 ${summaryCard("lan", "network", "本地局域网", "rcLanState", "rcLanAddress", "rcLanSummary")}
-${summaryCard("network", "network", "Tailscale", "rcTailState", "rcTailAddress", "rcTailCounts")}
+${summaryCard("network", "network", "ORN", "rcTailState", "rcTailAddress", "rcTailCounts")}
 ${summaryCard("nodebaby", "link", "节点小宝", "nbState", "nbAddress", "nbSummary")}
 ${summaryCard("proxy", "settings", "网络代理", "rcProxyState", "rcProxyAddress", "rcProxySummary")}
 ${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", null)}
@@ -433,7 +433,7 @@ ${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", n
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 Tailscale ${icon("external")}</a></div><a class="button" href="https://login.tailscale.com/admin/machines" target="_blank" rel="noopener">组网管理后台 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
+<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 ORN ${icon("external")}</a></div><a class="button" href="https://aaronchou313.github.io/open-remote-hub/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
         <section id="rcOverview" hidden>
@@ -638,6 +638,7 @@ ${RemoteHubNodeBaby.markup()}
         `<option value="${esc(selected)}">${esc(selected)} · 已选择</option>`,
       );
     exit.value = selected;
+    $("#rcTailSettings").hidden = value.backend === "orn";
     $("#rcTailSave").disabled = !value.preferences;
     if (value.preferences && !tailDirty) fillTailPreferences(value.preferences);
     if (!value.preferences)
@@ -689,7 +690,7 @@ ${RemoteHubNodeBaby.markup()}
               id: node.id,
             });
             if (current())
-              output("Tailscale · " + node.hostname, result.output);
+              output("ORN · " + node.hostname, result.output);
           })),
     );
     document.querySelectorAll("[data-peer-copy]").forEach(
@@ -776,8 +777,8 @@ ${RemoteHubNodeBaby.markup()}
         if (
           action !== "connect" &&
           !(await confirm(
-            action === "disconnect" ? "断开 Tailscale" : "重新连接 Tailscale",
-            "当前通过 Tailscale 建立的控制台和远程桌面连接将中断。可通过局域网入口继续管理。",
+            action === "disconnect" ? "断开 ORN" : "重新连接 ORN",
+            "当前通过 ORN 建立的控制台和远程桌面连接将中断。可通过局域网入口继续管理。",
           ))
         )
           return;
@@ -789,7 +790,7 @@ ${RemoteHubNodeBaby.markup()}
           fallbackNotice(
             "组网操作请求已发送。当前入口断开后，请使用局域网入口查看执行结果。",
           );
-        else notify("已请求连接 Tailscale");
+        else notify("已请求连接 ORN");
         if (action === "connect") await controller.refresh();
       });
     }
@@ -803,7 +804,7 @@ ${RemoteHubNodeBaby.markup()}
     $("#rcTailNetcheck").onclick = () =>
       busy($("#rcTailNetcheck"), async () => {
         const result = await api("/remote-connect/tailscale/netcheck", {});
-        if (current()) output("Tailscale 网络诊断", result.output);
+        if (current()) output("ORN 网络诊断", result.output);
       });
   }
 
