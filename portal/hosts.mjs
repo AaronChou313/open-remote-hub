@@ -32,6 +32,11 @@ export function isIdentity(value) {
 export function addressSpace(address) {
   const host = new URL(address).hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (host === 'localhost' || host.endsWith('.localhost') || host === '::1' || host.startsWith('127.')) return 'loopback';
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const [a,b] = host.split('.').map(Number);
+    if (a === 10 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 100 && b >= 64 && b <= 127 || a === 169 && b === 254) return 'local';
+    return undefined;
+  }
   if (new URL(address).protocol === 'http:') return 'local';
   return undefined;
 }

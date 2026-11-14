@@ -7,6 +7,8 @@ assert.equal(normalizeURL('[::1]:8765'), 'http://[::1]:8765');
 for (const input of ['javascript://alert(1)', 'ftp://mac.local', 'http://u:p@mac.local']) assert.throws(() => normalizeURL(input));
 assert.equal(addressSpace('http://localhost:8765'), 'loopback');
 assert.equal(addressSpace('http://192.168.1.2:8765'), 'local');
+assert.equal(addressSpace('http://100.66.11.2:8765'), 'local');
+assert.equal(addressSpace('http://100.128.0.1:8765'), undefined);
 const id = '1a1ba1ee-eff2-7e81-8f6e-1933661ea66c';
 const other = '2a1ba1ee-eff2-7e81-8f6e-1933661ea66c';
 const identity = {service:'openremotehub', protocol:1, instance_id:id, name:'Mac mini'};

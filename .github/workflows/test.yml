@@ -15,7 +15,7 @@ jobs:
           node-version: '24'
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -q
-      - run: node tests/portal-model.mjs && node --check portal/portal.js
+      - run: node tests/portal-model.mjs && node --check portal/portal.js && node --check portal/cloud.js
       - run: node tests/workflow-ui.mjs
       - run: node tests/workspace-ui.mjs
       - run: node tests/uploads-ui.mjs

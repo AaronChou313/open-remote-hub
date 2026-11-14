@@ -7,7 +7,7 @@ output = root / '.runtime' / 'portal-site'
 if output.exists():
     shutil.rmtree(output)
 output.mkdir(parents=True)
-for name in ('index.html', 'portal.css', 'portal.js', 'hosts.mjs', 'favicon.svg'):
+for name in ('index.html', 'portal.css', 'portal.js', 'hosts.mjs', 'favicon.svg', 'cloud.js', 'cloud-config.json'):
     shutil.copyfile(root / 'portal' / name, output / name)
 for source, target in [('icons.svg', 'icons.svg'), ('icons-LICENSE.txt', 'icons-LICENSE.txt')]:
     shutil.copyfile(root / 'static' / source, output / target)

@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 """SQLite account, binding and one-use ticket storage."""
 import hashlib
 import os
@@ -11,13 +12,18 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+@contextmanager
 def database():
     directory = Path(os.environ.get('ORH_CLOUD_DATA', Path(__file__).resolve().parents[1] / '.runtime/cloud'))
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     connection = sqlite3.connect(directory / 'cloud.sqlite3', timeout=15)
     connection.row_factory = sqlite3.Row
     connection.execute('PRAGMA foreign_keys=ON')
-    return connection
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def initialize():

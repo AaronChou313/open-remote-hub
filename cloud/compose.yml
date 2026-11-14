@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  cloud:
+    build:
+      context: ..
+      dockerfile: cloud/Dockerfile
+    restart: unless-stopped
+    environment:
+      ORH_CLOUD_PUBLIC_URL: https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}
+      ORH_CLOUD_ORIGINS: https://aaronchou313.github.io,https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}
+      ORH_CLOUD_PORTAL: https://aaronchou313.github.io/open-remote-hub/
+    volumes:
+      - cloud-data:/data
+    mem_limit: 512m
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9090/api/health', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+  https:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      ORH_CLOUD_DOMAIN: ${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - cloud
+volumes:
+  cloud-data:
+  caddy-data:
+  caddy-config:

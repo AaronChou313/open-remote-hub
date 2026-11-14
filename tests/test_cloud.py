@@ -168,3 +168,4 @@ def test_cgnat_address_classification():
     assert cloud_agent.local_address(ipaddress.ip_address('100.66.11.2'))
     assert not cloud_agent.local_address(ipaddress.ip_address('100.128.0.1'))
     assert not cloud_agent.local_address(ipaddress.ip_address('127.0.0.1'))
+    assert not cloud_agent.local_address(ipaddress.ip_address('198.18.0.1'))

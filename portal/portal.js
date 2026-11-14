@@ -61,14 +61,14 @@ function render() {
   });
 }
 
-async function probe(url, signal) {
+export async function probe(url, signal, timeoutMS) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal.addEventListener('abort', abort, {once:true});
   // Keep the first browser permission prompt alive while the user reads it.
   // After any HTTP response, subsequent probes use the normal short timeout.
   const awaitingPermission = networkPermission?.state === 'prompt' && !receivedNetworkResponse;
-  const timeout = setTimeout(abort, awaitingPermission ? 120000 : 4000);
+  const timeout = setTimeout(abort, timeoutMS ?? (awaitingPermission ? 120000 : 4000));
   const began = performance.now();
   try {
     const options = {signal:controller.signal, mode:'cors', credentials:'omit', cache:'no-store', redirect:'error'};
@@ -184,7 +184,7 @@ $('#exportHosts').onclick = () => {
   link.href = url; link.download = 'remotehub-hosts.json'; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-function setTheme(dark) {
+export function setTheme(dark) {
   document.documentElement.classList.toggle('dark', dark);
   $('#theme').innerHTML = icon(dark ? 'sun' : 'moon');
   $('#theme').setAttribute('aria-label', dark ? '切换为浅色模式' : '切换为暗色模式');
@@ -253,4 +253,4 @@ async function start() {
 setInterval(() => {
   if (autoCheck && hosts.length && !document.hidden && !request && !$('#hostDialog').open) check();
 }, 30000);
-start();
+if (new URLSearchParams(location.search).has('local')) start();

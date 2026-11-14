@@ -35,17 +35,46 @@
 
 当前 Mac 使用 RemoteHub + Zellij 0.45.1 + OrbStack/Docker + Mihomo，并接入 Tailscale、节点小宝和 RustDesk。DSH 已启用网关，其原生进程按需运行。文件、知识库、项目、开发环境、SSH 管理和本地服务页面均属于核心控制台，Codex 可在普通终端中自行运行。
 
-## 统一主机入口
+## Cloud 账号与 Agent
 
-访问 [我的主机](https://aaronchou313.github.io/open-remote-hub/)，添加 RemoteHub 地址即可检测并打开控制台。可同时填写同一主机的局域网、Tailscale、节点小宝地址，检测后按持久主机标识合并，进入时选择可达地址。主机列表支持搜索、编辑、移除和 JSON 导入 / 导出，保存在当前浏览器。
+Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个人主机运行现有全部管理功能。浏览器从 Cloud 获得一次性 Ticket 后直接导航到 Agent，Agent 向 Cloud 兑换并建立原有管理员 Cookie。Zellij、Docker、文件等请求从浏览器直接到 Agent。Cloud 在线状态依据最近 100 秒内的心跳，浏览器地址检测结果单独展示。
 
-已登录控制台的右上角“主机入口”会将本机可用配置地址带入入口页，首次登记后无需反复输入 IP。地址通过 URL fragment 传递，GitHub Pages 托管文件中不包含本机地址、密码、代理订阅或运行数据。新浏览器可从控制台重新登记或导入导出的列表；当前版本的主机列表使用浏览器本地存储。
+前端入口为 [OpenRemoteHub Cloud](https://aaronchou313.github.io/open-remote-hub/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。Cloud 账号密码至少 8 个字符。
 
-首次点击“检测连接”时，请允许浏览器访问本地网络；支持权限查询的浏览器授权后可自动检测，页面运行期间每 30 秒更新。实际连接由访问者的浏览器发起，目标设备需在局域网或已连接的虚拟组网内可达。纯网页检测使用已登记地址，首次未知设备需添加地址或通过控制台登记。浏览器限制导致检测失败时，卡片仍可“直接打开”目标控制台。
+```sh
+# 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
+./scripts/start.sh
+.venv/bin/python scripts/cloud_agent.py bind --cloud-url https://cloud.openremotehub.top
+.venv/bin/python scripts/cloud_agent.py status
+```
 
-后端 `GET /.well-known/openremotehub` 提供最小的服务标识、协议版本、主机名称和持久 UUID。默认允许 `https://aaronchou313.github.io` 跨域读取该接口，其他管理接口继续使用原有认证和同源规则。可通过 `ORH_INSTANCE_NAME` 设置显示名，通过 `ORH_DISCOVERY_ORIGINS` 设置其他入口 Origin，多个值用逗号分隔。UUID 保存在 `.runtime/instance-id`，克隆部署到另一台主机时应生成自己的 UUID。
+已登录的独立控制台也可点击右上角“绑定 Cloud”生成绑定码。绑定码 10 分钟有效且只能确认一次。Agent 保存私有 `.runtime/cloud-binding.json`，每 30 秒上报名称、系统、端口、局域网 / Tailscale / 已配置组网地址，重启后自动恢复。设备 UUID 沿用 `.runtime/instance-id`，在新主机部署时应生成自己的 UUID。绑定凭据、账号令牌和 Ticket 都不提交到 Git。
 
-入口前端源文件在 `portal/`，无 npm 构建依赖。`python3 scripts/build_portal.py` 生成 `.runtime/portal-site/`，可用 `python3 -m http.server 8878 --directory .runtime/portal-site` 本机预览；联调时将相应预览 Origin 加入后端 `ORH_DISCOVERY_ORIGINS`。推送入口相关修改到 `main` 后，GitHub Actions 自动构建并发布 Pages，仓库 Pages 来源使用 GitHub Actions。
+Cloud 设备卡片支持改名、编辑地址、设置首选入口、连接检测和解绑，手动地址及名称不会被心跳覆盖。点击“打开控制台”或某个地址会签发 90 秒、目标设备专用、单次兑换的 Ticket，使用顶层导航进入 Agent，浏览器跨域探测失败时也可以直接进入。直接访问 Agent IP 时点击“使用 Cloud 账号登录”，完成 Cloud 授权后自动返回。新浏览器登录同一 Cloud 账号即可读取同一设备目录。
+
+绑定模式使用 Cloud 登录，独立本机密码入口隐藏。未绑定模式保留原有本机密码。Cloud 退出会撤销 Cloud 会话与尚未使用的 Ticket；已建立的 Agent Cookie 通过 Agent 退出、到期或解绑撤销。Cloud 解绑后，Agent 在下次成功联系 Cloud 时撤销绑定和本机会话。主机睡眠或断网期间无法即时接收解绑状态。
+
+### Cloud 部署
+
+Cloud 目录为 `cloud/`，使用独立 SQLite 数据卷。将域名 A 记录指向 ECS，安全组开放 TCP 80、443。在部署目录执行以下命令，Caddy 自动申请和续期 HTTPS 证书。
+
+```sh
+cp cloud/.env.example cloud/.env
+# 修改 ORH_CLOUD_DOMAIN，默认 cloud.openremotehub.top
+docker compose --env-file cloud/.env -f cloud/compose.yml up -d --build
+docker compose --env-file cloud/.env -f cloud/compose.yml ps
+docker compose --env-file cloud/.env -f cloud/compose.yml logs --tail=100 cloud https
+```
+
+Cloud 和 HTTPS 网关配置了自动重启。更新代码后执行相同 `up -d --build` 命令。备份应在停止 Cloud 容器后复制 `cloud-data` 数据卷，保留 `caddy-data` 可延续证书状态。Cloud 只存元数据和令牌摘要，设备凭据与 Ticket 不以明文入库。账号不支持邮件验证、密码找回、MFA 或公共账号配额，当前为 MVP。
+
+本次部署实例为杭州 ECS，`cloud.openremotehub.top` 指向 `121.43.119.168`。Agent 只需能出站访问 Cloud HTTPS，浏览器仍需具备到 Agent 的局域网 / 虚拟组网路由。
+
+### 前端发布与独立模式
+
+前端源文件位于 `portal/`，无 npm 构建依赖。`python3 scripts/build_portal.py` 生成 `.runtime/portal-site/`，推送到 main 后由 GitHub Actions 发布。`portal/cloud-config.json` 设置默认 Cloud 地址，登录页也可切换服务地址。Cloud 容器同时提供相同 Web 页面，可直接访问 Cloud 域名登录和授权。
+
+[独立主机列表](https://aaronchou313.github.io/open-remote-hub/?local=1) 保留原有浏览器本地列表、导入导出与发现功能。旧 `#add` 链接自动进入此模式。`/.well-known/openremotehub` 仍仅公开最小身份元数据，管理接口沿用统一 Cookie 和同源校验。
 
 ## 功能
 

@@ -38,6 +38,10 @@ def state():
 
 def save(value):
     with lock:
+        previous = state()
+        if previous != value and ('bound' in (previous.get('status'),value.get('status'))):
+            from app import access
+            access.revoke_all()
         path = state_path()
         temporary = path.with_suffix('.tmp')
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -82,8 +86,8 @@ def call(base, path, body, credential=None):
 
 
 def local_address(address):
-    return address.version == 4 and not address.is_loopback and not address.is_link_local and (
-        address.is_private or address in ipaddress.ip_network('100.64.0.0/10'))
+    networks = ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','100.64.0.0/10')
+    return address.version == 4 and any(address in ipaddress.ip_network(network) for network in networks)
 
 
 def metadata():
@@ -93,7 +97,7 @@ def metadata():
     if main.NETWORK.bind not in ('127.0.0.1','::1','localhost'):
         stats = psutil.net_if_stats()
         for name, items in psutil.net_if_addrs().items():
-            if name not in stats or not stats[name].isup:
+            if name not in stats or not stats[name].isup or name.startswith(('bridge','veth','docker','br-','vmenet','utun')):
                 continue
             for item in items:
                 try:
@@ -143,7 +147,8 @@ def synchronize():
             if state() != value:
                 return
             value = dict(status='bound',cloud_url=value['cloud_url'],credential=value['device_code'],
-                         owner_id=result['owner_id'],username=result['username'],instance_id=result['instance_id'])
+                         owner_id=result['owner_id'],username=result['username'],instance_id=result['instance_id'],
+                         portal_url=value['verification_url'].split('#',1)[0])
             save(value)
     if value.get('status') == 'bound':
         try:
@@ -217,7 +222,7 @@ def login_start(request: Request):
     payload = dict(device=value['instance_id'],address=str(request.base_url).rstrip('/'),state=nonce)
     import urllib.parse
     # The Cloud's same UI is also served at its own origin.
-    response = RedirectResponse(value['cloud_url']+'/#authorize='+urllib.parse.quote(json.dumps(payload),safe=''))
+    response = RedirectResponse(value.get('portal_url',discovery.PORTAL).rstrip('/')+'/#authorize='+urllib.parse.quote(json.dumps(payload),safe=''))
     response.set_cookie('orh_cloud_state',nonce,httponly=True,samesite='lax',secure=request.url.scheme=='https',max_age=600)
     return response
 

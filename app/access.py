@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 """Durable, revocable browser sessions. Only digests are persisted."""
 import hashlib
 import sqlite3
@@ -5,11 +6,16 @@ import time
 from fastapi import Request, HTTPException
 
 
+@contextmanager
 def connection():
     from app import main
     c=sqlite3.connect(main.DATA/'auth.sqlite3',timeout=10)
     c.execute('CREATE TABLE IF NOT EXISTS sessions (digest TEXT PRIMARY KEY, role TEXT, expires REAL, credential TEXT)')
-    return c
+    try:
+        with c:
+            yield c
+    finally:
+        c.close()
 
 
 def credential(role):
@@ -39,3 +45,8 @@ def admin(request:Request):
     session=get(request.cookies.get('orh',''))
     if not session or session['role']!='admin':raise HTTPException(403,'仅管理员可操作终端')
     return session
+
+
+def revoke_all():
+    with connection() as c:
+        c.execute('DELETE FROM sessions')
