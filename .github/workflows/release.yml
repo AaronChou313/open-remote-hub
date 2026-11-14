@@ -1,0 +1,57 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  mesh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: mesh/go.sum
+      - run: sh scripts/build_mesh.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mesh
+          path: dist/orh-mesh-*
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: mesh/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
+      - name: Build client APK
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          sh mesh/packaging/build-android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client
+          path: dist/orh-client-android-debug.apk
+  publish:
+    needs: [mesh, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/orh-mesh-*
+            dist/orh-client-android-debug.apk
+          generate_release_notes: true

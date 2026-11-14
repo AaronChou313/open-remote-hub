@@ -5,7 +5,7 @@ FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入
 | 模块 | 职责 |
 | --- | --- |
 | app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
-| app/remote_connect/api.py / tailscale.py | 统一远程连接 API、ORN LocalAPI 适配、状态及受控网络操作 |
+| app/remote_connect/api.py / tailscale.py | 统一远程连接 API、组网 LocalAPI 适配、状态及受控网络操作 |
 | app/mesh_runtime.py | 内置 组网 数据面的进程生命周期、独立服务接管、健康探测与日志 |
 | scripts/mesh_setup.py | 安装时定位并固化 组网组件、生成缺省配置、识别独立服务 |
 | app/remote_connect/rustdesk | RustDesk 本机 IPC、后台复用恢复及客户端设置 |

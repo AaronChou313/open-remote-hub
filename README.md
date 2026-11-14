@@ -490,7 +490,7 @@ VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接�
 
 ## ORH 客户端（Android）
 
-下载 Release 中的 `orh-client-android-debug.apk`。包名为 `top.openremotehub.client`，最低 Android 8；与旧的 ORN 应用是两个不同应用，安装前请先卸载旧应用。
+下载 Release 中的 `orh-client-android-debug.apk`。包名为 `top.openremotehub.client`，最低 Android 8；与旧的 ORN 版本应用是两个不同应用，安装前请先卸载旧应用。
 
 打开后：绑定 Cloud 账号 → 设备列表 → 控制台（应用内 WebView）或远程桌面。绑定页会显示 24pt 绑定码、剩余有效时间，并提供“复制绑定码”和“前往 Cloud 确认”；确认后页面自动变为已绑定。设备卡片显示在线状态、直连/中继与“仅远程桌面”标记。
 
