@@ -115,7 +115,31 @@ def parse_mac_listeners(output):
     return rows
 
 
-host = MacHost() if platform.system() == 'Darwin' else LinuxHost()
+class WindowsHost(Host):
+    def info(self):
+        return dict(hostname=platform.node(), system='Windows', version=platform.version(),
+                    arch=platform.machine(), cores=psutil.cpu_count(), boot=psutil.boot_time())
+
+    def services(self, scope='user'):
+        result = []
+        if not hasattr(psutil, 'win_service_iter'):
+            return result
+        try:
+            for service in psutil.win_service_iter():
+                info = service.as_dict()
+                result.append(dict(pid=None, exit='', name=info.get('name') or '',
+                                   status=info.get('status'), description=info.get('display_name'),
+                                   source='service', scope='system', managed=False))
+        except psutil.Error:
+            pass
+        return result
+
+    def proxy_status(self):
+        return dict(platform='Windows', proxies=[], vpn=None, note='Windows 系统代理由系统设置或桌面客户端管理')
+
+
+host = (MacHost() if platform.system() == 'Darwin'
+        else WindowsHost() if platform.system() == 'Windows' else LinuxHost())
 
 
 def process_detail(pid):

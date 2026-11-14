@@ -72,8 +72,9 @@ def token_path():
 
 
 def log_path():
-    from app.main import DATA
-    return DATA / 'orn.log'
+    # Kept independent from app.main so CLI helpers can stop the agent without
+    # importing the whole console (and its platform shims).
+    return ROOT / '.runtime' / 'orn.log'
 
 
 def pid_path():

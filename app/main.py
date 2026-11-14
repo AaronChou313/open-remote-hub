@@ -15,7 +15,7 @@ import time
 
 import psutil
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from app.platforms import command, host, service_detail
@@ -435,8 +435,18 @@ def task_logs(key:str):
     with p.open('rb') as f:
         f.seek(max(0,p.stat().st_size-65536));return {'output':f.read().decode(errors='replace')}
 
+# Unix-only features stay hidden on the Windows edition instead of failing on click.
+WINDOWS_EDITION = os.name == 'nt'
+HIDDEN_ON_WINDOWS = ('zellij', 'ssh', 'files', 'dsh', 'projects', 'environments')
+
+
 @app.get('/')
-def index():return FileResponse(ROOT/'static/index.html')
+def index():
+    page = (ROOT / 'static' / 'index.html').read_text(encoding='utf-8')
+    if WINDOWS_EDITION:
+        rules = ''.join(f'[data-view="{view}"]{{display:none}}' for view in HIDDEN_ON_WINDOWS)
+        page = page.replace('</head>', f'<style>{rules}</style></head>')
+    return HTMLResponse(page)
 from app.dsh import router as dsh_router
 app.include_router(dsh_router)
 from app.environments import router as environments_router

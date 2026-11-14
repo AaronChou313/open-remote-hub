@@ -4,7 +4,10 @@ from pathlib import Path
 import shutil
 import sys
 
-BINARY = Path(os.environ.get('ORH_RUSTDESK_BIN', '/Applications/RustDesk.app/Contents/MacOS/RustDesk' if sys.platform == 'darwin' else shutil.which('rustdesk') or '/usr/bin/rustdesk'))
+BINARY = Path(os.environ.get('ORH_RUSTDESK_BIN',
+    '/Applications/RustDesk.app/Contents/MacOS/RustDesk' if sys.platform == 'darwin'
+    else r'C:\Program Files\RustDesk\rustdesk.exe' if sys.platform == 'win32'
+    else shutil.which('rustdesk') or '/usr/bin/rustdesk'))
 SOCKET = Path(f'/tmp/RustDesk-{os.getuid()}/ipc')
 
 

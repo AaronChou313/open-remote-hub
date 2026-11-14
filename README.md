@@ -326,11 +326,29 @@ git clone <仓库地址> src/<仓库目录>
 | --- | --- |
 | macOS arm64 / amd64 | 原生 Python + launchd；已在 Apple Silicon Mac 实机使用，Intel Mac 待实机验收 |
 | Linux amd64 / arm64 | 原生 Python + systemd，优先 Ubuntu 24.04+；已有 Linux 适配和 Ubuntu amd64 CI，完整部署及 arm64 待实机验收 |
-| Windows amd64 / arm64 | 当前通过 WSL2 Ubuntu 部署，按 Linux 流程安装；Windows 原生适配尚未实现，WSL2 部署待实机验收 |
+| Windows amd64 / arm64 | 原生**预览版**：Python 控制台 + 登录计划任务，内置 ORN；终端 / SSH / 文件 / DSH / 项目 / 开发环境在 Windows 上隐藏，RustDesk 设置页不可用（远程桌面仍由 ORN 调用已安装的 RustDesk）。需要完整功能可改用 WSL2 Ubuntu |
 
 新主机的基础安装只有虚拟环境、配置和启动几步。完整启用所有模块还需安装相应原生软件、完成账户登录及系统授权，现有 `install.sh` 只安装 Python 依赖。各架构需使用对应的 Python、Zellij、DSH、Docker 和代理二进制，并现场核对其可用版本。
 
-Windows 先在管理员 PowerShell 执行 `wsl --install -d Ubuntu-24.04`，按提示重启并创建 Linux 用户，再让 AI 在 WSL 的 `~/Projects` 内部署。当前代码使用 Unix PTY、文件锁、UID 和 Unix Socket。WSL 中的进程、网卡、systemd 与 RustDesk IPC 按 Linux 环境读取，Windows 原生服务和桌面客户端尚无直接管理适配。访问 Windows 文件需配置 `/mnt/c/...` 等授权目录。WSL 的局域网访问、Windows 防火墙、发行版随 Windows 启动均需单独配置和验证，Windows 11 支持的镜像网络可简化访问。[WSL 安装](https://learn.microsoft.com/en-us/windows/wsl/install) · [WSL 网络](https://learn.microsoft.com/en-us/windows/wsl/networking) · [WSL systemd](https://learn.microsoft.com/en-us/windows/wsl/systemd)
+### Windows 预览版（原生）
+
+需要 Python 3.11+（安装时勾选 Add to PATH）、已安装 RustDesk，以及 `orn-agent-windows-amd64.exe`（Release 里 `orn-windows-amd64.zip` 解压后的 `dist/orn-agent-windows-amd64.exe`）。把它放在与本仓库同级的 `open-remote-net\dist\`，或设置 `ORH_ORN_SOURCE` 指向它。
+
+```powershell
+git clone https://github.com/AaronChou313/open-remote-hub.git
+cd open-remote-hub
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+安装脚本会创建 `.venv`、安装依赖、生成 `.env`（自动把本机 IPv4 写入 `ORH_ALLOWED_HOSTS`）、把 ORN 放到 `bin\orn-agent.exe`、注册登录时启动的计划任务 `OpenRemoteHub`，并打开 `http://127.0.0.1:8765/`。首次使用需设置管理员密码并绑定 Cloud；ORN 随之启动并出现在设备列表中。
+
+- 启停：开始菜单「OpenRemoteHub」打开控制台，「OpenRemoteHub 停止」停止控制台与内置 ORN；也可用 `scripts\start.cmd`、`scripts\stop.cmd`。
+- 可用：系统概览、我的应用、容器（需 Docker CLI）、网络连接（设备列表 / 对端控制台 / 远程桌面 / ORN 管理）、知识库、本地服务。
+- 暂不可用：终端（Zellij 无 Windows 原生版）、SSH、文件管理、DSH、项目、开发环境——这些入口在 Windows 上隐藏；RustDesk 设置页依赖 Unix Socket，同样不可用，但远程桌面仍由 ORN 调用已安装的 RustDesk。
+- 卸载：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Uninstall`（保留 `.runtime` 数据）。
+- 首次启动若出现 Windows 防火墙提示，请允许专用网络访问；其他设备用 `http://<本机IP>:8765/` 访问，需要额外主机名时补充 `ORH_ALLOWED_HOSTS`。
+
+完整功能（终端、文件、SSH、DSH）仍需 WSL2：先在管理员 PowerShell 执行 `wsl --install -d Ubuntu-24.04`，按提示重启并创建 Linux 用户，再按 Linux 流程在 WSL 的 `~/Projects` 内部署。WSL 中的进程、网卡、systemd 与 RustDesk IPC 按 Linux 环境读取；访问 Windows 文件需配置 `/mnt/c/...` 等授权目录。WSL 的局域网访问、Windows 防火墙、发行版随 Windows 启动均需单独配置和验证，Windows 11 支持的镜像网络可简化访问。[WSL 安装](https://learn.microsoft.com/en-us/windows/wsl/install) · [WSL 网络](https://learn.microsoft.com/en-us/windows/wsl/networking) · [WSL systemd](https://learn.microsoft.com/en-us/windows/wsl/systemd)
 
 ### 基础安装与配置
 
