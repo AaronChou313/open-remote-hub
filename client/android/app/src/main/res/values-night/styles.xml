@@ -4,5 +4,5 @@
     <item name="android:windowLightStatusBar">false</item><item name="android:statusBarColor">#101114</item>
     <item name="android:navigationBarColor">#101114</item><item name="android:windowActionModeOverlay">true</item>
 </style>
-<color name="surface">#101114</color><color name="card">#1A1C21</color><color name="text">#EEEEF2</color><color name="muted">#AAADB9</color><color name="outline">#30323C</color>
+<color name="surface">#101114</color><color name="card">#1A1C21</color><color name="text">#EEEEF2</color><color name="muted">#AAADB9</color><color name="outline">#30323C</color><color name="accent">#A89AF7</color><color name="accentSoft">#2A2740</color><color name="success">#5FD3A2</color>
 </resources>

@@ -3,6 +3,7 @@ package top.openremotehub.client;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -22,7 +23,9 @@ public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout page, binding;
-    private TextView status, message;
+    private TextView status, message, selfDetail, selfChip, selfDot, updateBanner;
+    private String latestUpdateUrl = "";
+    private boolean boundBefore;
     private Button backgroundButton;
     private String pendingDesktop;
     private GridLayout devices;
@@ -69,40 +72,156 @@ public final class MainActivity extends Activity {
         Button button = new Button(this); button.setText(label); button.setAllCaps(false);
         button.setOnClickListener(view -> perform(button,work)); return button;
     }
+
+    private TextView muted(String value) {
+        TextView view = text(value, 13, false); view.setTextColor(color(R.color.muted)); return view;
+    }
+    private TextView section(String value) {
+        TextView view = text(value, 12, true); view.setTextColor(color(R.color.muted));
+        view.setPadding(0, dp(18), 0, dp(6)); return view;
+    }
+    private TextView chip(String value) {
+        TextView view = new TextView(this);
+        view.setText(value); view.setTextSize(11); view.setTextColor(color(R.color.accent));
+        view.setPadding(dp(8), dp(3), dp(8), dp(3));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color(R.color.accentSoft)); background.setCornerRadius(dp(20));
+        view.setBackground(background);
+        return view;
+    }
+    private Button primary(String label, Work work) {
+        Button button = button(label, work);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color(R.color.accent)); background.setCornerRadius(dp(12));
+        button.setBackground(background); button.setTextColor(Color.WHITE);
+        button.setTypeface(null, Typeface.BOLD); button.setTextSize(14);
+        button.setPadding(dp(18), dp(10), dp(18), dp(10));
+        return button;
+    }
+    private Button secondary(String label, Work work) {
+        Button button = button(label, work);
+        button.setTextSize(13);
+        return button;
+    }
+    private void copy(String value) {
+        getSystemService(ClipboardManager.class).setPrimaryClip(ClipData.newPlainText("ORH 绑定码", value));
+        info("绑定码已复制");
+    }
+    private static String stateLabel(String value) {
+        switch (value) {
+            case "Running": return "已连接";
+            case "Starting": return "连接中";
+            case "NeedsLogin": return "需要登录";
+            case "NeedsMachineAuth": return "等待批准";
+            case "Stopped": return "已断开";
+            case "NoState": return "初始化";
+            default: return value.isEmpty() ? "连接中" : value;
+        }
+    }
+    private String versionName() {
+        try { return getPackageManager().getPackageInfo(getPackageName(),0).versionName; }
+        catch (Exception error) { return ""; }
+    }
+    private void checkForUpdate(boolean manual) {
+        if (busy) return;
+        Updates.check(worker, main, versionName(), release -> {
+            if (!active) return;
+            if (release == null) {
+                updateBanner.setVisibility(View.GONE);
+                if (manual) info("已是最新版本 " + versionName());
+                return;
+            }
+            latestUpdateUrl = release.url;
+            updateBanner.setText("新版本 " + release.version + " · 更新");
+            updateBanner.setVisibility(View.VISIBLE);
+            if (manual) new AlertDialog.Builder(this).setTitle("发现新版本 " + release.version)
+                .setMessage(release.notes.isEmpty() ? "可以下载安装新版本。" : release.notes)
+                .setPositiveButton("下载", (dialog, which) -> open(release.url))
+                .setNegativeButton("稍后", null).show();
+            else info("新版本 " + release.version + " 可用");
+        });
+    }
+    private void renderBinding(JSONObject cloud, boolean bound) {
+        binding.removeAllViews();
+        binding.setVisibility(bound ? View.GONE : View.VISIBLE);
+        if (bound) return;
+        binding.addView(text("连接 Cloud 账号", 20, true));
+        binding.addView(muted("绑定后可在其他设备打开这台设备的控制台与远程桌面。"));
+        JSONObject pending = cloud == null ? null : cloud.optJSONObject("pending");
+        if (pending != null) {
+            binding.addView(muted("在 Cloud 输入绑定码"));
+            TextView code = text(pending.optString("user_code"), 30, true);
+            code.setTextColor(color(R.color.accent)); code.setLetterSpacing(0.12f);
+            code.setPadding(0, dp(6), 0, dp(2));
+            binding.addView(code);
+            long left = (long) pending.optDouble("expires", 0) - System.currentTimeMillis() / 1000;
+            binding.addView(muted(left > 0 ? "约 " + Math.max(1, left / 60) + " 分钟内有效，确认后自动完成绑定。" : "绑定码已过期，请重新获取。"));
+            LinearLayout row = new LinearLayout(this);
+            row.addView(primary("前往 Cloud 确认", () -> onUI(() -> open(pending.optString("verification_url")))));
+            row.addView(secondary("复制绑定码", () -> copy(pending.optString("user_code"))));
+            binding.addView(row);
+        } else {
+            binding.addView(primary("绑定账号", () -> api("/cloud/bind",
+                new JSONObject().put("cloud_url", "https://cloud.openremotehub.top"), "POST")));
+        }
+    }
     private void build() {
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true);
         scroll.setBackgroundColor(color(R.color.surface));
         page = column(); page.setPadding(dp(20),dp(24),dp(20),dp(24)); scroll.addView(page);
-        page.addView(text("ORH",14,true)); page.addView(text("设备网络",30,true));
-        LinearLayout self = card(); status = text("正在启动组网…",17,true); self.addView(status);
+
+        LinearLayout brand = new LinearLayout(this); brand.setOrientation(LinearLayout.HORIZONTAL); brand.setGravity(Gravity.CENTER_VERTICAL);
+        TextView mark = text("ORH",15,true); mark.setTextColor(color(R.color.accent)); mark.setLetterSpacing(0.14f); brand.addView(mark);
+        updateBanner = text("",12,false); updateBanner.setTextColor(color(R.color.accent)); updateBanner.setGravity(Gravity.END);
+        updateBanner.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); updateBanner.setVisibility(View.GONE);
+        updateBanner.setOnClickListener(view -> { if (!latestUpdateUrl.isEmpty()) open(latestUpdateUrl); });
+        brand.addView(updateBanner); page.addView(brand);
+        page.addView(text("设备网络",30,true));
+
+        LinearLayout self = card();
+        LinearLayout head = new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(Gravity.CENTER_VERTICAL);
+        selfDot = text("●",13,false); selfDot.setTextColor(color(R.color.muted)); selfDot.setPadding(0,0,dp(7),0); head.addView(selfDot);
+        status = text("正在启动组网…",18,true); status.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); head.addView(status);
+        selfChip = chip("连接中"); head.addView(selfChip); self.addView(head);
+        selfDetail = text("",13,false); selfDetail.setTextColor(color(R.color.muted)); self.addView(selfDetail);
         LinearLayout controls = new LinearLayout(this);
-        controls.addView(button("重新连接",() -> {Mobile.start(new File(getFilesDir(),"mesh").getAbsolutePath(),Build.MANUFACTURER+" "+Build.MODEL); api("/control",new JSONObject().put("action","reconnect"),"POST"); onUI(() -> info("已请求重新连接"));}));
-        controls.addView(button("刷新",() -> {}));
-        self.addView(controls); page.addView(self);
-        backgroundButton=button("允许后台连接",() -> onUI(() -> requestBackground(null)));
-        self.addView(backgroundButton);
-        message = text("",14,false); message.setTextColor(color(R.color.muted)); page.addView(message);
-        binding = card(); page.addView(binding);
-        devices = new GridLayout(this); page.addView(devices);
-        LinearLayout options = new LinearLayout(this);
-        options.addView(button("网络诊断",() -> {
-            Object result=api("/netcheck",new JSONObject(),"POST");
-            onUI(() -> {if (active) new AlertDialog.Builder(this).setTitle("网络诊断").setMessage(result.toString()).setPositiveButton("关闭",null).show();});
+        controls.addView(primary("重新连接", () -> {
+            Mobile.start(new File(getFilesDir(),"mesh").getAbsolutePath(),Build.MANUFACTURER+" "+Build.MODEL);
+            api("/control",new JSONObject().put("action","reconnect"),"POST");
+            onUI(() -> info("已请求重新连接"));
         }));
-        Button leave = new Button(this); leave.setText("退出网络"); leave.setAllCaps(false);
-        leave.setOnClickListener(view -> new AlertDialog.Builder(this).setTitle("退出当前网络？")
-            .setMessage("移除此设备的账号绑定和网络身份。重新连接需要绑定账号。")
-            .setNegativeButton("取消",null).setPositiveButton("退出",(dialog,which) -> perform(leave,() -> {
+        controls.addView(secondary("刷新", this::refresh));
+        self.addView(controls);
+        backgroundButton = secondary("允许后台连接", () -> onUI(() -> requestBackground(null)));
+        self.addView(backgroundButton);
+        page.addView(self);
+
+        message = text("",13,false); message.setTextColor(color(R.color.muted)); page.addView(message);
+        binding = card(); page.addView(binding);
+        page.addView(section("设备"));
+        devices = new GridLayout(this); page.addView(devices);
+
+        page.addView(section("更多"));
+        GridLayout options = new GridLayout(this); options.setColumnCount(3);
+        Button leave = secondary("解绑设备", () -> {});
+        leave.setOnClickListener(view -> new AlertDialog.Builder(this).setTitle("解绑这台设备？")
+            .setMessage("将删除本机在 Cloud 的设备条目与组网身份，控制台和远程桌面需要重新绑定后才能使用。")
+            .setNegativeButton("取消",null).setPositiveButton("解绑",(dialog,which) -> perform(leave,() -> {
                 api("/leave",new JSONObject().put("confirm",true),"POST");
                 getSharedPreferences("desktop",MODE_PRIVATE).edit().clear().apply();
             })).show());
-        Button diagnose=new Button(this); diagnose.setText("连接诊断"); diagnose.setAllCaps(false);
-        diagnose.setOnClickListener(view -> diagnose());
-        options.addView(diagnose);
-        options.addView(button("厂商后台设置",() -> openVendorSettings()));
-        options.addView(leave); page.addView(options);
+        Button netcheck = secondary("网络诊断", () -> {
+            Object result=api("/netcheck",new JSONObject(),"POST");
+            onUI(() -> {if (active) new AlertDialog.Builder(this).setTitle("网络诊断").setMessage(result.toString()).setPositiveButton("关闭",null).show();});
+        });
+        for (Button action : new Button[]{netcheck, secondary("连接诊断", this::diagnose), secondary("检查更新", () -> checkForUpdate(true)), secondary("厂商后台设置", this::openVendorSettings), leave}) {
+            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+            params.width = 0; params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            params.setMargins(dp(2), dp(2), dp(2), dp(2));
+            options.addView(action, params);
+        }
+        page.addView(options);
         setContentView(scroll);
-        // Keep controls clear of status/navigation bars under Android 15 edge-to-edge.
         scroll.setOnApplyWindowInsetsListener((view,insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());
@@ -112,6 +231,7 @@ public final class MainActivity extends Activity {
             }
             return insets;
         });
+        checkForUpdate(false);
     }
     @Override public void onResume() {
         super.onResume(); active=true;
@@ -200,23 +320,20 @@ public final class MainActivity extends Activity {
         JSONObject device=self.optJSONObject("device");
         int connections=0;
         for (int index=0;index<forwards.length();index++) connections+=forwards.optJSONObject(index).optInt("connections");
-        String line=(device==null?"":ips(device))+" · "+("Running".equals(self.optString("backend_state"))?"已连接":self.optString("backend_state"));
+        boolean running="Running".equals(self.optString("backend_state"));
+        status.setText(device==null?"此设备":device.optString("hostname"));
+        selfDot.setTextColor(color(running?R.color.success:R.color.muted));
+        selfChip.setText(stateLabel(self.optString("backend_state")));
+        String line=(device==null?"":ips(device));
+        if (!running && !self.optString("backend_state").isEmpty()) line+=" · "+stateLabel(self.optString("backend_state"));
         if (uptime>=0) line+=" · 运行 "+duration(uptime);
         if (connections>0) line+=" · "+connections+" 个连接";
-        status.setText((device==null?"此设备":device.optString("hostname"))+"\n"+line);
+        selfDetail.setText(line);
         JSONObject cloud=self.optJSONObject("cloud");
-        binding.removeAllViews();
-        boolean bound=cloud!=null&&cloud.optBoolean("bound"); binding.setVisibility(bound?View.GONE:View.VISIBLE);
-        if (!bound) {
-            binding.addView(text("绑定 Cloud 账号",18,true));
-            if (cloud!=null&&cloud.has("pending")) {
-                JSONObject pending=cloud.optJSONObject("pending");
-                binding.addView(text(pending.optString("user_code"),24,true));
-                binding.addView(button("前往 Cloud 确认绑定",() -> onUI(() -> open(pending.optString("verification_url")))));
-            } else {
-                binding.addView(button("绑定账号",() -> api("/cloud/bind",new JSONObject().put("cloud_url","https://cloud.openremotehub.top"),"POST")));
-            }
-        }
+        boolean bound=cloud!=null&&cloud.optBoolean("bound");
+        if (bound&&!boundBefore) info("已绑定 Cloud 账号");
+        boundBefore=bound;
+        renderBinding(cloud,bound);
         if (cloud!=null&&!cloud.optString("error").isEmpty()) info(cloud.optString("error"));
         devices.removeAllViews();
         int columns=getResources().getConfiguration().screenWidthDp>=720?2:1;
@@ -227,33 +344,40 @@ public final class MainActivity extends Activity {
             GridLayout.LayoutParams params=new GridLayout.LayoutParams();
             params.width=0; params.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
             params.setMargins(dp(4),0,dp(4),dp(14)); entry.setLayoutParams(params);
-            entry.addView(text(peer.optString("hostname"),20,true));
-            TextView detail=text(ips(peer)+" · "+(peer.optBoolean("online")?"在线":"离线"),14,false);
-            detail.setTextColor(color(R.color.muted)); entry.addView(detail);
+            LinearLayout head=new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(Gravity.CENTER_VERTICAL);
+            TextView dot=text("●",12,false); dot.setTextColor(color(peer.optBoolean("online")?R.color.success:R.color.muted));
+            dot.setPadding(0,0,dp(7),0); head.addView(dot);
+            TextView name=text(peer.optString("hostname"),19,true); name.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); head.addView(name);
             String path=peer.optString("path");
-            entry.addView(text("direct".equals(path)?"直连":"relay".equals(path)?"中继":"待连接",14,true));
+            head.addView(chip("direct".equals(path)?"直连":"relay".equals(path)?"中继":"待连接"));
+            entry.addView(head);
+            TextView detail=text(ips(peer)+(peer.optBoolean("online")?" · 在线":" · 离线"),13,false);
+            detail.setTextColor(color(R.color.muted)); entry.addView(detail);
             String ip=ips(peer);
             boolean console=consoleAvailable(directory,ip);
             if (!console) detail.setText(detail.getText()+" · 仅远程桌面");
             LinearLayout actions=new LinearLayout(this);
-            actions.addView(button("检测",() -> {
+            actions.addView(secondary("检测", () -> {
                 JSONObject result=(JSONObject)api("/ping",new JSONObject().put("peer_ip",ip),"POST");
                 onUI(() -> info(result.optString("Err").isEmpty()?peer.optString("hostname")+" · "+Math.round(result.optDouble("LatencySeconds")*1000)+" ms":result.optString("Err")));
             }));
-            Button consoleButton=button("控制台",() -> {
+            Button consoleButton=secondary("控制台", () -> {
                 JSONObject result=(JSONObject)api("/console",new JSONObject().put("peer_ip",ip),"POST");
                 onUI(() -> openConsole(result.optString("url"),ip,peer.optString("hostname")));
             });
             consoleButton.setEnabled(console);
             actions.addView(consoleButton);
             entry.addView(actions);
-            Button desktop=button("远程桌面",() -> {
+            Button desktop=primary("远程桌面", () -> {
                 String address=desktopAddress(ip);
                 onUI(() -> desktop(address));
             });
             desktop.setEnabled(peer.optBoolean("online")); entry.addView(desktop); devices.addView(entry);
         }
-        if (peers.length()==0) devices.addView(text("将其他设备绑定到同一账号后显示在这里。",15,false));
+        if (peers.length()==0) {
+            TextView empty=text("还没有其他设备。\n把另一台电脑或平板绑定到同一账号后会显示在这里。",14,false);
+            empty.setTextColor(color(R.color.muted)); devices.addView(empty);
+        }
     }
     private void openConsole(String url,String ip,String name) {
         Diagnostics.log("console","打开 "+name+" · "+url);
