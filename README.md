@@ -65,6 +65,8 @@ Cloud 目录为 `cloud/`，使用独立 SQLite 数据卷。将域名 A 记录指
 cp cloud/.env.example cloud/.env
 # 修改 ORH_CLOUD_DOMAIN，默认 cloud.openremotehub.top
 docker compose --env-file cloud/.env -f cloud/compose.yml up -d --build
+# 重建 cloud 容器后重启 https，让 Caddy 重新解析容器地址
+docker restart cloud-https-1
 docker compose --env-file cloud/.env -f cloud/compose.yml ps
 docker compose --env-file cloud/.env -f cloud/compose.yml logs --tail=100 cloud https
 ```
