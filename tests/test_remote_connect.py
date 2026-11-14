@@ -312,3 +312,16 @@ def test_cloud_login_route_registers_device(workspace,monkeypatch):
     response=http.post('/api/cloud/login',json={'cloud_url':'https://cloud.example','username':'aaron','password':'secret'})
     assert response.status_code==200 and response.json()['username']=='aaron'
     assert calls==[('https://cloud.example','aaron','secret')]
+
+
+def test_cloud_account_login_page(workspace,monkeypatch):
+    http,_,_ = workspace
+    from app import cloud_agent
+    calls=[]
+    monkeypatch.setattr(cloud_agent,'enroll',lambda base,username,password: calls.append((base,username,password)) or dict(instance_id='device',username=username,cloud_url=base))
+    response=http.post('/api/auth/cloud/login',json={'cloud_url':'https://cloud.example','username':'aaron','password':'secret'})
+    assert response.status_code==200,response.text
+    assert calls==[('https://cloud.example','aaron','secret')]
+    assert response.cookies.get('orh')
+    monkeypatch.setattr(cloud_agent,'binding',lambda:dict(instance_id='device'))
+    assert http.post('/api/auth/cloud/login',json={'cloud_url':'https://cloud.example','username':'aaron','password':'secret'}).status_code==409

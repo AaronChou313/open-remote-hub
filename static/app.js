@@ -108,13 +108,22 @@ async function loadAuth() {
   needsSetup = status.needs_setup;
   const bound = Boolean(status.cloud?.bound);
   $('#cloudLogin').hidden = !bound;
-  for (const selector of ['#password','#passwordLabel','#loginSubmit']) $(selector).hidden = bound;
-  $('#setupConfirm').hidden = !needsSetup || bound;
-  $('#password').autocomplete = needsSetup ? 'new-password':'current-password';
-  $('#passwordLabel').textContent = needsSetup ? '设置登录密码':'登录密码';
-  $('#loginSubmit').textContent = needsSetup ? '设置密码并进入 →':'进入控制台 →';
-  $('#loginHelp').textContent = bound ? '此设备使用已绑定的 Cloud 账号登录。' : needsSetup ? '首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。';
+  $('#cloudBlock').hidden = bound;
+  showLocalFields(bound);
+  if (bound) $('#loginHelp').textContent = '此设备使用已绑定的 Cloud 账号登录。';
+  else $('#loginHelp').textContent = '使用 Cloud 账号登录，本机会自动注册并接入组网。';
  } catch (error) {$('#loginError').textContent=error.message;}
+}
+function showLocalFields(show){
+ $('#password').hidden = !show;
+ $('#passwordLabel').hidden = !show;
+ $('#loginSubmit').hidden = !show;
+ $('#setupConfirm').hidden = !show || !needsSetup;
+ if (!show) return;
+ $('#password').autocomplete = needsSetup ? 'new-password':'current-password';
+ $('#passwordLabel').textContent = needsSetup ? '设置登录密码':'登录密码';
+ $('#loginSubmit').textContent = needsSetup ? '设置密码并进入 →':'进入控制台 →';
+ $('#loginHelp').textContent = needsSetup ? '首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。';
 }
 async function enter() {
  try {
@@ -134,6 +143,22 @@ async function enter() {
   else showError(error);
  }
 }
+$('#cloudLocalFallback').onclick = event => {
+ event.preventDefault();
+ $('#cloudBlock').hidden = true;
+ showLocalFields(true);
+};
+$('#cloudLoginSubmit').onclick = async () => {
+ const button = $('#cloudLoginSubmit');
+ button.disabled = true; $('#loginError').textContent = '';
+ try {
+  await api('/api/auth/cloud/login',{cloud_url:$('#cloudServer').value.trim(),
+   username:$('#cloudUser').value.trim(),password:$('#cloudPassword').value});
+  $('#cloudPassword').value = '';
+  await enter();
+ } catch (error) {$('#loginError').textContent = error.message;}
+ finally {button.disabled = false;}
+};
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubmit');button.disabled=true;try{if(needsSetup&&$('#password').value!==$('#passwordConfirm').value)throw Error('两次输入的密码不一致');await api(needsSetup?'/auth/setup':'/login',{password:$('#password').value});$('#loginForm').reset();$('#loginError').textContent='';needsSetup=false;await enter()}catch(e){$('#loginError').textContent=e.message;await loadAuth()}finally{button.disabled=false}};
 
 $('#cloudBind').onclick = async () => {

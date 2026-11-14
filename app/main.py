@@ -154,7 +154,7 @@ async def security(request:Request, call_next):
         return JSONResponse({'detail':'Terminal origin required'},403)
     if not native and request.method not in ('GET','HEAD','OPTIONS') and request.headers.get('x-orh-request')!='1':
         return JSONResponse({'detail':'Missing CSRF header'},403)
-    if request.url.path.startswith('/api/') and request.url.path not in ('/api/login','/api/auth/status','/api/auth/setup'):
+    if request.url.path.startswith('/api/') and request.url.path not in ('/api/login','/api/auth/status','/api/auth/setup','/api/auth/cloud/login'):
         s=access.get(request.cookies.get('orh',''))
         if not s or s['expires']<time.time():
             return JSONResponse({'detail':'请登录'},401)
@@ -212,6 +212,25 @@ def login(body:Login,request:Request):
     throttle(request)
     if not passwords.verify(body.password):raise HTTPException(401,'密码错误')
     return login_response(request)
+
+class CloudLogin(BaseModel):
+    cloud_url: str = Field(default='', max_length=512)
+    username: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+@app.post('/api/auth/cloud/login')
+def cloud_login(body: CloudLogin, request: Request):
+    """First-run login with the Cloud account; registers this device as a side effect."""
+    if cloud_agent.binding():
+        raise HTTPException(409, '设备已绑定 Cloud，请使用 Cloud 账号登录')
+    throttle(request)
+    try:
+        cloud_agent.enroll(body.cloud_url or os.environ.get('ORH_CLOUD_URL', ''), body.username, body.password)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+    return login_response(request)
+
 
 @app.post('/api/auth/password')
 def change_password(body:Login,request:Request):
