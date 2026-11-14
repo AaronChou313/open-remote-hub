@@ -6,6 +6,8 @@ let hosts = [];
 let editing = null;
 let request = null;
 let autoCheck = false;
+let networkPermission = null;
+let receivedNetworkResponse = false;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 const icon = name => `<svg aria-hidden="true"><use href="./icons.svg#${name}"></use></svg>`;
 
@@ -63,13 +65,17 @@ async function probe(url, signal) {
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal.addEventListener('abort', abort, {once:true});
-  const timeout = setTimeout(abort, 4000);
+  // Keep the first browser permission prompt alive while the user reads it.
+  // After any HTTP response, subsequent probes use the normal short timeout.
+  const awaitingPermission = networkPermission?.state === 'prompt' && !receivedNetworkResponse;
+  const timeout = setTimeout(abort, awaitingPermission ? 120000 : 4000);
   const began = performance.now();
   try {
     const options = {signal:controller.signal, mode:'cors', credentials:'omit', cache:'no-store', redirect:'error'};
     const space = addressSpace(url);
     if (space) options.targetAddressSpace = space;
     const response = await fetch(url + '/.well-known/openremotehub', options);
+    receivedNetworkResponse = true;
     if (!response.ok) throw Error(`HTTP ${response.status}`);
     const value = await response.json();
     if (!isIdentity(value)) throw Error('目标未返回 RemoteHub 服务标识');
@@ -97,7 +103,10 @@ async function check(urls = hosts.flatMap(host => host.urls)) {
     while (queue.length && !controller.signal.aborted) {
       const url = queue.shift();
       const result = await probe(url, controller.signal);
-      if (!controller.signal.aborted) results.set(url, result);
+      if (!controller.signal.aborted) {
+        results.set(url, result);
+        if (result.identity) render();
+      }
     }
   }
   try {
@@ -214,6 +223,7 @@ async function start() {
       catch { /* Try the permission name supported by this browser. */ }
     }
     if (permission) {
+      networkPermission = permission;
       permission.addEventListener('change', async () => {
         if (permission.state === 'granted') {
           if (!hosts.length) return;
