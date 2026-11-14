@@ -40,6 +40,7 @@ def management(monkeypatch,tmp_path,workspace):
     monkeypatch.setattr(client,'autostart_path',lambda:data/'autostart.json')
     monkeypatch.setattr(tailscale,'status',lambda:dict(available=True,state='Running',peers=[]))
     monkeypatch.setattr(orn_runtime,'status',lambda:dict(available=True,enabled=True,running=True,managed=True))
+    monkeypatch.setattr(web,'_directory',(0.0,{}))
     monkeypatch.setattr(web.nodebaby,'status',lambda:dict(available=False,mappings=[],addresses=[]))
     audit=[]
     monkeypatch.setattr(web,'audit',lambda *args:audit.append(args))
@@ -262,3 +263,19 @@ def test_overview_embeds_orn_runtime(management):
     http,_,_=management
     value=http.get('/api/remote-connect').json()
     assert value['orn']['managed'] is True
+
+
+def test_overview_marks_console_availability(management,monkeypatch):
+    http,_,_ = management
+    from app import cloud_agent
+    monkeypatch.setattr(tailscale,'status',lambda:dict(available=True,state='Running',peers=[
+        dict(id='1',hostname='console-host',addresses=['100.64.0.10','fd7a::10'],online=True),
+        dict(id='2',hostname='desktop-only',addresses=['100.64.0.11'],online=True),
+        dict(id='3',hostname='unknown',addresses=['100.64.0.12'],online=True)]))
+    monkeypatch.setattr(cloud_agent,'directory',lambda:[
+        dict(mesh=dict(ips=['100.64.0.10'],services=[8765,21118])),
+        dict(mesh=dict(ips=['100.64.0.11'],services=[21118]))])
+    peers=http.get('/api/remote-connect').json()['tailscale']['peers']
+    flags={peer['hostname']:peer['console'] for peer in peers}
+    assert flags=={'console-host':True,'desktop-only':False,'unknown':None}
+    assert peers[1]['services']==[21118]

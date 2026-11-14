@@ -66,9 +66,41 @@ def audit(target, action):
     record('remote-connect', target, action)
 
 
+_directory_lock = threading.Lock()
+_directory = (0.0, {})
+
+
+def mesh_services():
+    """Map mesh IP to the services a Cloud device publishes, cached briefly."""
+    global _directory
+    with _directory_lock:
+        stamp, cached = _directory
+        if time.monotonic() - stamp < 30:
+            return cached
+    from app import cloud_agent
+    services = {}
+    for device in cloud_agent.directory():
+        mesh = device.get('mesh') or {}
+        for address in mesh.get('ips') or []:
+            services[address] = set(mesh.get('services') or [])
+    with _directory_lock:
+        _directory = (time.monotonic(), services)
+    return services
+
+
 @router.get('')
 def overview():
-    return dict(rustdesk=client.status(), tailscale=tailscale.status(), nodebaby=nodebaby.status(),
+    status = tailscale.status()
+    services = mesh_services()
+    for peer in status.get('peers') or []:
+        known = next((services[address] for address in peer['addresses'] if address in services), None)
+        if known is None:
+            peer['services'] = []
+            peer['console'] = None
+        else:
+            peer['services'] = sorted(known)
+            peer['console'] = 8765 in known
+    return dict(rustdesk=client.status(), tailscale=status, nodebaby=nodebaby.status(),
                 lan_urls=tailscale.access_urls(), orn=orn_runtime.status())
 
 

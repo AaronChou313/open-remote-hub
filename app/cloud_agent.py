@@ -86,6 +86,20 @@ def call(base, path, body, credential=None):
     return response.json()
 
 
+def directory():
+    """Cloud device directory for this account, or [] when unavailable."""
+    value = binding()
+    if not value:
+        return []
+    try:
+        with httpx.Client(timeout=8, trust_env=False) as client:
+            response = client.get(value['cloud_url'] + '/agent/directory',
+                                  headers={'Authorization': 'Bearer ' + value['credential']})
+        return response.json() if response.status_code == 200 else []
+    except (httpx.HTTPError, ValueError):
+        return []
+
+
 def local_address(address):
     networks = ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','100.64.0.0/10')
     return address.version == 4 and any(address in ipaddress.ip_network(network) for network in networks)
