@@ -439,6 +439,7 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 2. 已有独立 ORN 安装（`orn-agent open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → ORN”点“由 ORH 托管 ORN”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
 3. 任一 ORH 都能作为控制端：网络连接 → ORN 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
 4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
+5. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 ORN 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 ORN 节点。
 
 Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 
