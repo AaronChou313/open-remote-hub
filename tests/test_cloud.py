@@ -224,3 +224,26 @@ def test_metadata_allows_mesh_host_when_console_binds_loopback(monkeypatch):
     assert value['addresses']==['http://127.0.0.1:8765']
     assert main.NETWORK.allows('100.64.0.21:8765',8765)
     assert main.NETWORK.allows('meshed.orh.internal:8765',8765)
+
+
+def test_metadata_skips_windows_virtual_adapters(monkeypatch):
+    from types import SimpleNamespace
+    from app.network import Network
+    from app.remote_connect import tailscale
+    monkeypatch.setenv('ORH_HOST','0.0.0.0')
+    monkeypatch.setenv('ORH_ALLOWED_HOSTS','')
+    monkeypatch.setattr(main,'NETWORK',Network.load())
+    monkeypatch.setattr(main,'PORT',8765)
+    monkeypatch.setattr(cloud_agent.psutil,'net_if_stats',lambda:{
+        'Ethernet':SimpleNamespace(isup=True),
+        'vEthernet (WSL)':SimpleNamespace(isup=True),
+        'Loopback Pseudo-Interface 1':SimpleNamespace(isup=True)})
+    monkeypatch.setattr(cloud_agent.psutil,'net_if_addrs',lambda:{
+        'Ethernet':[SimpleNamespace(address='192.168.1.50')],
+        'vEthernet (WSL)':[SimpleNamespace(address='172.20.0.1')],
+        'Loopback Pseudo-Interface 1':[SimpleNamespace(address='127.0.0.1')]})
+    monkeypatch.setattr(tailscale,'json_command',lambda argv:{'Self':{'TailscaleIPs':['100.64.0.9']}})
+    cloud_agent.metadata()
+    assert '192.168.1.50' in main.NETWORK.hosts
+    assert '172.20.0.1' not in main.NETWORK.hosts
+    assert '127.0.0.1' in main.NETWORK.hosts

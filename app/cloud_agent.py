@@ -123,7 +123,11 @@ def metadata():
     if main.NETWORK.bind not in ('127.0.0.1','::1','localhost'):
         stats = psutil.net_if_stats()
         for name, items in psutil.net_if_addrs().items():
-            if name not in stats or not stats[name].isup or name.startswith(('bridge','veth','docker','br-','vmenet','utun')):
+            if name not in stats or not stats[name].isup:
+                continue
+            lowered = name.lower()
+            if lowered.startswith(('bridge', 'veth', 'docker', 'br-', 'vmenet', 'utun',
+                                   'vethernet', 'loopback', 'teredo', 'isatap', 'bluetooth')):
                 continue
             for item in items:
                 try:
