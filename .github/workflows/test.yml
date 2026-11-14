@@ -31,3 +31,15 @@ jobs:
       - run: node --check static/knowledge.js
       - run: node --check static/ssh.js
       - run: node --check static/app.js && node --check static/sessions.js && node --check static/terminal-entry.js && node --check static/workspace.js && node --check static/dsh.js && node --check static/dsh-compat.js && node --check static/icons.js
+  mesh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.4'
+          cache-dependency-path: mesh/go.sum
+      - run: go test -race ./internal/...
+        working-directory: mesh
+      - run: go build ./...
+        working-directory: mesh
