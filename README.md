@@ -40,16 +40,15 @@
 
 Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个人主机运行现有全部管理功能。浏览器从 Cloud 获得一次性 Ticket 后直接导航到 Agent，Agent 向 Cloud 兑换并建立原有管理员 Cookie。Zellij、Docker、文件等请求从浏览器直接到 Agent。Cloud 在线状态依据最近 100 秒内的心跳，浏览器地址检测结果单独展示。
 
-前端入口为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。账号密码支持数字、字母与特殊符号组合，允许自定长度。
+前端入口为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在任意主机安装 ORH 并打开控制台，用 Cloud 账号登录即可：本机自动注册、组网自动入网，不再有绑定码或跳转确认页。
 
 ```sh
 # 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
 ./scripts/start.sh
-.venv/bin/python scripts/cloud_agent.py bind --cloud-url https://cloud.openremotehub.top
 .venv/bin/python scripts/cloud_agent.py status
 ```
 
-已登录的独立控制台也可点击右上角“绑定 Cloud”生成绑定码。绑定码 10 分钟有效且只能确认一次。Agent 保存私有 `.runtime/cloud-binding.json`，每 30 秒上报名称、系统、端口、局域网 / Tailscale / 已配置组网地址，重启后自动恢复。设备 UUID 沿用 `.runtime/instance-id`，在新主机部署时应生成自己的 UUID。绑定凭据、账号令牌和 Ticket 都不提交到 Git。
+登录一次后，Agent 保存私有 `.runtime/cloud-binding.json`（设备令牌，不含账号密码），每 30 秒上报名称、系统、端口、局域网 / 组网地址，重启后自动恢复。设备 UUID 沿用 `.runtime/instance-id`，在新主机部署时应生成自己的 UUID。设备凭据、账号令牌和 Ticket 都不提交到 Git。首次登录会用 Cloud 账号注册设备；同一账号再次登录会轮换设备令牌。
 
 Cloud 设备卡片支持改名、编辑地址、设置首选入口、连接检测和解绑，手动地址及名称不会被心跳覆盖。Agent 在心跳响应中同步这些地址的主机名，沿用原监听端口的 Host / Origin 校验。点击“打开控制台”或某个地址会签发 90 秒、目标设备专用、单次兑换的 Ticket，使用顶层导航进入 Agent，浏览器跨域探测失败时也可以直接进入。直接访问 Agent IP 时点击“使用 Cloud 账号登录”，完成 Cloud 授权后自动返回。新浏览器登录同一 Cloud 账号即可读取同一设备目录。
 
@@ -377,8 +376,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
 **5. 首次使用**
 
-1. 浏览器打开 `http://127.0.0.1:8765/`，设置管理员密码。
-2. 右上角「绑定 Cloud」，用账号确认绑定码；组网组件由 ORH 自动带上设备身份，几十秒内变为「已连接」。
+1. 浏览器打开 `http://127.0.0.1:8765/`，用 Cloud 账号登录（也可点「改用本机密码」设置离线密码）。
+2. 登录页输入 Cloud 账号与密码（未注册先点「注册账号」）；本机自动注册，组网组件由 ORH 自动带上设备身份，几十秒内变为「已连接」。
 3. Windows 防火墙提示时允许**专用网络**；其他设备用 `http://<Windows IP>:8765/` 访问（需要额外主机名时补充 `.env` 的 `ORH_ALLOWED_HOSTS`）。
 4. 平板/其他电脑的设备列表会出现这台 Windows，可打开控制台或发起远程桌面。
 
@@ -500,7 +499,7 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 
 ### 组网与 Cloud
 
-1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 组网组件放到 `bin/orh-mesh` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护组网组件。ORH 绑定 Cloud 后自动把设备 UUID、凭据和发布端口交给本机组网，共用一个 Cloud 设备条目：ORH 负责地址和心跳，组网负责入网与节点对账。日志为 `.runtime/mesh.log`。
+1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 组网组件放到 `bin/orh-mesh` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护组网组件。ORH 用 Cloud 账号登录后自动把设备 UUID、凭据和发布端口交给本机组网，共用一个 Cloud 设备条目：ORH 负责地址和心跳，组网负责入网与节点对账。日志为 `.runtime/mesh.log`。
 2. 已有独立 组网 安装（`orh-mesh open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → 组网”点“由 ORH 托管组网”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
 3. 任一 ORH 都能作为控制端：网络连接 → 组网 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。设备列表读取 Cloud 目录中的发布服务：只提供远程桌面的设备（例如只装了 组网 的 Windows）标记为“仅远程桌面”，控制台按钮禁用，不会点击后才报错。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
 4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
@@ -539,6 +538,6 @@ VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接�
 
 下载 Release 中的 `orh-client-android-debug.apk`。包名为 `top.openremotehub.client`，最低 Android 8；与旧的 ORN 版本应用是两个不同应用，安装前请先卸载旧应用。
 
-打开后：绑定 Cloud 账号 → 设备列表 → 控制台（应用内 WebView）或远程桌面。绑定页会显示 24pt 绑定码、剩余有效时间，并提供“复制绑定码”和“前往 Cloud 确认”；确认后页面自动变为已绑定。设备卡片显示在线状态、直连/中继与“仅远程桌面”标记。
+打开后：登录 Cloud 账号 → 本机自动注册并入网 → 设备列表 → 控制台（应用内 WebView）或远程桌面。登录一次后无需再操作，重启自动恢复。设备卡片显示在线状态、直连/中继与“仅远程桌面”标记。
 
 “更多 → 检查更新”读取本仓库 GitHub Release 的最新版本：有新版时顶部出现“新版本 x.y.z · 更新”，点击打开下载页；发布时把 APK 作为 Release 附件并打 `v<版本>` 标签即可。更新检查在启动时静默进行，也可手动触发。
