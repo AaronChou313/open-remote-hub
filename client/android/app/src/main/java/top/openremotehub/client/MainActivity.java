@@ -271,7 +271,9 @@ public final class MainActivity extends Activity {
             Object result=api("/netcheck",new JSONObject(),"POST");
             onUI(() -> {if (active) new AlertDialog.Builder(this).setTitle("网络诊断").setMessage(result.toString()).setPositiveButton("关闭",null).show();});
         });
-        for (Button action : new Button[]{netcheck, secondary("连接诊断", this::diagnose), secondary("检查更新", () -> checkForUpdate(true)), secondary("厂商后台设置", this::openVendorSettings), leave}) {
+        Button diagnoseButton = secondary("连接诊断", () -> {});
+        diagnoseButton.setOnClickListener(view -> diagnose());
+        for (Button action : new Button[]{netcheck, diagnoseButton, secondary("检查更新", () -> checkForUpdate(true)), secondary("厂商后台设置", this::openVendorSettings), leave}) {
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0; params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
