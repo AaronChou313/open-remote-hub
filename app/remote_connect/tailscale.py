@@ -28,16 +28,16 @@ def binary():
     return str(token_file()) if token_file().is_file() else None
 
 
-def request(path, body=None, timeout=10):
-    base = os.environ.get('ORH_ORN_API_URL','http://127.0.0.1:4789').rstrip('/')
+def request(path, body=None, timeout=10, base=None, token=None):
+    base = (base or os.environ.get('ORH_ORN_API_URL','http://127.0.0.1:4789')).rstrip('/')
     parsed = urlsplit(base)
     if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost','::1') or parsed.username or parsed.path:
         raise TailscaleError('ORN LocalAPI 地址必须是 loopback HTTP 入口')
     try:
-        token=token_file().read_text().strip()
+        secret = token if token is not None else token_file().read_text().strip()
         with httpx.Client(timeout=timeout,trust_env=False) as client:
             response=client.request('GET' if body is None else 'POST',base+'/api/v1'+path,
-                                    json=body,headers={'Authorization':'Bearer '+token})
+                                    json=body,headers={'Authorization':'Bearer '+secret})
     except FileNotFoundError:
         raise TailscaleError('请先安装并启动 ORN Agent') from None
     except httpx.TimeoutException:

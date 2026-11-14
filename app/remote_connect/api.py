@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.routing import APIRoute
 from .rustdesk import client
 from .rustdesk.ipc import NativeError, native
+from app import orn_runtime
 from . import tailscale, nodebaby
 
 
@@ -67,7 +68,8 @@ def audit(target, action):
 
 @router.get('')
 def overview():
-    return dict(rustdesk=client.status(), tailscale=tailscale.status(), nodebaby=nodebaby.status(), lan_urls=tailscale.access_urls())
+    return dict(rustdesk=client.status(), tailscale=tailscale.status(), nodebaby=nodebaby.status(),
+                lan_urls=tailscale.access_urls(), orn=orn_runtime.status())
 
 
 @router.get('/rustdesk/settings')
@@ -176,6 +178,50 @@ def tailscale_control(background: BackgroundTasks, value=Depends(body)):
     # Return the acknowledgement before a requested disconnect tears down the
     # same network path used by the browser. Result remains visible via LAN.
     background.add_task(tailscale.run_operation, result['action'])
+    return result
+
+
+@router.post('/orn/takeover')
+def orn_takeover():
+    result = orn_runtime.takeover()
+    audit('orn', 'takeover')
+    return result
+
+
+def peer_address(value):
+    import ipaddress
+    address = value.get('peer_ip') if isinstance(value, dict) else None
+    try:
+        parsed = ipaddress.ip_address(address)
+    except (TypeError, ValueError):
+        raise ValueError('请选择组网设备') from None
+    return str(parsed)
+
+
+@router.post('/peers/console')
+def peer_console(value=Depends(body)):
+    address = peer_address(value)
+    result = tailscale.request('/console', {'peer_ip': address, 'device_id': value.get('device_id') or ''}, timeout=30)
+    audit(address, 'orn-console')
+    return result
+
+
+@router.post('/peers/desktop')
+def peer_desktop(value=Depends(body)):
+    address = peer_address(value)
+    result = tailscale.request('/connect', {'peer_ip': address, 'remote_port': 21118, 'local_port': 0}, timeout=40)
+    audit(address, 'orn-desktop')
+    return result
+
+
+@router.post('/peers/forward')
+def peer_forward(value=Depends(body)):
+    address = peer_address(value)
+    port = value.get('remote_port')
+    if type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError('请输入 1–65535 的目标端口')
+    result = tailscale.request('/forwards', {'peer_ip': address, 'remote_port': port, 'local_port': 0}, timeout=30)
+    audit(f'{address}:{port}', 'orn-forward')
     return result
 
 

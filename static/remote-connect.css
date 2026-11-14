@@ -176,6 +176,7 @@
 }
 .remote-connect .rc-peer-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 .remote-connect .rc-peer-actions button {

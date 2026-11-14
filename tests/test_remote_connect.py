@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.remote_connect.rustdesk import client, ipc
 from app.remote_connect import api as web, tailscale
-from app import main, access
+from app import main, access, orn_runtime
 from test_files import workspace
 import time
 
@@ -39,6 +39,7 @@ def management(monkeypatch,tmp_path,workspace):
     monkeypatch.setattr(client,'data_dir',lambda:data)
     monkeypatch.setattr(client,'autostart_path',lambda:data/'autostart.json')
     monkeypatch.setattr(tailscale,'status',lambda:dict(available=True,state='Running',peers=[]))
+    monkeypatch.setattr(orn_runtime,'status',lambda:dict(available=True,enabled=True,running=True,managed=True))
     monkeypatch.setattr(web.nodebaby,'status',lambda:dict(available=False,mappings=[],addresses=[]))
     audit=[]
     monkeypatch.setattr(web,'audit',lambda *args:audit.append(args))
@@ -234,3 +235,30 @@ def test_live_password_defaults_and_two_way_settings(management):
     assert http.get('/api/remote-connect/rustdesk/live').json()['temporary_password'] == 'fixture-rotated'
     native.values['approve-mode'] = 'click'
     assert http.get('/api/remote-connect/rustdesk/live').json()['temporary_password'] == ''
+
+def test_peer_console_desktop_and_forward(management,monkeypatch):
+    http,_,audit = management
+    calls=[]
+    def request(path,body=None,timeout=10):
+        calls.append((path,body))
+        if path=='/console':return {'url':'http://orh-x.localhost:1234/auth/cloud/enter','forward':{}}
+        if path=='/connect':return {'address':'127.0.0.1:4567','forward':{}}
+        return {'address':'127.0.0.1:9999','forward':{}}
+    monkeypatch.setattr(tailscale,'request',request)
+    console=http.post('/api/remote-connect/peers/console',json={'peer_ip':'100.64.0.9'})
+    assert console.status_code==200 and console.json()['url'].startswith('http://orh-')
+    assert calls[-1]==('/console',{'peer_ip':'100.64.0.9','device_id':''})
+    desktop=http.post('/api/remote-connect/peers/desktop',json={'peer_ip':'100.64.0.9'})
+    assert desktop.status_code==200 and desktop.json()['address']=='127.0.0.1:4567'
+    assert calls[-1]==('/connect',{'peer_ip':'100.64.0.9','remote_port':21118,'local_port':0})
+    forward=http.post('/api/remote-connect/peers/forward',json={'peer_ip':'100.64.0.9','remote_port':8765})
+    assert forward.json()['address']=='127.0.0.1:9999'
+    assert calls[-1]==('/forwards',{'peer_ip':'100.64.0.9','remote_port':8765,'local_port':0})
+    assert http.post('/api/remote-connect/peers/console',json={'peer_ip':'not-an-address'}).status_code==400
+    assert http.post('/api/remote-connect/peers/forward',json={'peer_ip':'100.64.0.9','remote_port':0}).status_code==400
+    assert [item[1] for item in audit]==['orn-console','orn-desktop','orn-forward']
+
+def test_overview_embeds_orn_runtime(management):
+    http,_,_=management
+    value=http.get('/api/remote-connect').json()
+    assert value['orn']['managed'] is True

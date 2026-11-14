@@ -146,6 +146,7 @@ window.RemoteHubRemoteConnect = (() => {
         updateStatus(data.rustdesk);
         RemoteHubNodeBaby.update(data.nodebaby);
         updateNetwork(data.tailscale, data.lan_urls);
+        updateOrn(data.orn);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
         if (tab === "overview" && data.rustdesk.ready) return loadSettings();
         if (tab === "status") return Promise.all([RemoteHubLAN.refresh(), refreshProxySummary()]);
@@ -433,7 +434,7 @@ ${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", n
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 ORN ${icon("external")}</a></div><a class="button" href="https://aaronchou313.github.io/open-remote-hub/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
+<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管 ORN</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 ORN ${icon("external")}</a></div><p id="rcOrnHost" class="muted"></p><a class="button" href="https://aaronchou313.github.io/open-remote-hub/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
         <section id="rcOverview" hidden>
@@ -656,6 +657,31 @@ ${RemoteHubNodeBaby.markup()}
     drawPeers();
   }
 
+  function peerAddress(node) {
+    if (!node) throw Error("设备已不在当前列表中，请刷新");
+    return (
+      node.addresses.find((address) => !address.includes(":")) ||
+      node.addresses[0]
+    );
+  }
+
+  function updateOrn(value) {
+    if (!value) return;
+    const label = !value.available
+      ? "未发现 ORN Agent，组网功能不可用"
+      : value.managed
+        ? "ORN 由 ORH 托管，随本控制台启停"
+        : value.running
+          ? value.standalone
+            ? `ORN 由独立服务运行（${value.standalone}）`
+            : "ORN 以独立进程运行"
+          : "ORN 未运行";
+    $("#rcOrnHost").textContent = value.note
+      ? `${label} · ${value.note}`
+      : label;
+    $("#rcOrnTakeover").hidden = !(value.available && !value.managed);
+  }
+
   function drawPeers() {
     if (network?.state !== "Running") {
       $("#rcPeerList").innerHTML = empty("组网连接后显示设备状态");
@@ -673,7 +699,7 @@ ${RemoteHubNodeBaby.markup()}
           ["设备", "组网地址", "连接状态", "累计收发", "操作"],
           rows.map(
             (peer) =>
-              `<tr><td><strong>${esc(peer.hostname === "localhost" && peer.dns ? peer.dns.split(".")[0] : peer.hostname || peer.dns || "未命名设备")}</strong><small>${esc(peer.os)}</small></td><td class="mono">${peer.addresses.map((address) => `<span>${esc(address)}</span>`).join("")}</td><td><span class="rc-dot ${peer.online ? "online" : ""}">${peer.online ? "在线" : "离线"}</span><small>${peer.online ? (peer.route === "direct" ? "直连" : peer.route === "relay" ? "中继 · " + esc(peer.relay) : "按需建立连接") : peer.last_seen && !peer.last_seen.startsWith("0001") ? "上次在线 " + new Date(peer.last_seen).toLocaleString() : "暂无近期连接"}</small></td><td><small>↑ ${bytes(peer.tx)}</small><small>↓ ${bytes(peer.rx)}</small></td><td><div class="rc-peer-actions"><button data-peer-ping="${esc(peer.id)}">${icon("diagnose")}检测</button><button data-peer-copy="${esc(peer.id)}">${icon("copy")}复制 IP</button></div></td></tr>`,
+              `<tr><td><strong>${esc(peer.hostname === "localhost" && peer.dns ? peer.dns.split(".")[0] : peer.hostname || peer.dns || "未命名设备")}</strong><small>${esc(peer.os)}</small></td><td class="mono">${peer.addresses.map((address) => `<span>${esc(address)}</span>`).join("")}</td><td><span class="rc-dot ${peer.online ? "online" : ""}">${peer.online ? "在线" : "离线"}</span><small>${peer.online ? (peer.route === "direct" ? "直连" : peer.route === "relay" ? "中继 · " + esc(peer.relay) : "按需建立连接") : peer.last_seen && !peer.last_seen.startsWith("0001") ? "上次在线 " + new Date(peer.last_seen).toLocaleString() : "暂无近期连接"}</small></td><td><small>↑ ${bytes(peer.tx)}</small><small>↓ ${bytes(peer.rx)}</small></td><td><div class="rc-peer-actions"><button data-peer-console="${esc(peer.id)}">${icon("external")}控制台</button><button class="primary" data-peer-desktop="${esc(peer.id)}">${icon("server")}远程桌面</button><button data-peer-ping="${esc(peer.id)}">${icon("diagnose")}检测</button><button data-peer-copy="${esc(peer.id)}">${icon("copy")}复制 IP</button></div></td></tr>`,
           ),
         )
       : empty(
@@ -691,6 +717,53 @@ ${RemoteHubNodeBaby.markup()}
             });
             if (current())
               output("ORN · " + node.hostname, result.output);
+          })),
+    );
+    document.querySelectorAll("[data-peer-console]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          const node = network.peers.find(
+            (peer) => peer.id === button.dataset.peerConsole,
+          );
+          // Open the tab inside the click gesture; async work happens after it.
+          const tab = window.open("", "_blank");
+          busy(button, async () => {
+            try {
+              const result = await api("/remote-connect/peers/console", {
+                peer_ip: peerAddress(node),
+              });
+              if (tab) tab.location.replace(result.url);
+              if (current())
+                notify(
+                  tab
+                    ? "已打开 " + (node.hostname || "设备") + " 的控制台"
+                    : "控制台地址：" + result.url,
+                );
+            } catch (error) {
+              if (tab) tab.close();
+              throw error;
+            }
+          });
+        }),
+    );
+    document.querySelectorAll("[data-peer-desktop]").forEach(
+      (button) =>
+        (button.onclick = () =>
+          busy(button, async () => {
+            const node = network.peers.find(
+              (peer) => peer.id === button.dataset.peerDesktop,
+            );
+            const result = await api("/remote-connect/peers/desktop", {
+              peer_ip: peerAddress(node),
+            });
+            if (current())
+              notify(
+                result.launch_error ||
+                  "已在本机打开 " +
+                    (node.hostname || "") +
+                    " 的远程桌面 " +
+                    result.address,
+              );
           })),
     );
     document.querySelectorAll("[data-peer-copy]").forEach(
@@ -805,6 +878,22 @@ ${RemoteHubNodeBaby.markup()}
       busy($("#rcTailNetcheck"), async () => {
         const result = await api("/remote-connect/tailscale/netcheck", {});
         if (current()) output("ORN 网络诊断", result.output);
+      });
+    $("#rcOrnTakeover").onclick = () =>
+      busy($("#rcOrnTakeover"), async () => {
+        if (
+          !(await confirm(
+            "由 ORH 托管 ORN",
+            "将停止当前独立运行的 ORN 服务，改由本控制台启动和管理。组网会短暂重启，正在使用的控制台或远程桌面连接将中断约 5 秒。设备身份与账号绑定保留。",
+          ))
+        )
+          return;
+        const result = await api("/remote-connect/orn/takeover", {});
+        if (current()) {
+          updateOrn(result);
+          notify(result.note || "ORN 已由 ORH 托管");
+        }
+        await controller.refresh();
       });
   }
 

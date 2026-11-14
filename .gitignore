@@ -21,3 +21,4 @@ docs/*
 !docs/validation.md
 
 /cloud/bin/
+/bin/

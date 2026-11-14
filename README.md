@@ -30,6 +30,7 @@
 | Docker | 容器管理需要 CLI 和可访问的 Docker Engine，本机使用 OrbStack；Linux 可使用 Docker Engine | 当前用户的 Docker context / Socket |
 | DeepSeek Harness | DSH 工作台按需启用，原生 DSH 按需启动；认证网关与 RemoteHub 使用同一 Python 进程 | 网关 `8767`，原生回环 `9741` |
 | Mihomo + Python broker | 网络代理按需安装的独立特权服务，本机为 `local.openremotehub.proxy`；Linux 安装器使用 systemd | 用户 Unix Socket，内核端口仅回环 |
+| ORN（内置） | 组网数据面。安装脚本把 `bin/orn-agent` 与控制台一起部署，由 ORH 启停和监护；也可接管既有独立服务 | 回环 `4789` |
 | Tailscale、节点小宝、RustDesk | 分别独立安装、登录和运行，RemoteHub 接入各自 CLI / 本地接口；按需选择 | 由原生客户端管理 |
 | “我的应用”中的其他 Web 服务 | 各项目自行部署，控制台保存入口并发现监听状态 | 各服务自己的端口 |
 
@@ -434,10 +435,10 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 
 ### ORN 与 Cloud
 
-1. 在主机安装 ORN 用户服务并启动 ORH。ORH 已绑定 Cloud 时，自动把现有设备 UUID 和绑定交给本机 ORN，共用一个 Cloud 设备条目。ORH 负责地址和心跳，ORN 负责网络入网与节点对账。
-2. 仅安装 ORN 的电脑运行 `orn-agent open`，点击绑定账号，在 Cloud 确认绑定码。Windows 安装包使用当前用户登录计划任务，macOS 使用 LaunchAgent，Linux 使用用户 systemd。配置和网络身份持久化，重启后恢复。
-3. 控制端也需运行 ORN。Cloud 设备卡片的“ORN 控制台”打开本机 ORN，再经 userspace 网络打开目标控制台。每台目标设备使用独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换。Zellij HTTP / WebSocket 与 DSH 独立入口随该通道转发。
-4. “远程桌面”创建本地 loopback 转发并调用 RustDesk，保留原生密码和桌面权限。RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。
+1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 ORN 二进制放到 `bin/orn-agent` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护 ORN。ORH 绑定 Cloud 后自动把设备 UUID、凭据和发布端口交给本机 ORN，共用一个 Cloud 设备条目：ORH 负责地址和心跳，ORN 负责入网与节点对账。日志为 `.runtime/orn.log`。
+2. 已有独立 ORN 安装（`orn-agent open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → ORN”点“由 ORH 托管 ORN”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
+3. 任一 ORH 都能作为控制端：网络连接 → ORN 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
+4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
 
 Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 
