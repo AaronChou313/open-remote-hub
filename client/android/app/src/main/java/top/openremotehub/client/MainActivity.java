@@ -127,7 +127,6 @@ public final class MainActivity extends Activity {
         catch (Exception error) { return ""; }
     }
     private void checkForUpdate(boolean manual) {
-        if (busy) return;
         Updates.check(worker, main, versionName(), release -> {
             if (!active) return;
             if (release == null) {
@@ -166,7 +165,8 @@ public final class MainActivity extends Activity {
         cloudPassword = field("密码", true);
         binding.addView(cloudAddress); binding.addView(cloudUser); binding.addView(cloudPassword);
         LinearLayout row = new LinearLayout(this);
-        cloudLoginButton = primary("登录并绑定", this::loginCloud);
+        cloudLoginButton = primary("登录并绑定", () -> {});
+        cloudLoginButton.setOnClickListener(view -> loginCloud());
         row.addView(cloudLoginButton);
         row.addView(secondary("注册账号", () -> {
             String base = cloudAddress.getText().toString().trim().replaceAll("/+$", "");
@@ -241,7 +241,9 @@ public final class MainActivity extends Activity {
             api("/control",new JSONObject().put("action","reconnect"),"POST");
             onUI(() -> info("已请求重新连接"));
         }));
-        controls.addView(secondary("刷新", this::refresh));
+        Button refreshButton = secondary("刷新", () -> {});
+        refreshButton.setOnClickListener(view -> refresh());
+        controls.addView(refreshButton);
         self.addView(controls);
         backgroundButton = secondary("允许后台连接", () -> onUI(() -> requestBackground(null)));
         self.addView(backgroundButton);
