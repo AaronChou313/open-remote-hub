@@ -835,77 +835,8 @@ body.dark #rcOverview {
   }
 }
 
-.remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
-  gap: 14px;
-  margin-bottom: 20px;
-}
-
-.remote-connect:has(#rcOverview:not([hidden])) .rc-summary {
-  padding: 16px 18px;
-}
-
-.remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
-  margin-bottom: 10px;
-}
-
-.remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head h2 {
-  font-size: 14px;
-}
-
-.remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p {
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
 @media (max-width: 640px) {
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary {
-    padding: 12px 10px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 0;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head h2 {
-    font-size: 12px;
-    gap: 5px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head svg {
-    width: 15px;
-    height: 15px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p,
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > small {
-    display: none;
-  }
-  #rcOverview .rc-radio-row, #rcOverview .rc-password-length label:not(.rc-numeric-password) {
-    min-height: 44px;
-  }
-}
-
-@media (max-width: 640px) {
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs button {
-    padding: 10px 6px;
-    gap: 6px;
-    font-size: 12px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-tabs svg {
-    width: 16px;
-    height: 16px;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-tab-suffix {
-    display: none;
-  }
+  #rcOverview .rc-radio-row, #rcOverview .rc-password-length label:not(.rc-numeric-password) { min-height: 44px; }
 }
 
 #rcOverview #rcTemporaryValue::placeholder {
@@ -915,21 +846,6 @@ body.dark #rcOverview {
   color: var(--muted);
 }
 
-@media (min-width: 641px) and (max-width: 1050px) {
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summaries {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 0;
-  }
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > p,
-  .remote-connect:has(#rcOverview:not([hidden])) .rc-summary > small {
-    display: none;
-  }
-}
 /* Local network facts share the console's existing network surfaces. */
 .lan-interfaces { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,280px),1fr)); gap: 16px; }
 .lan-interface { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
@@ -956,5 +872,18 @@ body.dark #rcOverview {
  .lan-interface { padding:18px; }
  .lan-interface dl { gap:14px; }
 }
-.remote-connect:has(#rcLAN:not([hidden])) > .rc-summaries,
-.remote-connect:has(#rcNetworkProxy:not([hidden])) > .rc-summaries { display:none; }
+/* All network pages share the same navigation and status surface. */
+.remote-connect[data-tab="status"] .rc-summary { display: flex; flex-direction: column; align-items: stretch; }
+.remote-connect[data-tab="status"] .rc-summary > small { flex: 1; }
+.remote-connect .rc-summary-open { align-self: flex-start; min-height: 36px; }
+.remote-connect .rc-summary[hidden] { display: none; }
+.remote-connect .rc-summary-open { margin-top: 18px; padding: 7px 0; color: var(--accent); border: 0; background: none; }
+.remote-connect:not([data-tab="status"]) .rc-summary-open { display: none; }
+.remote-connect .rc-summary > small { display: block; min-height: 18px; }
+.remote-connect .rc-summary-head h2 { margin: 0; }
+.remote-connect .rc-summary > p { margin-top: 0; }
+.remote-connect .rc-summaries { gap: 16px; }
+.remote-connect:not([data-tab="status"]) .rc-summary { padding: 18px 22px; }
+.remote-connect:not([data-tab="status"]) .rc-summary-head { margin-bottom: 10px; }
+
+.remote-connect .rc-summary-open svg { transform: rotate(-90deg); }

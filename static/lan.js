@@ -6,7 +6,7 @@ window.RemoteHubLAN = (() => {
   let search = "";
   let onlineOnly = false;
   function markup() {
-    return `<section id="rcLAN"><div id="lanInterfaces" class="lan-interfaces"></div>
+    return `<section id="rcLAN" hidden><div id="lanInterfaces" class="lan-interfaces"></div>
       <details class="lan-dns"><summary>系统 DNS</summary><div id="lanDNS" class="mono"></div></details>
       <div class="lan-toolbar"><input id="lanSearch" type="search" aria-label="搜索局域网设备" placeholder="搜索设备、备注、IP 或 MAC"><label class="rc-online-filter"><input id="lanOnlineOnly" type="checkbox">仅在线</label><button id="lanScan" class="primary">${icon("search")}发现设备</button></div>
       <p id="lanMessage" class="muted" role="status"></p><div id="lanDevices" class="rc-peers"></div></section>`;
@@ -46,6 +46,12 @@ window.RemoteHubLAN = (() => {
   }
   function update(value) {
     data = value;
+    $("#rcLanState").textContent = value.interfaces.length ? "已连接" : "未连接";
+    $("#rcLanState").classList.toggle("online", value.interfaces.length > 0);
+    $("#rcLanAddress").textContent = value.interfaces.map((link) => link.ip).join(" · ") || "无活动接口";
+    const online = value.devices.filter((device) => ["self", "online"].includes(device.state)).length;
+    $("#rcLanSummary").textContent = `${value.interfaces.length} 个接口 · ${value.devices.length} 台已发现设备 · ${online} 台已确认在线`;
+
     $("#lanInterfaces").innerHTML = value.interfaces.map((link) => {
       const gateways = value.gateways.filter((row) => row.interface === link.name).map((row) => row.address);
       return `<article class="lan-interface"><div class="lan-interface-title"><h2>${icon("network")}网络接口 ${esc(link.name)}</h2><span class="rc-dot online">已连接</span></div><p class="lan-address mono">${esc(link.ip)}</p><dl><div><dt>网段</dt><dd>${esc(link.network)}</dd></div><div><dt>网关</dt><dd>${esc(gateways.join(" · ") || "—")}</dd></div><div><dt>掩码</dt><dd>${esc(link.netmask)}</dd></div><div><dt>链路速率</dt><dd>${link.speed_mbps ? link.speed_mbps + " Mbps" : "—"}</dd></div></dl><div class="lan-traffic"><span>↑ ${link.upload == null ? "采样中" : bytes(link.upload) + "/s"}</span><span>↓ ${link.download == null ? "采样中" : bytes(link.download) + "/s"}</span></div></article>`;

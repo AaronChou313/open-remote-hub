@@ -5,7 +5,7 @@ window.RemoteHubRemoteConnect = (() => {
   let state;
   let original = {};
   let effectiveOriginal = {};
-  let tab = "lan";
+  let tab = "status";
   let requestedTab;
   let proxyVersion = 0;
   let operation = false;
@@ -54,7 +54,35 @@ window.RemoteHubRemoteConnect = (() => {
   }
   async function renderProxy() {
     const version = ++proxyVersion;
-    return RemoteHubProxy.render(() => current() && tab === "proxy" && version === proxyVersion, "#rcNetworkProxy");
+    return RemoteHubProxy.render(() => current() && tab === "proxy" && version === proxyVersion, "#rcNetworkProxy", updateProxySummary);
+  }
+  function updateProxySummary(data, manager) {
+    const engine = manager.engine;
+    const active = manager.profiles.find((profile) => profile.active);
+    const running = data.available && (!manager.managed || engine.enabled);
+    $("#rcProxyState").textContent = running ? "运行中" : manager.managed
+      ? !engine.ready ? "后台离线" : engine.enabled ? "内核未就绪" : "已停止"
+      : "未连接";
+    $("#rcProxyState").classList.toggle("online", running);
+    $("#rcProxyAddress").textContent = manager.managed
+      ? active?.name || "尚未选择配置" : running ? "Clash / Mihomo" : "代理控制器不可用";
+    const modes = {rule: "规则模式", global: "全局模式", direct: "直连模式"};
+    $("#rcProxySummary").textContent = running
+      ? `${modes[data.mode] || data.mode} · ${data.connection_count} 个连接 · TUN ${data.tun_enabled ? "已启用" : "未启用"}`
+      : manager.managed && engine.ready ? "Mihomo 后台已就绪" : "进入网络代理查看详情";
+  }
+  async function refreshProxySummary() {
+    const owner = current;
+    try {
+      const [data, manager] = await Promise.all([api("/proxy"), api("/proxy/manager")]);
+      if (owner()) updateProxySummary(data, manager);
+    } catch (error) {
+      if (!owner()) return;
+      $("#rcProxyState").textContent = "读取失败";
+      $("#rcProxyState").classList.remove("online");
+      $("#rcProxyAddress").textContent = error.message;
+      $("#rcProxySummary").textContent = "";
+    }
   }
   function bindRustdesk() {
     let statusRequest;
@@ -120,6 +148,7 @@ window.RemoteHubRemoteConnect = (() => {
         updateNetwork(data.tailscale, data.lan_urls);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
         if (tab === "overview" && data.rustdesk.ready) return loadSettings();
+        if (tab === "status") return Promise.all([RemoteHubLAN.refresh(), refreshProxySummary()]);
         if (tab === "lan") return RemoteHubLAN.refresh();
       });
       statusRequest = request;
@@ -309,6 +338,10 @@ window.RemoteHubRemoteConnect = (() => {
             fillTailPreferences(network.preferences);
           tailDirty = false;
           tab = next;
+          $("#rcRoot").dataset.tab = next;
+          document.querySelectorAll("[data-rc-card]").forEach((card) => {
+            card.hidden = next !== "status" && card.dataset.rcCard !== next;
+          });
           $("#rcLAN").hidden = next !== "lan";
           $("#rcNetworkProxy").hidden = next !== "proxy";
           $("#rcNetwork").hidden = next !== "network";
@@ -321,11 +354,15 @@ window.RemoteHubRemoteConnect = (() => {
             .forEach((item) =>
               item.classList.toggle("active", item.dataset.rcTab === next),
             );
+          if (next === "status") await Promise.all([RemoteHubLAN.refresh(), refreshProxySummary()]);
           if (next === "lan") await RemoteHubLAN.refresh();
           if (next === "proxy") await renderProxy();
           window.scrollTo?.(0, 0);
       });
     }
+    document.querySelectorAll("[data-rc-open]").forEach((button) => {
+      button.onclick = () => selectTab(button.dataset.rcOpen, button);
+    });
     document.querySelectorAll("[data-rc-tab]").forEach((button) => {
       button.onclick = () => selectTab(button.dataset.rcTab, button);
     });
@@ -380,10 +417,19 @@ window.RemoteHubRemoteConnect = (() => {
     return { refresh, selectTab, settle: () => statusRequest || Promise.resolve() };
   }
 
+  function summaryCard(target, glyph, title, statusId, addressId, detailId) {
+    return `<article class="rc-summary" data-rc-card="${target}"><div class="rc-summary-head"><h2>${icon(glyph)}${title}</h2><span class="rc-dot" id="${statusId}">读取中</span></div><p id="${addressId}" class="mono">—</p><small ${detailId ? `id="${detailId}"` : ""} class="muted">${detailId ? "" : "本机远程桌面服务"}</small><button class="rc-summary-open" data-rc-open="${target}" aria-label="打开${title}">查看详情 ${icon("chevron")}</button></article>`;
+  }
   function markup() {
-    return `<div id="rcRoot" class="remote-connect">
-<div class="rc-summaries"><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("network")}Tailscale</h2><span class="rc-dot" id="rcTailState">读取中</span></div><p id="rcTailAddress" class="mono">—</p><small id="rcTailCounts" class="muted"></small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("server")}RustDesk</h2><span class="rc-dot" id="rcOnline">读取中</span></div><p id="rcNativeSummary" class="mono">—</p><small class="muted">本机远程桌面服务</small></article><article class="rc-summary"><div class="rc-summary-head"><h2>${icon("link")}节点小宝</h2><span class="rc-dot" id="nbState">读取中</span></div><p id="nbAddress" class="mono">—</p><small id="nbSummary" class="muted"></small></article></div>
-<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="network" aria-label="Tailscale 设备">${icon("network")}Tailscale<span class="rc-tab-suffix">设备</span></button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+    return `<div id="rcRoot" class="remote-connect" data-tab="status">
+<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="status" class="active">${icon("overview")}状态总览</button><button data-rc-tab="lan">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}Tailscale</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+<div class="rc-summaries">
+${summaryCard("lan", "network", "本地局域网", "rcLanState", "rcLanAddress", "rcLanSummary")}
+${summaryCard("network", "network", "Tailscale", "rcTailState", "rcTailAddress", "rcTailCounts")}
+${summaryCard("nodebaby", "link", "节点小宝", "nbState", "nbAddress", "nbSummary")}
+${summaryCard("proxy", "settings", "网络代理", "rcProxyState", "rcProxyAddress", "rcProxySummary")}
+${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", null)}
+</div>
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
@@ -764,7 +810,7 @@ ${RemoteHubNodeBaby.markup()}
   async function render(check) {
     current = check;
     if (!$("#rcRoot")) {
-      tab = "lan";
+      tab = "status";
       original = {};
       effectiveOriginal = {};
       dirty = false;
