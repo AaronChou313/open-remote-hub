@@ -186,6 +186,10 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject result = (JSONObject) api("/cloud/login",
                     new JSONObject().put("cloud_url", base).put("username", user).put("password", password), "POST");
+                getSharedPreferences("cloud",MODE_PRIVATE).edit()
+                    .putString("token",result.optString("account_token"))
+                    .putString("url",base)
+                    .putString("user",result.optString("username")).apply();
                 onUI(() -> {
                     cloudPassword.setText("");
                     info("已登录 " + result.optString("username") + "，正在入网…");
@@ -418,7 +422,11 @@ public final class MainActivity extends Activity {
             }));
             Button consoleButton=secondary("控制台", () -> {
                 JSONObject result=(JSONObject)api("/console",new JSONObject().put("peer_ip",ip),"POST");
-                onUI(() -> openConsole(result.optString("url"),ip,peer.optString("hostname")));
+                String address=result.optString("url");
+                String ticket=ticketFor(ip);
+                if (ticket!=null && ticket.contains("#")) address=address.replace("/auth/cloud/enter","/auth/cloud")+ticket.substring(ticket.indexOf('#'));
+                final String target=address;
+                onUI(() -> openConsole(target,ip,peer.optString("hostname")));
             });
             consoleButton.setEnabled(console);
             actions.addView(consoleButton);
@@ -433,6 +441,48 @@ public final class MainActivity extends Activity {
             TextView empty=text("还没有其他设备。\n把另一台电脑或平板绑定到同一账号后会显示在这里。",14,false);
             empty.setTextColor(color(R.color.muted)); devices.addView(empty);
         }
+    }
+    private String ticketFor(String peerIp) {
+        try {
+            SharedPreferences saved=getSharedPreferences("cloud",MODE_PRIVATE);
+            String token=saved.getString("token",""), base=saved.getString("url","");
+            if (token.isEmpty() || base.isEmpty()) return null;
+            JSONArray devices=(JSONArray)cloudCall(base+"/api/devices",token,"GET",null);
+            String id=null;
+            for (int index=0;index<devices.length() && id==null;index++) {
+                JSONObject device=devices.optJSONObject(index); if (device==null) continue;
+                JSONObject mesh=device.optJSONObject("mesh"); JSONArray ips=mesh==null?null:mesh.optJSONArray("ips");
+                for (int item=0;ips!=null&&item<ips.length();item++) if (peerIp.equals(ips.optString(item))) id=device.optString("instance_id");
+            }
+            if (id==null || id.isEmpty()) return null;
+            JSONObject ticket=(JSONObject)cloudCall(base+"/api/devices/"+id+"/ticket",token,"POST",new JSONObject().put("address","http://"+peerIp+":8765").put("state",""));
+            return ticket.optString("url");
+        } catch (Exception error) {
+            Diagnostics.log("console","票据获取失败，使用网页授权："+error.getMessage());
+            return null;
+        }
+    }
+    private Object cloudCall(String address,String token,String method,JSONObject body) throws Exception {
+        java.net.HttpURLConnection connection=(java.net.HttpURLConnection)new java.net.URL(address).openConnection();
+        connection.setRequestMethod(method);
+        connection.setRequestProperty("Authorization","Bearer "+token);
+        connection.setConnectTimeout(8000); connection.setReadTimeout(12000);
+        if (body!=null) {
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type","application/json");
+            try (java.io.OutputStream output=connection.getOutputStream()) {
+                output.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+        int code=connection.getResponseCode();
+        java.io.InputStream input=code<400?connection.getInputStream():connection.getErrorStream();
+        StringBuilder text=new StringBuilder();
+        try (java.io.BufferedReader reader=new java.io.BufferedReader(new java.io.InputStreamReader(input,java.nio.charset.StandardCharsets.UTF_8))) {
+            String line; while ((line=reader.readLine())!=null) text.append(line);
+        }
+        if (code>=400) throw new Exception("Cloud "+code);
+        String value=text.toString().trim();
+        return value.startsWith("[")?new JSONArray(value):new JSONObject(value);
     }
     private void openConsole(String url,String ip,String name) {
         Diagnostics.log("console","打开 "+name+" · "+url);

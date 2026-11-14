@@ -399,5 +399,5 @@ func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 500, err)
 		return
 	}
-	reply(w, map[string]any{"ok": true, "instance_id": deviceID, "username": login.User.Username, "cloud_url": base})
+	reply(w, map[string]any{"ok": true, "instance_id": deviceID, "username": login.User.Username, "cloud_url": base, "account_token": login.Token})
 }
