@@ -52,7 +52,7 @@ Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个�
 
 Cloud 设备卡片支持改名、编辑地址、设置首选入口、连接检测和解绑，手动地址及名称不会被心跳覆盖。Agent 在心跳响应中同步这些地址的主机名，沿用原监听端口的 Host / Origin 校验。点击“打开控制台”或某个地址会签发 90 秒、目标设备专用、单次兑换的 Ticket，使用顶层导航进入 Agent，浏览器跨域探测失败时也可以直接进入。直接访问 Agent IP 时点击“使用 Cloud 账号登录”，完成 Cloud 授权后自动返回。新浏览器登录同一 Cloud 账号即可读取同一设备目录。
 
-绑定模式使用 Cloud 登录，独立本机密码入口隐藏。未绑定模式保留原有本机密码。Cloud 退出会撤销 Cloud 会话与尚未使用的 Ticket；已建立的 Agent Cookie 通过 Agent 退出、到期或解绑撤销。Cloud 解绑后，Agent 在下次成功联系 Cloud 时撤销绑定和本机会话。主机睡眠或断网期间无法即时接收解绑状态。
+已登录 Cloud 的设备使用 Cloud 登录，本机密码入口隐藏。未绑定模式保留原有本机密码。Cloud 退出会撤销 Cloud 会话与尚未使用的 Ticket；已建立的 Agent Cookie 通过 Agent 退出、到期或解绑撤销。Cloud 解绑后，Agent 在下次成功联系 Cloud 时撤销绑定和本机会话。主机睡眠或断网期间无法即时接收解绑状态。
 
 已通过真实 ECS HTTPS 注册、绑定、心跳、跨账号隔离、并发 Ticket 单次消费与解绑测试。Mac 正式 Agent 已验证 GitHub Pages → Tailscale 地址登录、直接本机入口授权、原生 Zellij 终端、Docker / 文件读取，以及重启后心跳和登录会话恢复。Windows / iPad 实机浏览器仍需客户端验收。
 
