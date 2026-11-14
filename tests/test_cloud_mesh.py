@@ -97,6 +97,7 @@ def test_mesh_enrollment_directory_scope_unbind_and_account_delete(mesh):
         )
     rows = client.get("/agent/directory", headers=agent_a).json()
     assert len(rows) == 1 and rows[0]["instance_id"] == a["instance_id"]
+    assert rows[0]["self"] is True
     assert rows[0]["mesh"]["ips"] == ["100.64.0.11"] and rows[0]["mesh"]["paths"] == [
         "direct"
     ]
