@@ -330,23 +330,68 @@ git clone <仓库地址> src/<仓库目录>
 
 新主机的基础安装只有虚拟环境、配置和启动几步。完整启用所有模块还需安装相应原生软件、完成账户登录及系统授权，现有 `install.sh` 只安装 Python 依赖。各架构需使用对应的 Python、Zellij、DSH、Docker 和代理二进制，并现场核对其可用版本。
 
-### Windows 预览版（原生）
+### Windows 预览版（原生，从零安装）
 
-需要 Python 3.11+（安装时勾选 Add to PATH）、已安装 RustDesk，以及 `orh-mesh-windows-amd64.exe`（Release 里 `orn-windows-amd64.zip` 解压后的 `dist/orh-mesh-windows-amd64.exe`）。把它放在与本仓库同级的 `open-remote-net\dist\`，或设置 `ORH_MESH_SOURCE` 指向它。
+Windows 版保留控制台核心、组网与远程桌面；终端、SSH、文件、DSH、项目、开发环境在 Windows 上隐藏（Zellij / Unix PTY / Unix Socket 不可用），RustDesk 设置页也不可用，但远程桌面仍由组网组件调用已安装的 RustDesk。
+
+**1. 安装 Python 3.11+**
+
+从 python.org 安装，勾选 *Add python.exe to PATH*。验证：
+
+```powershell
+python --version
+```
+
+**2. 获取代码**
 
 ```powershell
 git clone https://github.com/AaronChou313/open-remote-hub.git
 cd open-remote-hub
+```
+
+没有 Git 时，可在 GitHub 页面下载 ZIP 后解压并进入目录。
+
+**3. 放入组网二进制**
+
+仓库不含构建产物。任选一种方式得到 `orh-mesh-windows-amd64.exe`（约 22 MB）：
+
+- 从本仓库的 GitHub Release 下载（发布时会把三平台二进制和 APK 作为附件）；
+- 从已构建的机器（macOS / Linux）拷贝 `dist/orh-mesh-windows-amd64.exe`；
+- 在装有 Go 1.27.4 的机器上构建：`cd mesh && go build -trimpath -ldflags="-s -w" -o ..\dist\orh-mesh-windows-amd64.exe .\cmd\orh-mesh`。
+
+把文件放到 `open-remote-hub\dist\orh-mesh-windows-amd64.exe`。若放在别处，安装前设置：
+
+```powershell
+$env:ORH_MESH_SOURCE = "C:\path\orh-mesh-windows-amd64.exe"
+```
+
+**4. 运行安装脚本**
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-安装脚本会创建 `.venv`、安装依赖、生成 `.env`（自动把本机 IPv4 写入 `ORH_ALLOWED_HOSTS`）、把组网组件放到 `bin\orh-mesh.exe`、注册登录时启动的计划任务 `OpenRemoteHub`，并打开 `http://127.0.0.1:8765/`。首次使用需设置管理员密码并绑定 Cloud；组网组件随控制台启动并出现在设备列表中。
+脚本会：创建 `.venv` 并安装依赖；生成 `.env`（`ORH_HOST=0.0.0.0`、`ORH_PORT=8765`、自动填入本机 IPv4 到 `ORH_ALLOWED_HOSTS`、`ORH_DSH_ENABLED=0`）；把组网二进制复制为 `bin\orh-mesh.exe` 并生成 `%APPDATA%\orh-mesh\config.json`；注册登录时启动的计划任务 `OpenRemoteHub`；创建开始菜单「OpenRemoteHub」与「OpenRemoteHub 停止」；启动服务并打开 `http://127.0.0.1:8765/`。
 
-- 启停：开始菜单「OpenRemoteHub」打开控制台，「OpenRemoteHub 停止」停止控制台与内置组网；也可用 `scripts\start.cmd`、`scripts\stop.cmd`。
-- 可用：系统概览、我的应用、容器（需 Docker CLI）、网络连接（设备列表 / 对端控制台 / 远程桌面 / 组网 管理）、知识库、本地服务。
-- 暂不可用：终端（Zellij 无 Windows 原生版）、SSH、文件管理、DSH、项目、开发环境——这些入口在 Windows 上隐藏；RustDesk 设置页依赖 Unix Socket，同样不可用，但远程桌面仍由 组网 调用已安装的 RustDesk。
-- 卸载：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Uninstall`（保留 `.runtime` 数据）。
-- 首次启动若出现 Windows 防火墙提示，请允许专用网络访问；其他设备用 `http://<本机IP>:8765/` 访问，需要额外主机名时补充 `ORH_ALLOWED_HOSTS`。
+**5. 首次使用**
+
+1. 浏览器打开 `http://127.0.0.1:8765/`，设置管理员密码。
+2. 右上角「绑定 Cloud」，用账号确认绑定码；组网组件由 ORH 自动带上设备身份，几十秒内变为「已连接」。
+3. Windows 防火墙提示时允许**专用网络**；其他设备用 `http://<Windows IP>:8765/` 访问（需要额外主机名时补充 `.env` 的 `ORH_ALLOWED_HOSTS`）。
+4. 平板/其他电脑的设备列表会出现这台 Windows，可打开控制台或发起远程桌面。
+
+> 不要直接运行 `orh-mesh.exe`：单独启动只会停在 `NeedsLogin`。它必须由 ORH 启动，才能获得 Cloud 预授权。
+
+**6. 启停、更新与卸载**
+
+```powershell
+.\scripts\start.cmd   # 启动（或开始菜单「OpenRemoteHub」）
+.\scripts\stop.cmd    # 停止控制台与内置组网
+```
+
+更新：`git pull`，放入新的 `dist\orh-mesh-windows-amd64.exe`，执行 `.venv\Scripts\python.exe scripts\mesh_setup.py`，再停止并启动。日志在 `.runtime\server.log` 与 `.runtime\mesh.log`。
+
+卸载：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Uninstall`（保留 `.runtime` 数据）。
 
 完整功能（终端、文件、SSH、DSH）仍需 WSL2：先在管理员 PowerShell 执行 `wsl --install -d Ubuntu-24.04`，按提示重启并创建 Linux 用户，再按 Linux 流程在 WSL 的 `~/Projects` 内部署。WSL 中的进程、网卡、systemd 与 RustDesk IPC 按 Linux 环境读取；访问 Windows 文件需配置 `/mnt/c/...` 等授权目录。WSL 的局域网访问、Windows 防火墙、发行版随 Windows 启动均需单独配置和验证，Windows 11 支持的镜像网络可简化访问。[WSL 安装](https://learn.microsoft.com/en-us/windows/wsl/install) · [WSL 网络](https://learn.microsoft.com/en-us/windows/wsl/networking) · [WSL systemd](https://learn.microsoft.com/en-us/windows/wsl/systemd)
 

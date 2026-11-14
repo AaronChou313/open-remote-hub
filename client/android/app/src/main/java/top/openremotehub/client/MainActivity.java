@@ -454,8 +454,12 @@ public final class MainActivity extends Activity {
         }
     }
     private void desktop(String address) {
-        if (!backgroundAllowed() && !getPreferences(MODE_PRIVATE).getBoolean("background_requested",false)) {
-            requestBackground(address);
+        if (!backgroundAllowed()) {
+            Diagnostics.log("desktop","后台未豁免，提示授权");
+            new AlertDialog.Builder(this).setTitle("需要后台运行权限")
+                .setMessage("远程桌面期间 ORH 需要在后台保持连接。未授权时系统可能在一分钟后断开。\n\n请允许“忽略电池优化”，并在厂商设置里放行后台运行/高耗电。")
+                .setNegativeButton("继续",(dialog,which) -> openDesktop(address))
+                .setPositiveButton("去授权",(dialog,which) -> requestBackground(address)).show();
             return;
         }
         openDesktop(address);
