@@ -52,3 +52,5 @@ nav{max-height:none;min-height:0;overflow-y:auto}.workspace:has(#dshFrame) main{
 .account-actions #portalLink {display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;padding:8px;border-radius:7px;font-size:13px;white-space:nowrap}
 .account-actions #portalLink:hover {color:var(--accent);background:var(--soft)}
 @media(max-width:760px){.account-actions #portalLink span {display:none}}
+
+.brandmark{background:none;padding:0}.brandmark img{width:100%;height:100%;border-radius:9px;display:block;object-fit:cover}

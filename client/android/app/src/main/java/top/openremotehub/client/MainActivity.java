@@ -2,8 +2,10 @@ package top.openremotehub.client;
 
 import android.Manifest;
 import android.app.*;
+import android.app.usage.UsageStatsManager;
 import android.content.*;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -23,7 +25,7 @@ public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
     private LinearLayout page, binding;
-    private TextView status, message, selfDetail, selfChip, selfDot, updateBanner;
+    private TextView status, message, selfDetail, selfChip, selfDot, updateBanner, powerNotice;
     private String latestUpdateUrl = "";
     private boolean boundBefore;
     private Button backgroundButton;
@@ -171,12 +173,30 @@ public final class MainActivity extends Activity {
         page = column(); page.setPadding(dp(20),dp(24),dp(20),dp(24)); scroll.addView(page);
 
         LinearLayout brand = new LinearLayout(this); brand.setOrientation(LinearLayout.HORIZONTAL); brand.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.orh_logo);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(30), dp(30)); logoParams.rightMargin = dp(9);
+        logo.setLayoutParams(logoParams); logo.setClipToOutline(true);
+        logo.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(8));
+            }
+        });
+        brand.addView(logo);
         TextView mark = text("ORH",15,true); mark.setTextColor(color(R.color.accent)); mark.setLetterSpacing(0.14f); brand.addView(mark);
         updateBanner = text("",12,false); updateBanner.setTextColor(color(R.color.accent)); updateBanner.setGravity(Gravity.END);
         updateBanner.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); updateBanner.setVisibility(View.GONE);
         updateBanner.setOnClickListener(view -> { if (!latestUpdateUrl.isEmpty()) open(latestUpdateUrl); });
         brand.addView(updateBanner); page.addView(brand);
         page.addView(text("设备网络",30,true));
+        powerNotice = text("",13,false); powerNotice.setTextColor(Color.WHITE);
+        GradientDrawable warn = new GradientDrawable(); warn.setColor(color(R.color.warn)); warn.setCornerRadius(dp(10));
+        powerNotice.setBackground(warn); powerNotice.setPadding(dp(14),dp(10),dp(14),dp(10));
+        powerNotice.setVisibility(View.GONE);
+        LinearLayout.LayoutParams noticeParams = new LinearLayout.LayoutParams(-1,-2); noticeParams.bottomMargin = dp(12);
+        powerNotice.setLayoutParams(noticeParams);
+        powerNotice.setOnClickListener(view -> requestBackground(null));
+        page.addView(powerNotice);
 
         LinearLayout self = card();
         LinearLayout head = new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(Gravity.CENTER_VERTICAL);
@@ -329,6 +349,8 @@ public final class MainActivity extends Activity {
         if (uptime>=0) line+=" · 运行 "+duration(uptime);
         if (connections>0) line+=" · "+connections+" 个连接";
         selfDetail.setText(line);
+        powerNotice.setText("后台连接未授权，远程桌面可能被系统中断 · 点此授权");
+        powerNotice.setVisibility(backgroundAllowed()?View.GONE:View.VISIBLE);
         JSONObject cloud=self.optJSONObject("cloud");
         boolean bound=cloud!=null&&cloud.optBoolean("bound");
         if (bound&&!boundBefore) info("已绑定 Cloud 账号");
@@ -488,6 +510,10 @@ public final class MainActivity extends Activity {
                     JSONObject peer=peers.optJSONObject(index);
                     report.append("设备 ").append(peer.optString("hostname")).append(" · ").append(peer.optString("path").isEmpty()?"idle":peer.optString("path")).append(peer.optBoolean("online")?" · 在线":" · 离线").append("\n");
                 }
+                boolean exempt = getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+                String bucket = "—";
+                if (Build.VERSION.SDK_INT >= 28) bucket = String.valueOf(getSystemService(UsageStatsManager.class).getAppStandbyBucket());
+                report.append("后台 ").append(exempt?"已豁免":"未豁免").append(" · 待机分组 ").append(bucket).append("\n");
                 report.append("转发 ").append(forwards==null?0:forwards.length()).append(" 个\n");
                 if (forwards!=null) for (int index=0;index<forwards.length();index++) {
                     JSONObject entry=forwards.optJSONObject(index);
