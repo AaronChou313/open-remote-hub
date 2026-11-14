@@ -156,6 +156,25 @@ def begin_binding(base):
     return {key:result[key] for key in ('user_code','verification_url','expires_in')}
 
 
+def enroll(base, username, password):
+    """Log in with the Cloud account and register this device in one step."""
+    if binding():
+        raise ValueError('设备已经绑定，请先在 Cloud 设备目录解绑')
+    base = cloud_url(base)
+    if not username or not password:
+        raise ValueError('请输入 Cloud 账号与密码')
+    login = call(base,'/api/login',{'username':username,'password':password})
+    account = login.get('token')
+    user = login.get('user') or {}
+    if not account or not user.get('id'):
+        raise ValueError('Cloud 登录响应无效')
+    result = call(base,'/api/devices/enroll',metadata(),account)
+    save(dict(status='bound',cloud_url=base,credential=result['device_token'],
+              owner_id=user['id'],username=user.get('username'),instance_id=result['instance_id'],
+              portal_url=base))
+    return dict(instance_id=result['instance_id'],username=user.get('username'),cloud_url=base)
+
+
 def synchronize():
     global last_heartbeat, last_error, mesh_error
     value = state()
@@ -241,6 +260,16 @@ async def bind_api(request: Request):
     body = await request.json()
     try:
         return await asyncio.to_thread(begin_binding,body.get('cloud_url') or os.environ.get('ORH_CLOUD_URL',''))
+    except ValueError as error:
+        raise HTTPException(409,str(error)) from None
+
+
+@router.post('/api/cloud/login')
+async def login_api(request: Request):
+    body = await request.json()
+    try:
+        return await asyncio.to_thread(enroll, body.get('cloud_url') or os.environ.get('ORH_CLOUD_URL',''),
+                                       str(body.get('username') or ''), str(body.get('password') or ''))
     except ValueError as error:
         raise HTTPException(409,str(error)) from None
 

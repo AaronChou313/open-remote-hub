@@ -250,6 +250,35 @@ def approve_binding(body: BindingApproval, request: Request, user=Depends(accoun
     return {'ok':True,'instance_id':row['instance_id']}
 
 
+@app.post('/api/devices/enroll')
+def enroll_device(body: Metadata, request: Request, user=Depends(account)):
+    """Register a device from an authenticated account session (no user code)."""
+    rate_limit(request,'device-enroll',20)
+    metadata = body.model_dump(mode='json')
+    metadata['addresses'] = addresses(body.addresses)
+    instance = str(body.instance_id)
+    credential = secrets.token_urlsafe(32)
+    now = time.time()
+    limit = int(os.environ.get('ORH_MAX_DEVICES','16'))
+    with database() as db:
+        db.execute('BEGIN IMMEDIATE')
+        existing = db.execute('SELECT owner_id FROM devices WHERE instance_id=?',(instance,)).fetchone()
+        if existing and existing['owner_id'] != user['id']:
+            raise HTTPException(403,'设备属于其他账号')
+        if existing:
+            db.execute('UPDATE devices SET credential_hash=?,owner_id=?,name=?,os=?,agent_addresses=?,port=?,last_seen=? WHERE instance_id=?',
+                       (digest(credential),user['id'],metadata['name'],metadata['os'],json.dumps(metadata['addresses']),metadata['port'],0,instance))
+        else:
+            count = db.execute('SELECT COUNT(*) AS n FROM devices WHERE owner_id=?',(user['id'],)).fetchone()['n']
+            if count >= limit:
+                raise HTTPException(409,f'设备数量已达上限（{limit}）')
+            db.execute('INSERT INTO devices (instance_id,owner_id,credential_hash,name,os,agent_addresses,port,last_seen,created,kind) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                       (instance,user['id'],digest(credential),metadata['name'],metadata['os'],json.dumps(metadata['addresses']),metadata['port'],0,now,metadata.get('kind','orh')))
+        db.execute('DELETE FROM bindings WHERE instance_id=?',(instance,))
+    return dict(ok=True,instance_id=instance,device_token=credential,
+                cloud_url=os.environ.get('ORH_CLOUD_PUBLIC_URL','https://cloud.openremotehub.top'))
+
+
 class Poll(BaseModel):
     device_code: str = Field(min_length=20,max_length=256)
 

@@ -247,3 +247,39 @@ def test_metadata_skips_windows_virtual_adapters(monkeypatch):
     assert '192.168.1.50' in main.NETWORK.hosts
     assert '172.20.0.1' not in main.NETWORK.hosts
     assert '127.0.0.1' in main.NETWORK.hosts
+
+
+def test_device_enrollment_from_account_login(cloud):
+    headers,user = signup(cloud,'enroll-user')
+    login = cloud.post('/api/login',json={'username':'enroll-user','password':'test-password-42'})
+    assert login.status_code==200,login.text
+    account = {'Authorization':'Bearer '+login.json()['token']}
+    metadata = dict(instance_id=str(uuid.uuid4()),name='New host',os='Darwin',
+                    addresses=['http://100.66.11.9:8765'],port=8765)
+    first = cloud.post('/api/devices/enroll',headers=account,json=metadata)
+    assert first.status_code==200,first.text
+    device = {'Authorization':'Bearer '+first.json()['device_token']}
+    assert cloud.post('/agent/heartbeat',headers=device,json=metadata).status_code==200
+    second = cloud.post('/api/devices/enroll',headers=account,json=metadata).json()
+    assert second['device_token'] != first.json()['device_token']
+    assert cloud.post('/agent/heartbeat',headers=device,json=metadata).status_code==401
+    other,_ = signup(cloud,'enroll-other')
+    assert cloud.post('/api/devices/enroll',headers=other,json=metadata).status_code==403
+
+
+def test_agent_enroll_logs_in_with_account(monkeypatch,tmp_path):
+    data=tmp_path/'agent';data.mkdir()
+    monkeypatch.setattr(main,'DATA',data)
+    monkeypatch.setattr(cloud_agent,'metadata',lambda:dict(instance_id=str(uuid.uuid4()),name='Mac',os='Darwin',addresses=[],port=8765))
+    calls=[]
+    def call(base,path,body,credential=None):
+        calls.append((path,body,credential))
+        if path=='/api/login':return {'token':'account-token','user':{'id':'owner','username':'aaron'}}
+        return {'device_token':'device-token','instance_id':body['instance_id']}
+    monkeypatch.setattr(cloud_agent,'call',call)
+    result=cloud_agent.enroll('https://cloud.example','aaron','secret')
+    assert result['username']=='aaron'
+    assert calls[0][0]=='/api/login' and calls[0][2] is None
+    assert calls[1][0]=='/api/devices/enroll' and calls[1][2]=='account-token'
+    value=cloud_agent.state()
+    assert value['status']=='bound' and value['credential']=='device-token' and value['owner_id']=='owner'

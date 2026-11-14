@@ -126,10 +126,8 @@ async function enter() {
   $('#login').hidden = true;
   $('#shell').hidden = false;
   const portal = $('#portalLink');
-  portal.href = 'https://aaronchou313.github.io/open-remote-hub/#add=' + encodeURIComponent(JSON.stringify({urls:[location.origin]}));
-  api('/discovery').then(data => {portal.href = data.portal_url;}).catch(() => {
-   portal.title = '使用当前访问地址添加本机';
-  });
+  portal.href = (me.cloud?.base_url || 'https://cloud.openremotehub.top') + '/'; portal.title='打开 Cloud 门户';
+  
   switchView(view);
  } catch (error) {
   if (!$('#login').hidden) $('#loginError').textContent = error.message;
@@ -141,24 +139,25 @@ $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubm
 $('#cloudBind').onclick = async () => {
  $('#cloudBindDialog').showModal();
  $('#agentBindError').textContent = '';
- $('#agentBindResult').hidden = true;
- try {
-  const status = await api('/cloud/status');
-  if (status.pending && status.pending.expires > Date.now()/1000) showBinding(status.pending);
- } catch (error) {$('#agentBindError').textContent=error.message;}
+ syncCloudRegister();
 };
-function showBinding(value) {
- $('#agentBindCode').textContent = value.user_code;
- $('#agentVerifyLink').href = value.verification_url;
- $('#agentBindResult').hidden = false;
+function syncCloudRegister(){
+ const base=($('#agentCloudURL').value||'').trim().replace(/\/$/,'');
+ $('#agentCloudRegister').href=base?base+'/':'#';
 }
+$('#agentCloudURL').oninput = syncCloudRegister;
 $('#agentBindClose').onclick = () => $('#cloudBindDialog').close();
 $('#cloudBindForm').onsubmit = async event => {
  event.preventDefault();
- $('#agentBindSubmit').disabled = true;
- try {showBinding(await api('/cloud/bind',{cloud_url:$('#agentCloudURL').value.trim()}));}
- catch (error) {$('#agentBindError').textContent=error.message;}
- finally {$('#agentBindSubmit').disabled=false;}
+ const button=$('#agentBindSubmit');
+ button.disabled=true; $('#agentBindError').textContent='';
+ try {
+  await api('/cloud/login',{cloud_url:$('#agentCloudURL').value.trim(),
+    username:$('#agentCloudUser').value.trim(),password:$('#agentCloudPassword').value});
+  $('#cloudBindDialog').close();
+  location.reload();
+ } catch (error) {$('#agentBindError').textContent=error.message;}
+ finally {button.disabled=false;}
 };
 $('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError').textContent='';$('#passwordDialog').showModal()};$('#cancelPassword').onclick=()=>$('#passwordDialog').close();$('#passwordForm').onsubmit=async e=>{e.preventDefault();try{if($('#newPassword').value!==$('#newPasswordConfirm').value)throw Error('两次输入的新密码不一致');await api('/auth/password',{password:$('#newPassword').value});$('#passwordForm').reset();$('#passwordDialog').close();notify('密码已更新，其他登录已失效')}catch(e){$('#passwordError').textContent=e.message}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});

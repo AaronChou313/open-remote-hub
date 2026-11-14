@@ -299,3 +299,16 @@ def test_orn_management_routes(management,monkeypatch):
     assert http.post('/api/remote-connect/mesh/leave',json={'confirm':True}).json()=={'ok':True}
     assert calls==[('/leave',{'confirm':True})]
     assert [item[1] for item in audit]==['config','restart','leave']
+
+
+def test_cloud_login_route_registers_device(workspace,monkeypatch):
+    http,_,_ = workspace
+    from app import cloud_agent
+    calls=[]
+    def enroll(base,username,password):
+        calls.append((base,username,password))
+        return dict(instance_id='device',username=username,cloud_url=base)
+    monkeypatch.setattr(cloud_agent,'enroll',enroll)
+    response=http.post('/api/cloud/login',json={'cloud_url':'https://cloud.example','username':'aaron','password':'secret'})
+    assert response.status_code==200 and response.json()['username']=='aaron'
+    assert calls==[('https://cloud.example','aaron','secret')]
