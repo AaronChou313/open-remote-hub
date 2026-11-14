@@ -129,7 +129,7 @@ def public_device(row):
 
 class Credentials(BaseModel):
     username: str = Field(min_length=3, max_length=80, pattern=r'^[A-Za-z0-9][A-Za-z0-9_.@+\-]*$')
-    password: str = Field(max_length=1024)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 @app.get('/api/health')
@@ -140,8 +140,6 @@ def health():
 @app.post('/api/register')
 def register(body: Credentials, request: Request):
     rate_limit(request,'register',10)
-    if len(body.password) < 8:
-        raise HTTPException(422,'Cloud 账号密码至少需要 8 个字符')
     username = body.username.lower()
     salt = secrets.token_hex(32)
     hashed = password_hash(body.password, salt)

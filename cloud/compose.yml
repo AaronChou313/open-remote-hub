@@ -1,9 +1,10 @@
-version: '3.8'
 services:
   cloud:
     build:
       context: ..
       dockerfile: cloud/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     restart: unless-stopped
     environment:
       ORH_CLOUD_PUBLIC_URL: https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}

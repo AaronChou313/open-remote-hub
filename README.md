@@ -39,7 +39,7 @@
 
 Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个人主机运行现有全部管理功能。浏览器从 Cloud 获得一次性 Ticket 后直接导航到 Agent，Agent 向 Cloud 兑换并建立原有管理员 Cookie。Zellij、Docker、文件等请求从浏览器直接到 Agent。Cloud 在线状态依据最近 100 秒内的心跳，浏览器地址检测结果单独展示。
 
-前端入口为 [OpenRemoteHub Cloud](https://aaronchou313.github.io/open-remote-hub/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。Cloud 账号密码至少 8 个字符。
+前端入口为 [OpenRemoteHub Cloud](https://aaronchou313.github.io/open-remote-hub/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。账号密码支持数字、字母与特殊符号组合，允许自定长度。
 
 ```sh
 # 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
@@ -65,6 +65,8 @@ docker compose --env-file cloud/.env -f cloud/compose.yml up -d --build
 docker compose --env-file cloud/.env -f cloud/compose.yml ps
 docker compose --env-file cloud/.env -f cloud/compose.yml logs --tail=100 cloud https
 ```
+
+本次 ECS 的 Docker Hub 直连不可用，已从镜像源拉取官方 Python / Caddy 镜像并保留本地标签。构建时可在 `cloud/.env` 设置 `PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`。
 
 Cloud 和 HTTPS 网关配置了自动重启。更新代码后执行相同 `up -d --build` 命令。备份应在停止 Cloud 容器后复制 `cloud-data` 数据卷，保留 `caddy-data` 可延续证书状态。Cloud 只存元数据和令牌摘要，设备凭据与 Ticket 不以明文入库。账号不支持邮件验证、密码找回、MFA 或公共账号配额，当前为 MVP。
 
