@@ -210,3 +210,17 @@ def test_orn_console_ticket_is_bound_to_its_device_origin(cloud):
     assert cloud.post('/api/devices/'+identifier+'/ticket',headers=owner,json={'address':address}).status_code==200
     for invalid in [f'http://orh-{uuid.uuid4()}.localhost:47890',f'http://orh-{identifier}.localhost:80','http://attacker.localhost:47890']:
         assert cloud.post('/api/devices/'+identifier+'/ticket',headers=owner,json={'address':invalid}).status_code==422
+
+
+def test_metadata_allows_mesh_host_when_console_binds_loopback(monkeypatch):
+    from app.network import Network
+    from app.remote_connect import tailscale
+    monkeypatch.setenv('ORH_HOST','127.0.0.1')
+    monkeypatch.setenv('ORH_ALLOWED_HOSTS','')
+    monkeypatch.setattr(main,'NETWORK',Network.load())
+    monkeypatch.setattr(main,'PORT',8765)
+    monkeypatch.setattr(tailscale,'json_command',lambda argv:{'Self':{'TailscaleIPs':['100.64.0.21'],'DNSName':'meshed.orh.internal.'}})
+    value=cloud_agent.metadata()
+    assert value['addresses']==['http://127.0.0.1:8765']
+    assert main.NETWORK.allows('100.64.0.21:8765',8765)
+    assert main.NETWORK.allows('meshed.orh.internal:8765',8765)
