@@ -94,8 +94,8 @@ def test_timeout_and_unavailable(monkeypatch):
     monkeypatch.setattr(tailscale,'binary',lambda:None)
     assert tailscale.status()['available'] is False
     monkeypatch.setattr(tailscale,'binary',lambda:'/native/tailscale')
-    def run(*args,**kwargs):raise subprocess.TimeoutExpired('tailscale',10)
-    monkeypatch.setattr(tailscale.subprocess,'run',run)
+    def run(*args,**kwargs):raise tailscale.TailscaleError('ORN 请求超时')
+    monkeypatch.setattr(tailscale,'request',run)
     with pytest.raises(tailscale.TailscaleError):tailscale.command(['status','--json'])
     result=tailscale.status()
     assert result['reachable'] is False and '超时' in result['error']

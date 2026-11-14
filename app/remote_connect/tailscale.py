@@ -1,9 +1,10 @@
-"""Bounded system Tailscale CLI calls. No daemon sockets are exposed to Web."""
+"""ORN LocalAPI consumer, preserving the console network response contract."""
 import ipaddress
 import json
 import os
-import shutil
-import subprocess
+from pathlib import Path
+import sys
+import httpx
 import threading
 import time
 from urllib.parse import urlsplit
@@ -17,38 +18,77 @@ class TailscaleError(RuntimeError):
     pass
 
 
+def token_file():
+    default = (Path.home()/'Library/Application Support/orn-agent/api.token' if sys.platform=='darwin'
+               else Path(os.environ.get('APPDATA') or os.environ.get('XDG_CONFIG_HOME') or str(Path.home()/'.config'))/'orn-agent/api.token')
+    return Path(os.environ.get('ORH_ORN_API_TOKEN_FILE',str(default))).expanduser()
+
+
 def binary():
-    return os.environ.get('ORH_TAILSCALE_BIN') or shutil.which('tailscale') or (
-        '/Applications/Tailscale.app/Contents/MacOS/Tailscale'
-        if os.path.isfile('/Applications/Tailscale.app/Contents/MacOS/Tailscale') else None)
+    return str(token_file()) if token_file().is_file() else None
+
+
+def request(path, body=None, timeout=10):
+    base = os.environ.get('ORH_ORN_API_URL','http://127.0.0.1:4789').rstrip('/')
+    parsed = urlsplit(base)
+    if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost','::1') or parsed.username or parsed.path:
+        raise TailscaleError('ORN LocalAPI 地址必须是 loopback HTTP 入口')
+    try:
+        token=token_file().read_text().strip()
+        with httpx.Client(timeout=timeout,trust_env=False) as client:
+            response=client.request('GET' if body is None else 'POST',base+'/api/v1'+path,
+                                    json=body,headers={'Authorization':'Bearer '+token})
+    except FileNotFoundError:
+        raise TailscaleError('请先安装并启动 ORN Agent') from None
+    except httpx.TimeoutException:
+        raise TailscaleError('ORN 请求超时，请刷新状态核对') from None
+    except (httpx.HTTPError,OSError):
+        raise TailscaleError('ORN 本地服务不可用，请检查 Agent 状态') from None
+    if response.status_code>=400:
+        raise TailscaleError(response.json().get('detail','ORN 操作未完成'))
+    return response.json()
+
+
+def native_peer(value):
+    return dict(ID=value.get('id'),HostName=value.get('hostname'),DNSName=value.get('dns_name'),
+                TailscaleIPs=value.get('ips',[]),Online=value.get('online',False),
+                Active=value.get('path') in ('direct','relay'),CurAddr=value.get('direct_addr',''),
+                Relay=value.get('relay',''),RxBytes=value.get('rx',0),TxBytes=value.get('tx',0))
 
 
 def command(arguments, timeout=10):
-    executable = binary()
-    if not executable:
-        raise TailscaleError('未发现 Tailscale CLI')
-    try:
-        result = subprocess.run([executable, *arguments], capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise TailscaleError('Tailscale 操作超时，请刷新状态核对') from None
-    except OSError:
-        raise TailscaleError('无法执行 Tailscale CLI，请检查本机安装') from None
-    if result.returncode:
-        message = (result.stderr or result.stdout).strip()[:1200]
-        raise TailscaleError(message or 'Tailscale 操作未成功')
-    return result.stdout.strip()
+    if arguments==['status','--json']:
+        value=request('/status',timeout=timeout)
+        peers=request('/peers',timeout=timeout)
+        raw=dict(Version=value.get('version'),BackendState=value.get('backend_state'),
+                 Self=native_peer(value.get('device',{})),Peer={peer['id']:native_peer(peer) for peer in peers},
+                 Health=value.get('health',[]),AuthURL='',
+                 CurrentTailnet={'Name':'ORN','MagicDNSSuffix':value.get('network',''),'MagicDNSEnabled':value.get('magic_dns',False)})
+        return json.dumps(raw)
+    if arguments==['get','--json']:
+        return '{}'
+    if arguments==['netcheck']:
+        return json.dumps(request('/netcheck',{},timeout=timeout),ensure_ascii=False,indent=2)
+    if arguments and arguments[0]=='ping':
+        value=request('/ping',{'peer_ip':arguments[-1]},timeout=timeout)
+        if value.get('Err'):raise TailscaleError(value['Err'])
+        route=value.get('Endpoint') or 'DERP '+str(value.get('DERPRegionCode') or value.get('DERPRegionID'))
+        return f"{value.get('IP')} · {value.get('LatencySeconds',0)*1000:.1f} ms · {route}"
+    if arguments and arguments[0] in ('up','down'):
+        return json.dumps(request('/control',{'action':'connect' if arguments[0]=='up' else 'disconnect'},timeout=timeout))
+    raise TailscaleError('此设置请在 ORN 本地入口管理')
 
 
 def json_command(arguments):
     try:
         return json.loads(command(arguments))
     except ValueError:
-        raise TailscaleError('Tailscale 返回了无法解析的状态') from None
+        raise TailscaleError('ORN 返回了无法解析的状态') from None
 
 
 def preferences():
     values = json_command(['get', '--json'])
-    return {name: values.get(name) for name in PREFERENCES}
+    return {name: values.get(name) for name in PREFERENCES} if values else None
 
 
 def peer(value):
@@ -74,13 +114,13 @@ def status():
     with lock:
         last_operation = dict(operation) if operation else None
     if not binary():
-        return dict(available=False, error='未发现 Tailscale CLI', peers=[], last_operation=last_operation)
+        return dict(available=False, error='未发现 ORN Agent', peers=[], last_operation=last_operation)
     try:
         value = json_command(['status', '--json'])
     except TailscaleError as error:
         return dict(available=True, reachable=False, error=str(error), peers=[], last_operation=last_operation)
     network = value.get('CurrentTailnet') or {}
-    result = dict(available=True, reachable=True, state=value.get('BackendState'), version=value.get('Version'),
+    result = dict(backend='orn', available=True, reachable=True, state=value.get('BackendState'), version=value.get('Version'),
                   device=peer(value.get('Self') or {}), network=network.get('MagicDNSSuffix') or network.get('Name'),
                   magic_dns=bool(network.get('MagicDNSEnabled')), health=value.get('Health') or [],
                   auth_url=safe_url(value.get('AuthURL') or ''),
@@ -109,6 +149,8 @@ def save_preferences(changes, before, confirm=False):
             raise ValueError('组网开关值无效')
     with lock:
         current = preferences()
+        if current is None:
+            raise ValueError('此设置请在 ORN 本地入口管理')
         if any(name not in before or current[name] != before[name] for name in changes):
             raise ValueError('组网设置已在其他窗口更改，请刷新后重试')
         actual = {name:value for name,value in changes.items() if current[name] != value}
@@ -140,7 +182,7 @@ def control(action, confirm=False):
     if action not in ('connect', 'disconnect', 'reconnect'):
         raise ValueError('不支持的组网操作')
     if action != 'connect' and not confirm:
-        raise ValueError('请确认断开或重连 Tailscale，当前组网访问会中断')
+        raise ValueError('请确认断开或重连 ORN，当前组网访问会中断')
     with lock:
         if operation and operation['state'] == 'pending':
             raise ValueError('已有组网操作正在执行')
