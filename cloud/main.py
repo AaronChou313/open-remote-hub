@@ -411,7 +411,7 @@ def agent_unbind(device=Depends(agent)):
 def agent_directory(device=Depends(agent)):
     with database() as db:
         rows=db.execute('SELECT * FROM devices WHERE owner_id=?',(device['owner_id'],)).fetchall()
-    return [public_device(row) for row in rows]
+    return [public_device(row) | {'self':row['instance_id']==device['instance_id']} for row in rows]
 
 
 class AccountDeletion(BaseModel):
