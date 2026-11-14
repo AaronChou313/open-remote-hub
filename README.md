@@ -40,7 +40,7 @@
 
 Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个人主机运行现有全部管理功能。浏览器从 Cloud 获得一次性 Ticket 后直接导航到 Agent，Agent 向 Cloud 兑换并建立原有管理员 Cookie。Zellij、Docker、文件等请求从浏览器直接到 Agent。Cloud 在线状态依据最近 100 秒内的心跳，浏览器地址检测结果单独展示。
 
-前端入口为 [OpenRemoteHub Cloud](https://aaronchou313.github.io/open-remote-hub/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。账号密码支持数字、字母与特殊符号组合，允许自定长度。
+前端入口为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在 Agent 所在主机执行以下命令，打开输出链接，用自己的 Cloud 账号确认设备绑定。账号密码支持数字、字母与特殊符号组合，允许自定长度。
 
 ```sh
 # 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
@@ -81,7 +81,7 @@ Cloud 和 HTTPS 网关配置了自动重启。更新代码后执行相同 `up -d
 
 前端源文件位于 `portal/`，无 npm 构建依赖。`python3 scripts/build_portal.py` 生成 `.runtime/portal-site/`，推送到 main 后由 GitHub Actions 发布。`portal/cloud-config.json` 设置默认 Cloud 地址，登录页也可切换服务地址。Cloud 容器同时提供相同 Web 页面，可直接访问 Cloud 域名登录和授权。
 
-[独立主机列表](https://aaronchou313.github.io/open-remote-hub/?local=1) 保留原有浏览器本地列表、导入导出与发现功能。旧 `#add` 链接自动进入此模式。`/.well-known/openremotehub` 仍仅公开最小身份元数据，管理接口沿用统一 Cookie 和同源校验。
+[独立主机列表](https://cloud.openremotehub.top/?local=1) 保留原有浏览器本地列表、导入导出与发现功能。旧 `#add` 链接自动进入此模式。`/.well-known/openremotehub` 仍仅公开最小身份元数据，管理接口沿用统一 Cookie 和同源校验。
 
 ## 功能
 

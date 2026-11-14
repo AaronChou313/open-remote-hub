@@ -212,7 +212,7 @@ def start_binding(body: Metadata, request: Request):
     with database() as db:
         db.execute('DELETE FROM bindings WHERE expires<?',(time.time(),))
         db.execute('INSERT INTO bindings VALUES (?,?,?,?,?,?,?)', (digest(code),digest(credential),str(body.instance_id),json.dumps(metadata),time.time()+600,None,'pending'))
-    portal = os.environ.get('ORH_CLOUD_PORTAL','https://aaronchou313.github.io/open-remote-hub/').rstrip('/')+'/'
+    portal = os.environ.get('ORH_CLOUD_PORTAL', os.environ.get('ORH_CLOUD_PUBLIC_URL','https://cloud.openremotehub.top')).rstrip('/')+'/'
     return dict(device_code=credential, user_code=code[:4]+'-'+code[4:], expires_in=600,
                 verification_url=portal+'#bind='+code)
 

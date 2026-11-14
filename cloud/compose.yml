@@ -9,7 +9,7 @@ services:
     environment:
       ORH_CLOUD_PUBLIC_URL: https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}
       ORH_CLOUD_ORIGINS: https://aaronchou313.github.io,https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}
-      ORH_CLOUD_PORTAL: https://aaronchou313.github.io/open-remote-hub/
+      ORH_CLOUD_PORTAL: https://${ORH_CLOUD_DOMAIN:-cloud.openremotehub.top}/
     volumes:
       - cloud-data:/data
     mem_limit: 512m

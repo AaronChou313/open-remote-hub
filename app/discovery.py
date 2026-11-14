@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-PORTAL = 'https://aaronchou313.github.io/open-remote-hub/'
+PORTAL = os.environ.get('ORH_CLOUD_PORTAL', 'https://cloud.openremotehub.top/')
 PATH = '/.well-known/openremotehub'
 lock = threading.Lock()
 router = APIRouter()
