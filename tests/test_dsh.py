@@ -154,3 +154,44 @@ def test_managed_pid_tolerates_clock_rounding(dsh_client,monkeypatch):
     assert dsh.managed()
     monkeypatch.setattr(Process,'create_time',lambda self:1001)
     assert not dsh.managed()
+
+
+def test_cookie_stays_usable_when_pid_ownership_drifted(tmp_path,monkeypatch):
+    """A drifted PID/create-time check must not blank an otherwise valid cookie."""
+    import json
+    monkeypatch.setattr(main,'DATA',tmp_path)
+    monkeypatch.setenv('ORH_DSH_PORT','9741')
+    monkeypatch.setattr(dsh,'managed',lambda:None)
+    (tmp_path/'dsh-auth.json').write_text(json.dumps(dict(port=9741,cookie='native-cookie=drifted',launch_token='',renew_after=0)))
+    assert dsh.native_cookie()=='native-cookie=drifted'
+
+
+def test_recover_exchanges_stored_launch_token(dsh_client,monkeypatch):
+    import json,time
+    from app.dsh import state_path
+    from app import dsh_auth
+    (state_path().parent/'dsh-auth.json').write_text(json.dumps(dict(port=9741,cookie='stale',launch_token='launch-token',renew_after=0)))
+    seen={}
+    def exchange(port,token):
+        seen.update(port=port,token=token)
+        return dict(port=port,cookie='fresh',launch_token=token,renew_after=time.time()+600)
+    monkeypatch.setattr(dsh_auth,'exchange',exchange)
+    assert dsh.recover()
+    assert seen=={'port':9741,'token':'launch-token'}
+    assert json.loads((state_path().parent/'dsh-auth.json').read_text())['cookie']=='fresh'
+
+
+def test_start_repairs_instead_of_refusing_a_stale_cookie(dsh_client,monkeypatch):
+    c,target,token=dsh_client
+    monkeypatch.setattr(dsh,'installation',lambda:{'argv':['node','/trusted/dsh.js'],'version':'0.2.2-rc.1'})
+    class Process:pid=1234
+    monkeypatch.setattr(dsh,'listener',lambda:Process())
+    monkeypatch.setattr(dsh,'managed',lambda:None)
+    state={'healthy':False,'recovered':False}
+    monkeypatch.setattr(dsh,'healthy',lambda:state['healthy'])
+    def recover():state['recovered']=True;state['healthy']=True;return True
+    monkeypatch.setattr(dsh,'recover',recover)
+    monkeypatch.setattr(dsh.subprocess,'Popen',lambda *a,**kw:pytest.fail('Recovery must not start a second host'))
+    assert c.post('/api/dsh/start',json={}).status_code==200
+    assert state['recovered'] and c.get('/api/dsh/status').json()['running']
+

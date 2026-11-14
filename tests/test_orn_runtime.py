@@ -90,3 +90,39 @@ def test_takeover_stops_standalone_before_spawning(monkeypatch, tmp_path):
     assert value['takeover'] is True and value['note'] == '已停止独立服务'
     assert value['managed'] is False
     assert orn_runtime.stop() is False
+
+
+def test_save_config_validates_and_restarts(monkeypatch, tmp_path):
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps(dict(control_url='https://hs.example', hostname='old',
+                                      state_dir=str(tmp_path / 'state'), api_addr='127.0.0.1:4789',
+                                      cloud={'device_id': 'keep-me'}, publish={'21118': '127.0.0.1:21118'})))
+    monkeypatch.setattr(orn_runtime, 'config_path', lambda: config)
+    restarted = []
+    monkeypatch.setattr(orn_runtime, 'restart', lambda: restarted.append(True))
+    monkeypatch.setattr(orn_runtime, 'status', lambda: dict(running=True))
+    value = orn_runtime.save_config(dict(hostname='new-host', control_url='https://hs.openremotehub.top',
+                                         publish={'8765': '127.0.0.1:8765'}))
+    assert value == dict(running=True) and restarted == [True]
+    saved = json.loads(config.read_text())
+    assert saved['hostname'] == 'new-host'
+    assert saved['cloud'] == {'device_id': 'keep-me'}
+    assert saved['publish'] == {'8765': '127.0.0.1:8765'}
+    assert oct(config.stat().st_mode & 0o777) == '0o600'
+    for bad in (dict(hostname='', control_url='https://hs.example', publish={}),
+                dict(hostname='ok', control_url='http://public.example', publish={}),
+                dict(hostname='ok', control_url='https://hs.example', publish={'8765': '10.0.0.5:8765'}),
+                dict(hostname='ok', control_url='https://hs.example', publish={'70000': '127.0.0.1:8765'})):
+        with pytest.raises(ValueError):
+            orn_runtime.save_config(bad)
+
+
+def test_restart_prefers_owned_process(monkeypatch):
+    calls = []
+    monkeypatch.setattr(orn_runtime, 'managed', lambda: True)
+    monkeypatch.setattr(orn_runtime, 'stop', lambda: calls.append('stop') or True)
+    monkeypatch.setattr(orn_runtime, 'start', lambda: calls.append('start'))
+    monkeypatch.setattr(orn_runtime, 'probe', lambda timeout=2: False)
+    monkeypatch.setattr(orn_runtime, 'status', lambda: dict(running=True))
+    orn_runtime.restart()
+    assert calls == ['stop', 'start']

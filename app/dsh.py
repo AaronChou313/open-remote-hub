@@ -97,7 +97,12 @@ def native_cookie():
     from app.main import DATA
     try:
         record=json.loads((DATA/'dsh-auth.json').read_text())
-        if record['port']==settings()['port'] and managed():
+        # The cookie is the credential; process ownership is bookkeeping. Gating
+        # here on managed() blanks a perfectly valid cookie whenever the PID /
+        # create-time / start-script check drifts (a relaunched console, a clock
+        # step, a recycled PID) and turns the whole DSH pane into a 503. Let the
+        # native host decide: an invalid cookie simply 401s upstream.
+        if record['port']==settings()['port']:
             if record.get('launch_token') and time.time()>record.get('renew_after',0):
                 with mutex:
                     record=json.loads((DATA/'dsh-auth.json').read_text())
@@ -115,6 +120,18 @@ def healthy():
         with httpx.Client(trust_env=False,timeout=1) as c:r=c.get(f"http://127.0.0.1:{settings()['port']}/",headers={'Cookie':native_cookie()})
         return r.status_code==200 and ('dsh' in r.text.lower() or 'deepseek' in r.text.lower())
     except httpx.HTTPError:return False
+
+
+def recover():
+    """Re-exchange the stored launch token; the only sanctioned way to revive a stale cookie."""
+    from app.main import DATA
+    try:record=json.loads((DATA/'dsh-auth.json').read_text())
+    except (OSError,ValueError):return False
+    if record.get('port')!=settings()['port'] or not record.get('launch_token'):return False
+    from app.dsh_auth import exchange,save
+    try:save(DATA,exchange(record['port'],record['launch_token']))
+    except (httpx.HTTPError,RuntimeError):return False
+    return True
 
 
 @router.get('/status')
@@ -139,7 +156,9 @@ def start():
         existing=managed() or listener()
         if existing:
             if healthy():return status()
-            raise HTTPException(409,'DSH 进程存在但尚未就绪，未重复启动或终止它；请稍后重试')
+            if recover() and healthy():
+                main.audit('dsh','web','recover');return status()
+            raise HTTPException(409,'DSH 进程存在但未通过本机认证；请重启控制台后再连接（docs/dsh-recovery.md）')
         with socket.socket() as sock:
             if sock.connect_ex(('127.0.0.1',cfg['port']))==0:raise HTTPException(409,'DSH 内部端口已占用，未连接未知服务')
         argv=info['argv']+['web','--patch',str(main.ROOT/'config/dsh-web.patch.yml'),'--host','127.0.0.1','--port',str(cfg['port']),'--no-open']

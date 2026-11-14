@@ -162,7 +162,7 @@ DSH 官方前端使用根路径和自身插件加载器，因此采用独立端�
 
 **实例边界**：此模块使用本机 DSH 的官方 **Web profile**，默认共用 `~/.dsh` 用户根目录。桌面版运行在 Desktop profile 和自己的 Host 中；共享数据根目录不代表共享执行中的进程、内存或任务。控制台不会接管、重启桌面版，也不伪装成能无缝接续桌面版正在运行的任务。已有其他 Web 实例占用指定内部端口时不冒认或强行结束。
 
-DSH 与独立认证日志 supervisor 在浏览器或控制台退出后继续运行；控制台重启会按 PID/创建时间/启动脚本校验复用它。整机重启后旧计算进程已不存在，需重新启动 Web Host，再由 DSH 自己恢复持久化记录。关闭浏览器不等于停止 Host；具体模型任务的断线行为仍以 DSH 自身实现为准。`.runtime/dsh.log`、认证状态、启动计划均为私有文件，没有远程原始日志/令牌下载入口。
+DSH 与独立认证日志 supervisor 在浏览器或控制台退出后继续运行；控制台重启会按 PID/创建时间/启动脚本校验复用它，但该簿记只决定“是否复用”，不参与 Cookie 认证——否则一次时钟跳变或 PID 漂移就会让面板永久 503。面板打不开时先运行 `.venv/bin/python scripts/dsh_doctor.py`，完整排查顺序见 [`docs/dsh-recovery.md`](docs/dsh-recovery.md)。整机重启后旧计算进程已不存在，需重新启动 Web Host，再由 DSH 自己恢复持久化记录。关闭浏览器不等于停止 Host；具体模型任务的断线行为仍以 DSH 自身实现为准。`.runtime/dsh.log`、认证状态、启动计划均为私有文件，没有远程原始日志/令牌下载入口。
 
 未执行真实模型计费请求；复杂任务、第三方插件、桌面专用能力、账号 OAuth 与实体手机输入法仍需按实际使用验收。Native UI 不同版本可能有兼容变化；新增版本不能仅凭页面加载即视为全部验证通过。
 
@@ -439,7 +439,8 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 2. 已有独立 ORN 安装（`orn-agent open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → ORN”点“由 ORH 托管 ORN”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
 3. 任一 ORH 都能作为控制端：网络连接 → ORN 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。设备列表读取 Cloud 目录中的发布服务：只提供远程桌面的设备（例如只装了 ORN 的 Windows）标记为“仅远程桌面”，控制台按钮禁用，不会点击后才报错。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
 4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
-5. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 ORN 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 ORN 节点。
+5. “网络连接 → ORN → ORN 设备管理”可以修改本机设备名称、控制服务和发布到组网的端口，保存后自动重启 ORN；也可以单独重启 ORN，或解绑本机设备（删除 Cloud 设备条目与组网身份，需重新绑定）。组网 IP 由控制服务按顺序分配，不支持手动修改；其他设备的改名 / 解绑在 Cloud 设备目录完成。
+6. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 ORN 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 ORN 节点。
 
 Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 

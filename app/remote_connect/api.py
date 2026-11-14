@@ -220,6 +220,39 @@ def orn_takeover():
     return result
 
 
+@router.get('/orn/config')
+def orn_config():
+    if not orn_runtime.binary():
+        raise HTTPException(503, '未发现 ORN Agent')
+    try:
+        return orn_runtime.config_view()
+    except (OSError, ValueError):
+        raise HTTPException(503, '无法读取 ORN 配置') from None
+
+
+@router.post('/orn/config')
+def orn_save_config(value=Depends(body)):
+    result = orn_runtime.save_config(value)
+    audit('orn', 'config')
+    return result
+
+
+@router.post('/orn/restart')
+def orn_restart():
+    result = orn_runtime.restart()
+    audit('orn', 'restart')
+    return result
+
+
+@router.post('/orn/leave')
+def orn_leave(value=Depends(body)):
+    if value.get('confirm') is not True:
+        raise ValueError('请确认解绑本机设备')
+    result = tailscale.request('/leave', {'confirm': True}, timeout=25)
+    audit('orn', 'leave')
+    return result
+
+
 def peer_address(value):
     import ipaddress
     address = value.get('peer_ip') if isinstance(value, dict) else None

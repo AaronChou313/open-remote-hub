@@ -49,15 +49,30 @@ def write_env(values):
     temporary.replace(path)
 
 
-def install_binary(source):
-    name = 'orn-agent.exe' if sys.platform == 'win32' else 'orn-agent'
-    destination = ROOT / 'bin' / name
+def install_binary(source, destination):
+    """Replace via rename so a running agent keeps its old image intact."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists() and destination.resolve() == Path(source).resolve():
         return destination
-    shutil.copy2(source, destination)
-    destination.chmod(0o755)
+    temporary = destination.with_suffix('.tmp')
+    shutil.copy2(source, temporary)
+    temporary.chmod(0o755)
+    os.replace(temporary, destination)
     return destination
+
+
+def source_binary(destination):
+    """A build to copy into bin/, never bin/ itself (ORH_ORN_BIN points there)."""
+    from app import orn_runtime
+    system, architecture = orn_runtime.target()
+    name = 'orn-agent.exe' if sys.platform == 'win32' else 'orn-agent'
+    candidates = [os.environ.get('ORH_ORN_SOURCE'),
+                  str(ROOT.parent / 'open-remote-net' / 'dist' / f'orn-agent-{system}-{architecture}'),
+                  shutil.which(name)]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file() and Path(candidate).resolve() != destination.resolve():
+            return Path(candidate)
+    return None
 
 
 def main():
@@ -66,12 +81,19 @@ def main():
     if values.get('ORH_ORN_ENABLED', 'auto').lower() in ('0', 'false', 'off', 'no'):
         print('ORN integration disabled by ORH_ORN_ENABLED; nothing to do.')
         return
-    binary = orn_runtime.binary()
-    if not binary:
+    name = 'orn-agent.exe' if sys.platform == 'win32' else 'orn-agent'
+    destination = ROOT / 'bin' / name
+    source = source_binary(destination)
+    if source:
+        installed = install_binary(source, destination)
+        print(f'已从 {source} 更新 ORN 二进制')
+    elif destination.is_file():
+        installed = destination
+        print('未发现更新的 ORN 构建，沿用现有 bin/ 二进制')
+    else:
         print('未找到 ORN Agent 二进制。请先构建 open-remote-net（dist/orn-agent-*），')
-        print('或设置 ORH_ORN_BIN=/absolute/path/to/orn-agent 后重新运行本脚本。')
+        print('或设置 ORH_ORN_SOURCE=/absolute/path/to/orn-agent 后重新运行本脚本。')
         return
-    installed = install_binary(binary)
     configured = values.get('ORH_ORN_BIN', '').strip()
     changes = {}
     if not configured:

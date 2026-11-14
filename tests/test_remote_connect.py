@@ -279,3 +279,23 @@ def test_overview_marks_console_availability(management,monkeypatch):
     flags={peer['hostname']:peer['console'] for peer in peers}
     assert flags=={'console-host':True,'desktop-only':False,'unknown':None}
     assert peers[1]['services']==[21118]
+
+
+def test_orn_management_routes(management,monkeypatch):
+    http,_,audit = management
+    monkeypatch.setattr(orn_runtime,'binary',lambda:'/fake/orn')
+    monkeypatch.setattr(orn_runtime,'config_view',lambda:dict(hostname='mac',control_url='https://hs.example',publish={'8765':'127.0.0.1:8765'}))
+    assert http.get('/api/remote-connect/orn/config').json()['hostname']=='mac'
+    saved={}
+    monkeypatch.setattr(orn_runtime,'save_config',lambda value:saved.update(value) or dict(managed=True))
+    body=dict(hostname='mac-2',control_url='https://hs.example',publish={'8765':'127.0.0.1:8765'})
+    assert http.post('/api/remote-connect/orn/config',json=body).status_code==200
+    assert saved==body
+    monkeypatch.setattr(orn_runtime,'restart',lambda:dict(running=True))
+    assert http.post('/api/remote-connect/orn/restart',json={}).json()=={'running':True}
+    calls=[]
+    monkeypatch.setattr(tailscale,'request',lambda path,body=None,timeout=10: calls.append((path,body)) or {'ok':True})
+    assert http.post('/api/remote-connect/orn/leave',json={}).status_code==400
+    assert http.post('/api/remote-connect/orn/leave',json={'confirm':True}).json()=={'ok':True}
+    assert calls==[('/leave',{'confirm':True})]
+    assert [item[1] for item in audit]==['config','restart','leave']

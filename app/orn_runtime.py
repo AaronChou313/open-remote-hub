@@ -7,9 +7,11 @@ ORN config path is reused, keeping the existing enrollment, device UUID and API
 token. When a standalone ORN service is running, ORH observes it instead of
 starting a duplicate until an explicit takeover.
 """
+import ipaddress
 import json
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -17,6 +19,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import psutil
 
@@ -339,6 +342,98 @@ def takeover():
         NOTE = previous
         ERROR = ''
     start()
+    return status()
+
+
+def read_config():
+    return json.loads(config_path().read_text())
+
+
+def config_view():
+    value = read_config()
+    publish = value.get('publish') or {}
+    return dict(hostname=value.get('hostname', ''), control_url=value.get('control_url', ''),
+                api_addr=value.get('api_addr', ''), state_dir=value.get('state_dir', ''),
+                publish={str(port): target for port, target in publish.items()},
+                path=str(config_path()))
+
+
+def save_config(payload):
+    """Edit the local ORN identity and published services, then apply them."""
+    current = read_config()
+    hostname = (payload.get('hostname') or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,62}', hostname):
+        raise ValueError('设备名称只能包含字母、数字、点、下划线和连字符')
+    control = (payload.get('control_url') or '').strip()
+    parsed = urlsplit(control)
+    if not parsed.hostname or parsed.username or parsed.password or parsed.path not in ('', '/') or parsed.query or parsed.fragment:
+        raise ValueError('控制服务需为完整 Origin，例如 https://hs.openremotehub.top')
+    if parsed.scheme != 'https' and not (parsed.scheme == 'http' and parsed.hostname in ('127.0.0.1', 'localhost', '::1')):
+        raise ValueError('控制服务需要 HTTPS')
+    publish = payload.get('publish') or {}
+    if not isinstance(publish, dict):
+        raise ValueError('发布端口格式无效')
+    cleaned = {}
+    for key, target in publish.items():
+        try:
+            port = int(key)
+            host, _, address = str(target).rpartition(':')
+            remote = int(address)
+        except (TypeError, ValueError):
+            raise ValueError(f'发布端口 {key} 需要形如 8765=127.0.0.1:8765') from None
+        if not 1 <= port <= 65535 or not 1 <= remote <= 65535:
+            raise ValueError('端口范围须为 1–65535')
+        try:
+            address_value = ipaddress.ip_address(host)
+        except ValueError:
+            raise ValueError(f'发布目标 {target} 必须使用 loopback IP') from None
+        if not address_value.is_loopback:
+            raise ValueError(f'发布目标 {target} 必须使用 loopback IP')
+        cleaned[str(port)] = f'{address_value.compressed}:{remote}'
+    current['hostname'] = hostname
+    current['control_url'] = control
+    current['publish'] = cleaned
+    temporary = config_path().with_suffix('.tmp')
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as output:
+        json.dump(current, output, ensure_ascii=False, indent=2)
+    temporary.replace(config_path())
+    # A changed identity or control server needs a fresh connection, so restart.
+    restart()
+    return status()
+
+
+def _restart_standalone():
+    found = standalone_service()
+    if not found:
+        return
+    kind, plist = found
+    if kind == 'launchd':
+        subprocess.run(['launchctl', 'kickstart', '-k', f'gui/{os.getuid()}/top.openremotehub.orn'], capture_output=True, timeout=30)
+    elif kind == 'scheduled-task':
+        subprocess.run(['schtasks', '/End', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
+        subprocess.run(['schtasks', '/Run', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
+    else:
+        _systemctl('restart', 'orn-agent')
+
+
+def restart():
+    """Restart the ORN process this install owns, or the standalone unit."""
+    if managed():
+        stop()
+        for _ in range(40):
+            if not probe():
+                break
+            time.sleep(.25)
+        start()
+    elif standalone_service():
+        _restart_standalone()
+        for _ in range(40):
+            if probe():
+                break
+            time.sleep(.25)
+    else:
+        start()
     return status()
 
 

@@ -356,6 +356,7 @@ window.RemoteHubRemoteConnect = (() => {
               item.classList.toggle("active", item.dataset.rcTab === next),
             );
           if (next === "status") await Promise.all([RemoteHubLAN.refresh(), refreshProxySummary()]);
+          if (next === "network") await loadOrnConfig();
           if (next === "lan") await RemoteHubLAN.refresh();
           if (next === "proxy") await renderProxy();
           window.scrollTo?.(0, 0);
@@ -436,6 +437,7 @@ ${RemoteHubLAN.markup()}
 ${RemoteHubNodeBaby.markup()}
 <section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管 ORN</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录 ORN ${icon("external")}</a></div><p id="rcOrnHost" class="muted"></p><a class="button" href="https://aaronchou313.github.io/open-remote-hub/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
 <details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
+<details class="rc-network-details rc-orn-admin"><summary>ORN 设备管理</summary><p class="muted">组网地址由控制服务自动分配；这里修改设备名称、控制服务和本机发布到组网的端口，保存后会重启 ORN。其他设备的改名或解绑请在 Cloud 设备目录完成。</p><form id="rcOrnForm"><label>设备名称<input id="rcOrnHostname" maxlength="63" required autocomplete="off"></label><label>控制服务<input id="rcOrnControl" required autocomplete="off"></label><label>发布端口<textarea id="rcOrnPublish" rows="3" spellcheck="false" placeholder="8765=127.0.0.1:8765"></textarea></label><div class="rc-form-actions"><span id="rcOrnNotice" class="muted" hidden></span><button id="rcOrnSave" type="submit" class="primary">保存并重启</button><button id="rcOrnRestart" type="button">重启 ORN</button><button id="rcOrnLeave" type="button" class="rc-destructive">解绑本机设备</button></div></form></details>
 <div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
         <section id="rcOverview" hidden>
           <article class="panel rd-connection">
@@ -671,15 +673,16 @@ ${RemoteHubNodeBaby.markup()}
       ? "未发现 ORN Agent，组网功能不可用"
       : value.managed
         ? "ORN 由 ORH 托管，随本控制台启停"
-        : value.running
-          ? value.standalone
-            ? `ORN 由独立服务运行（${value.standalone}）`
-            : "ORN 以独立进程运行"
-          : "ORN 未运行";
+        : value.standalone
+          ? `ORN 由独立服务运行（${value.standalone}）`
+          : value.running
+            ? "ORN 以独立进程运行"
+            : "ORN 未运行";
     $("#rcOrnHost").textContent = value.note
       ? `${label} · ${value.note}`
       : label;
-    $("#rcOrnTakeover").hidden = !(value.available && !value.managed);
+    // Only offer takeover when a standalone unit actually still exists.
+    $("#rcOrnTakeover").hidden = !(value.available && value.standalone && !value.managed);
   }
 
   function drawPeers() {
@@ -878,6 +881,68 @@ ${RemoteHubNodeBaby.markup()}
       busy($("#rcTailNetcheck"), async () => {
         const result = await api("/remote-connect/tailscale/netcheck", {});
         if (current()) output("ORN 网络诊断", result.output);
+      });
+    async function loadOrnConfig() {
+      try {
+        const value = await api("/remote-connect/orn/config");
+        $("#rcOrnHostname").value = value.hostname || "";
+        $("#rcOrnControl").value = value.control_url || "";
+        $("#rcOrnPublish").value = Object.entries(value.publish || {})
+          .map(([port, target]) => `${port}=${target}`)
+          .join("\n");
+        $("#rcOrnNotice").hidden = true;
+      } catch (error) {
+        $("#rcOrnNotice").textContent = error.message;
+        $("#rcOrnNotice").hidden = false;
+      }
+    }
+    function publishMap() {
+      const result = {};
+      $("#rcOrnPublish").value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          const [port, target] = line.split("=");
+          result[(port || "").trim()] = (target || "").trim();
+        });
+      return result;
+    }
+    $("#rcOrnForm").onsubmit = (event) => {
+      event.preventDefault();
+      busy($("#rcOrnSave"), async () => {
+        const result = await api("/remote-connect/orn/config", {
+          hostname: $("#rcOrnHostname").value.trim(),
+          control_url: $("#rcOrnControl").value.trim(),
+          publish: publishMap(),
+        });
+        if (current()) {
+          updateOrn(result);
+          notify("ORN 配置已保存并重启");
+        }
+        await controller.refresh();
+      });
+    };
+    $("#rcOrnRestart").onclick = () =>
+      busy($("#rcOrnRestart"), async () => {
+        const result = await api("/remote-connect/orn/restart", {});
+        if (current()) {
+          updateOrn(result);
+          notify("ORN 已重启");
+        }
+        await controller.refresh();
+      });
+    $("#rcOrnLeave").onclick = () =>
+      busy($("#rcOrnLeave"), async () => {
+        if (
+          !(await confirm(
+            "解绑本机设备",
+            "将从 Cloud 删除本机设备条目和组网身份，控制台与远程桌面需要重新绑定后才能使用。这个操作不可撤销。",
+          ))
+        )
+          return;
+        await api("/remote-connect/orn/leave", { confirm: true });
+        if (current()) notify("本机设备已解绑");
       });
     $("#rcOrnTakeover").onclick = () =>
       busy($("#rcOrnTakeover"), async () => {
