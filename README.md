@@ -439,7 +439,7 @@ Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](
 3. 控制端也需运行 ORN。Cloud 设备卡片的“ORN 控制台”打开本机 ORN，再经 userspace 网络打开目标控制台。每台目标设备使用独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换。Zellij HTTP / WebSocket 与 DSH 独立入口随该通道转发。
 4. “远程桌面”创建本地 loopback 转发并调用 RustDesk，保留原生密码和桌面权限。RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。
 
-Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
+Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
 
 ```sh
 # 在 ECS 的 ORH 目录执行，group id 按目标主机实际配置。
@@ -450,7 +450,7 @@ docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.y
 
 注册为邀请码制。headscale 策略使用 `{"acls":[{"action":"accept","src":["*"],"dst":["autogroup:self:*"]}]}`，通过 `headscale policy set --file <policy.hujson>` 应用。一个 Cloud 账号对应一个 headscale user，设备解绑同步删除节点。迁移前需在线备份 Cloud 与 headscale SQLite 数据库，并保存配置。
 
-不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
+VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接地址。仅运行 userspace ORN 的控制端可通过端口转发访问这些额外服务。不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
 
 ### 节点小宝
 
