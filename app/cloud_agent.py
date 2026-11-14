@@ -225,6 +225,15 @@ async def bind_api(request: Request):
         raise HTTPException(409,str(error)) from None
 
 
+@router.get('/auth/cloud/enter')
+def enter_console(request: Request):
+    from app import access
+    session = access.get(request.cookies.get('orh',''))
+    if not binding() or (session and session['role']=='admin'):
+        return RedirectResponse('/',status_code=303)
+    return login_start(request)
+
+
 @router.get('/auth/cloud/start')
 def login_start(request: Request):
     value = binding()

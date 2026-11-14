@@ -132,6 +132,7 @@ def test_agent_cookie_api_terminal_and_restart(cloud,tmp_path,monkeypatch):
     assert agent_client.get('/api/me').status_code==200
     assert agent_client.get('/terminal/open/demo').status_code==200
     assert native_terminal.admin(cookie)
+    assert agent_client.get('/auth/cloud/enter',follow_redirects=False).headers['location']=='/'
     assert agent_client.post('/auth/cloud/exchange',json={'ticket':value}).status_code==401
     # A new client after Agent restart can use the same durable cookie and binding.
     other_client=TestClient(main.app,base_url=origin)
@@ -157,7 +158,7 @@ def test_direct_agent_authorization_state(cloud,tmp_path,monkeypatch):
     monkeypatch.setattr(main,'NETWORK',Network('0.0.0.0',frozenset(['100.66.11.2'])))
     cloud_agent.save(dict(status='bound',cloud_url='https://cloud.example',credential=pending['device_code'],owner_id=user['id'],instance_id=metadata['instance_id']))
     client=TestClient(main.app,base_url='http://100.66.11.2:8765',headers={'Origin':'http://100.66.11.2:8765','X-ORH-Request':'1'})
-    response=client.get('/auth/cloud/start',follow_redirects=False)
+    response=client.get('/auth/cloud/enter',follow_redirects=False)
     assert response.status_code==307
     assert 'orh_cloud_state=' in response.headers['set-cookie']
     intent=json.loads(parse_qs(urlsplit(response.headers['location']).fragment)['authorize'][0])
