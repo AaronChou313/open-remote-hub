@@ -252,9 +252,12 @@ def heartbeat(body: Metadata, device=Depends(agent)):
         raise HTTPException(403,'设备标识不匹配')
     urls = addresses(body.addresses)
     with database() as db:
-        db.execute('UPDATE devices SET name=?,os=?,agent_addresses=?,port=?,last_seen=? WHERE instance_id=? AND credential_hash=?',
+        changed = db.execute('UPDATE devices SET name=?,os=?,agent_addresses=?,port=?,last_seen=? WHERE instance_id=? AND credential_hash=?',
                    (body.name,body.os,json.dumps(urls),body.port,time.time(),device['instance_id'],device['credential_hash']))
-    return {'ok':True,'owner_id':device['owner_id'],'interval':30}
+        if not changed.rowcount:
+            raise HTTPException(401,'设备已解绑或绑定凭据无效')
+        current = db.execute('SELECT * FROM devices WHERE instance_id=?',(device['instance_id'],)).fetchone()
+    return {'ok':True,'owner_id':device['owner_id'],'interval':30,'addresses':effective_addresses(current)}
 
 
 @app.get('/api/devices')

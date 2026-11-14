@@ -163,6 +163,9 @@ def synchronize():
             raise
         if result['owner_id'] != value['owner_id']:
             raise HTTPException(403,'Cloud 绑定账号不匹配')
+        from app import main
+        synced_hosts = {urlsplit(address).hostname for address in result.get('addresses',[]) if urlsplit(address).hostname}
+        main.NETWORK = replace(main.NETWORK,hosts=frozenset(set(main.NETWORK.hosts) | synced_hosts))
         last_heartbeat = time.time()
         last_error = ''
 

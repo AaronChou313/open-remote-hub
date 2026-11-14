@@ -91,7 +91,9 @@ def test_address_sync_preference_and_unbind(cloud):
     key=metadata['instance_id']
     manual='https://mac.example.com'
     assert cloud.patch('/api/devices/'+key,headers=headers,json={'name':'My Mac','addresses':[manual,metadata['addresses'][0]],'preferred':manual}).status_code==200
-    assert cloud.post('/agent/heartbeat',headers=agent,json={**metadata,'addresses':metadata['addresses']+['http://10.77.1.2:8765']}).status_code==200
+    heartbeat=cloud.post('/agent/heartbeat',headers=agent,json={**metadata,'addresses':metadata['addresses']+['http://10.77.1.2:8765']})
+    assert heartbeat.status_code==200
+    assert manual in heartbeat.json()['addresses']
     row=cloud.get('/api/devices',headers=headers).json()[0]
     assert row['name']=='My Mac' and row['preferred']==manual
     assert metadata['addresses'][1] not in row['addresses']
@@ -186,3 +188,14 @@ def test_metadata_keeps_direct_local_entry_and_new_tailscale_address(monkeypatch
     assert 'http://localhost:8765' in value['addresses']
     assert 'http://100.66.11.2:8765' in value['addresses']
     assert '100.66.11.2' in main.NETWORK.hosts
+
+
+def test_cloud_manual_address_is_applied_to_agent_host_check(tmp_path,monkeypatch):
+    monkeypatch.setattr(main,'DATA',tmp_path/'manual-agent');main.DATA.mkdir()
+    monkeypatch.setattr(main,'NETWORK',Network('0.0.0.0',frozenset(['localhost'])))
+    cloud_agent.save(dict(status='bound',cloud_url='https://cloud.example',credential='isolated-device-credential',owner_id='owner',instance_id=str(uuid.uuid4())))
+    monkeypatch.setattr(cloud_agent,'metadata',lambda:{})
+    monkeypatch.setattr(cloud_agent,'call',lambda *args:{'owner_id':'owner','addresses':['http://mac.example.com:8765']})
+    cloud_agent.synchronize()
+    assert main.NETWORK.allows('mac.example.com:8765',8765)
+    assert not main.NETWORK.allows('mac.example.com:9999',8765)
