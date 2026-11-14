@@ -22,6 +22,7 @@ from app import discovery
 lock = threading.RLock()
 last_heartbeat = 0
 last_error = ''
+orn_error = ''
 
 
 def state_path():
@@ -136,7 +137,7 @@ def begin_binding(base):
 
 
 def synchronize():
-    global last_heartbeat, last_error
+    global last_heartbeat, last_error, orn_error
     value = state()
     if value.get('status') == 'pending':
         if value['expires'] < time.time():
@@ -168,6 +169,12 @@ def synchronize():
         main.NETWORK = replace(main.NETWORK,hosts=frozenset(set(main.NETWORK.hosts) | synced_hosts))
         last_heartbeat = time.time()
         last_error = ''
+        from app.remote_connect import tailscale
+        try:
+            tailscale.request('/cloud/adopt',dict(base_url=value['cloud_url'],device_id=value['instance_id'],device_token=value['credential'],console_port=main.PORT,gateway_port=int(os.environ.get('ORH_DSH_GATEWAY_PORT','8767'))))
+            orn_error = ''
+        except tailscale.TailscaleError as error:
+            orn_error = str(error)
 
 
 def watch(stop):
@@ -200,7 +207,7 @@ router = APIRouter(lifespan=lifecycle)
 def status():
     value = state()
     return dict(bound=value.get('status')=='bound',cloud_url=value.get('cloud_url') or os.environ.get('ORH_CLOUD_URL'),
-                username=value.get('username'),last_heartbeat=last_heartbeat,error=last_error,
+                username=value.get('username'),last_heartbeat=last_heartbeat,error=last_error,orn_error=orn_error,
                 pending={key:value[key] for key in ('user_code','verification_url','expires')} if value.get('status')=='pending' else None)
 
 

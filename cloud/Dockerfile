@@ -5,6 +5,7 @@ WORKDIR /service
 COPY cloud/requirements.txt cloud/requirements.txt
 RUN pip install --no-cache-dir -r cloud/requirements.txt
 COPY cloud cloud
+RUN if [ -f cloud/bin/headscale ]; then install -m 755 cloud/bin/headscale /usr/local/bin/headscale; fi
 COPY portal portal
 COPY scripts/build_portal.py scripts/build_portal.py
 COPY static/icons.svg static/icons-LICENSE.txt static/

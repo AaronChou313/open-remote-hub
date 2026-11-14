@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from cloud import headscale
 from cloud.store import database, digest, initialize, new_session, password_hash
 
 
@@ -121,10 +122,16 @@ def effective_addresses(row):
 
 
 def public_device(row):
-    return dict(instance_id=row['instance_id'], name=row['display_name'] or row['name'],
+    with database() as db:
+        mesh=headscale.public_mesh(db,row['instance_id'])
+    return dict(kind=row['kind'],mesh=mesh,instance_id=row['instance_id'], name=row['display_name'] or row['name'],
                 agent_name=row['name'], os=row['os'], addresses=effective_addresses(row),
                 preferred=row['preferred'], port=row['port'], last_seen=row['last_seen'],
                 online=time.time() - row['last_seen'] < 100)
+
+
+def invitations_required():
+    return os.environ.get('ORH_CLOUD_INVITE_REQUIRED','1' if headscale.enabled() else '0')=='1'
 
 
 class Credentials(BaseModel):
@@ -137,14 +144,23 @@ def health():
     return {'service':'openremotehub-cloud','protocol':1}
 
 
+class Registration(Credentials):
+    invitation: str = Field(default='',max_length=128)
+
+
 @app.post('/api/register')
-def register(body: Credentials, request: Request):
+def register(body: Registration, request: Request):
     rate_limit(request,'register',10)
     username = body.username.lower()
     salt = secrets.token_hex(32)
     hashed = password_hash(body.password, salt)
     with database() as db:
         db.execute('BEGIN IMMEDIATE')
+        if invitations_required():
+            invitation=db.execute('SELECT * FROM invitations WHERE digest=? AND used=0 AND expires>?',(digest(body.invitation),time.time())).fetchone()
+            if not invitation:
+                raise HTTPException(403,'请输入有效且尚未使用的邀请码')
+            db.execute('UPDATE invitations SET used=1 WHERE digest=?',(digest(body.invitation),))
         if db.execute('SELECT 1 FROM users WHERE username=?',(username,)).fetchone():
             raise HTTPException(409,'账号已存在')
         identifier = str(uuid.uuid4())
@@ -178,6 +194,7 @@ def logout(user=Depends(account)):
 
 
 class Metadata(BaseModel):
+    kind: str = Field(default='orh',pattern=r'^(orh|orn)$')
     instance_id: uuid.UUID
     name: str = Field(min_length=1,max_length=160)
     os: str = Field(max_length=160)
@@ -227,8 +244,8 @@ def approve_binding(body: BindingApproval, request: Request, user=Depends(accoun
             raise HTTPException(409,'设备已绑定，请先在原账号中解绑')
         metadata = json.loads(row['metadata'])
         now = time.time()
-        db.execute('INSERT INTO devices (instance_id,owner_id,credential_hash,name,os,agent_addresses,port,last_seen,created) VALUES (?,?,?,?,?,?,?,?,?)',
-                   (row['instance_id'],user['id'],row['credential_hash'],metadata['name'],metadata['os'],json.dumps(metadata['addresses']),metadata['port'],0,now))
+        db.execute('INSERT INTO devices (instance_id,owner_id,credential_hash,name,os,agent_addresses,port,last_seen,created,kind) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                   (row['instance_id'],user['id'],row['credential_hash'],metadata['name'],metadata['os'],json.dumps(metadata['addresses']),metadata['port'],0,now,metadata.get('kind','orh')))
         db.execute("UPDATE bindings SET status='approved',owner_id=?,code_hash=NULL WHERE credential_hash=?", (user['id'],row['credential_hash']))
     return {'ok':True,'instance_id':row['instance_id']}
 
@@ -281,7 +298,7 @@ def edit_device(identifier: str, body: DeviceEdit, user=Depends(account)):
         if not row:
             raise HTTPException(404,'设备不存在')
         urls = effective_addresses(row) if body.addresses is None else addresses(body.addresses)
-        if not urls:
+        if not urls and row['kind']=='orh':
             raise HTTPException(422,'请保留至少一个访问地址')
         automatic = json.loads(row['agent_addresses'])
         excluded = (set(json.loads(row['excluded_addresses'])) | (set(automatic)-set(urls))) - set(urls)
@@ -296,10 +313,11 @@ def edit_device(identifier: str, body: DeviceEdit, user=Depends(account)):
 
 @app.delete('/api/devices/{identifier}')
 def unbind(identifier: str, user=Depends(account)):
-    with database() as db:
+    with headscale.lock, database() as db:
         db.execute('BEGIN IMMEDIATE')
         if not db.execute('SELECT 1 FROM devices WHERE instance_id=? AND owner_id=?',(identifier,user['id'])).fetchone():
             raise HTTPException(404,'设备不存在')
+        headscale.delete_device(db,identifier)
         db.execute('DELETE FROM bindings WHERE instance_id=?',(identifier,))
         db.execute('DELETE FROM devices WHERE instance_id=?',(identifier,))
     return {'ok':True}
@@ -350,12 +368,74 @@ def redeem_ticket(body: Redeem, device=Depends(agent)):
                 expires=min(now+43200,row['session_expires']))
 
 
+@app.post('/api/devices/{identifier}/preauth')
+def account_preauth(identifier: str, user=Depends(account)):
+    with database() as db:
+        device=db.execute('SELECT * FROM devices WHERE instance_id=? AND owner_id=?',(identifier,user['id'])).fetchone()
+    if not device:
+        raise HTTPException(404,'设备不存在')
+    return headscale.preauth(dict(device))
+
+
+@app.post('/agent/preauth')
+def agent_preauth(device=Depends(agent)):
+    return headscale.preauth(device)
+
+
+class Reconcile(BaseModel):
+    node_key: str = Field(pattern=r'^nodekey:[0-9a-f]{64}$')
+    services: list[int] = Field(default_factory=list,max_length=32)
+    paths: list[str] = Field(default_factory=list,max_length=2)
+
+
+@app.post('/agent/reconcile')
+def agent_reconcile(body: Reconcile, device=Depends(agent)):
+    if any(port<1 or port>65535 for port in body.services):
+        raise HTTPException(422,'服务端口无效')
+    if any(path not in ('direct','relay') for path in body.paths):
+        raise HTTPException(422,'链路状态无效')
+    return headscale.reconcile(device,body.node_key,body.services,body.paths)
+
+
+@app.post('/agent/unbind')
+def agent_unbind(device=Depends(agent)):
+    with headscale.lock, database() as db:
+        db.execute('BEGIN IMMEDIATE')
+        headscale.delete_device(db,device['instance_id'])
+        db.execute('DELETE FROM bindings WHERE instance_id=?',(device['instance_id'],))
+        db.execute('DELETE FROM devices WHERE instance_id=?',(device['instance_id'],))
+    return {'ok':True}
+
+
+@app.get('/agent/directory')
+def agent_directory(device=Depends(agent)):
+    with database() as db:
+        rows=db.execute('SELECT * FROM devices WHERE owner_id=?',(device['owner_id'],)).fetchall()
+    return [public_device(row) for row in rows]
+
+
+class AccountDeletion(BaseModel):
+    confirm: bool
+
+
+@app.delete('/api/account')
+def delete_account(body: AccountDeletion, user=Depends(account)):
+    if not body.confirm:
+        raise HTTPException(400,'请确认删除账号及账号下所有组网节点')
+    with headscale.lock, database() as db:
+        db.execute('BEGIN IMMEDIATE')
+        headscale.delete_account(db,user['id'])
+        db.execute('DELETE FROM bindings WHERE owner_id=?',(user['id'],))
+        db.execute('DELETE FROM users WHERE id=?',(user['id'],))
+    return {'ok':True}
+
+
 web = Path(os.environ.get('ORH_CLOUD_WEB', Path(__file__).resolve().parents[1]/'.runtime/portal-site'))
 
 
 @app.get('/cloud-config.json')
 def web_config():
-    return {'url':os.environ.get('ORH_CLOUD_PUBLIC_URL','https://cloud.openremotehub.top')}
+    return {'url':os.environ.get('ORH_CLOUD_PUBLIC_URL','https://cloud.openremotehub.top'),'invitation_required':invitations_required()}
 
 
 @app.get('/')

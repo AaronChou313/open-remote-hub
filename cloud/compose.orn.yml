@@ -1,0 +1,12 @@
+services:
+  cloud:
+    environment:
+      ORH_HEADSCALE_ENABLED: '1'
+      ORH_CLOUD_INVITE_REQUIRED: '1'
+      ORH_HEADSCALE_PUBLIC_URL: ${ORH_HEADSCALE_PUBLIC_URL:-https://hs.openremotehub.top}
+      ORH_HEADSCALE_LEGACY_ACCOUNT: ${ORH_HEADSCALE_LEGACY_ACCOUNT:-}
+      ORH_HEADSCALE_LEGACY_USER_ID: ${ORH_HEADSCALE_LEGACY_USER_ID:-0}
+    group_add:
+      - '${ORH_HEADSCALE_GID:-999}'
+    volumes:
+      - /run/headscale:/run/headscale:ro
