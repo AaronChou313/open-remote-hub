@@ -129,8 +129,9 @@ async def lifespan(app):
     stop_sampling.set();thread.join(5)
 
 app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
-from app import discovery
+from app import discovery, cloud_agent
 app.include_router(discovery.router)
+app.include_router(cloud_agent.router)
 
 @app.middleware('http')
 async def security(request:Request, call_next):
@@ -178,18 +179,20 @@ def throttle(request):
         attempts[ip].append(now)
 
 
-def login_response(request):
-    token=secrets.token_urlsafe(32);access.create(token,'admin',time.time()+43200)
+def login_response(request,expires=None):
+    expires = min(expires or time.time()+43200,time.time()+43200)
+    token=secrets.token_urlsafe(32);access.create(token,'admin',expires)
     result=JSONResponse({'role':'admin'})
-    result.set_cookie('orh',token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=43200)
+    result.set_cookie('orh',token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=max(1,int(expires-time.time())))
     return result
 
 @app.get('/api/auth/status')
 def auth_status():
-    return {'needs_setup':passwords.record() is None}
+    return {'needs_setup':not cloud_agent.binding() and passwords.record() is None,'cloud':{key:cloud_agent.status()[key] for key in ('bound','cloud_url')}}
 
 @app.post('/api/auth/setup')
 def setup(body:Login,request:Request):
+    if cloud_agent.binding():raise HTTPException(409,'设备已绑定 Cloud，请使用 Cloud 登录')
     # First-use setup is restricted to an actual loopback connection and exact origin.
     if request.url.hostname not in ('localhost','127.0.0.1','::1') or request.client.host not in ('127.0.0.1','::1') or not NETWORK.same_origin(request.headers.get('host',''),request.headers.get('origin'),PORT,request.url.scheme):
         raise HTTPException(403,'请在本机浏览器设置密码，或使用本机 password.py 脚本')
@@ -199,12 +202,14 @@ def setup(body:Login,request:Request):
 
 @app.post('/api/login')
 def login(body:Login,request:Request):
+    if cloud_agent.binding():raise HTTPException(409,'请使用 Cloud 账号登录此设备')
     throttle(request)
     if not passwords.verify(body.password):raise HTTPException(401,'密码错误')
     return login_response(request)
 
 @app.post('/api/auth/password')
 def change_password(body:Login,request:Request):
+    if cloud_agent.binding():raise HTTPException(409,'Cloud 绑定模式请在 Cloud 管理账号')
     with passwords.lock:
         passwords.save(body.password)
     return login_response(request)
@@ -215,7 +220,7 @@ def logout(request:Request):
     r=JSONResponse({'ok':True});r.delete_cookie('orh');return r
 
 @app.get('/api/me')
-def me(request:Request): return {'role':request.state.role,'host':host.info(),'zellij_port':ZPORT}
+def me(request:Request): return {'role':request.state.role,'host':host.info(),'zellij_port':ZPORT,'cloud':cloud_agent.status()}
 
 @app.get('/api/system')
 def system(): return {**latest,'host':host.info()}

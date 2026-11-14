@@ -102,12 +102,27 @@ async function refresh(force=false){
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
 let needsSetup=false;
-async function loadAuth(){try{const status=await api('/auth/status');needsSetup=status.needs_setup;$('#setupConfirm').hidden=!needsSetup;$('#password').autocomplete=needsSetup?'new-password':'current-password';$('#passwordLabel').textContent=needsSetup?'设置登录密码':'登录密码';$('#loginSubmit').textContent=needsSetup?'设置密码并进入 →':'进入控制台 →';$('#loginHelp').textContent=needsSetup?'首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。'}catch(e){$('#loginError').textContent=e.message}}
+async function loadAuth() {
+ try {
+  const status = await api('/auth/status');
+  needsSetup = status.needs_setup;
+  const bound = Boolean(status.cloud?.bound);
+  $('#cloudLogin').hidden = !bound;
+  for (const selector of ['#password','#passwordLabel','#loginSubmit']) $(selector).hidden = bound;
+  $('#setupConfirm').hidden = !needsSetup || bound;
+  $('#password').autocomplete = needsSetup ? 'new-password':'current-password';
+  $('#passwordLabel').textContent = needsSetup ? '设置登录密码':'登录密码';
+  $('#loginSubmit').textContent = needsSetup ? '设置密码并进入 →':'进入控制台 →';
+  $('#loginHelp').textContent = bound ? '此设备使用已绑定的 Cloud 账号登录。' : needsSetup ? '首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。';
+ } catch (error) {$('#loginError').textContent=error.message;}
+}
 async function enter() {
  try {
   if ((await api('/auth/status')).needs_setup) {showLogin(); await loadAuth(); return;}
   me = await api('/me');
   $('#role').textContent = me.role === 'admin' ? '管理员' : '只读';
+  $('#changePassword').hidden = Boolean(me.cloud?.bound);
+  $('#cloudBind').hidden = Boolean(me.cloud?.bound);
   $('#login').hidden = true;
   $('#shell').hidden = false;
   const portal = $('#portalLink');
@@ -122,6 +137,29 @@ async function enter() {
  }
 }
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubmit');button.disabled=true;try{if(needsSetup&&$('#password').value!==$('#passwordConfirm').value)throw Error('两次输入的密码不一致');await api(needsSetup?'/auth/setup':'/login',{password:$('#password').value});$('#loginForm').reset();$('#loginError').textContent='';needsSetup=false;await enter()}catch(e){$('#loginError').textContent=e.message;await loadAuth()}finally{button.disabled=false}};
+
+$('#cloudBind').onclick = async () => {
+ $('#cloudBindDialog').showModal();
+ $('#agentBindError').textContent = '';
+ $('#agentBindResult').hidden = true;
+ try {
+  const status = await api('/cloud/status');
+  if (status.pending && status.pending.expires > Date.now()/1000) showBinding(status.pending);
+ } catch (error) {$('#agentBindError').textContent=error.message;}
+};
+function showBinding(value) {
+ $('#agentBindCode').textContent = value.user_code;
+ $('#agentVerifyLink').href = value.verification_url;
+ $('#agentBindResult').hidden = false;
+}
+$('#agentBindClose').onclick = () => $('#cloudBindDialog').close();
+$('#cloudBindForm').onsubmit = async event => {
+ event.preventDefault();
+ $('#agentBindSubmit').disabled = true;
+ try {showBinding(await api('/cloud/bind',{cloud_url:$('#agentCloudURL').value.trim()}));}
+ catch (error) {$('#agentBindError').textContent=error.message;}
+ finally {$('#agentBindSubmit').disabled=false;}
+};
 $('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError').textContent='';$('#passwordDialog').showModal()};$('#cancelPassword').onclick=()=>$('#passwordDialog').close();$('#passwordForm').onsubmit=async e=>{e.preventDefault();try{if($('#newPassword').value!==$('#newPasswordConfirm').value)throw Error('两次输入的新密码不一致');await api('/auth/password',{password:$('#newPassword').value});$('#passwordForm').reset();$('#passwordDialog').close();notify('密码已更新，其他登录已失效')}catch(e){$('#passwordError').textContent=e.message}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});
 $('#content').onclick=e=>{const b=e.target.closest('button[data-kind]');if(b)act(b.dataset.kind,b.dataset.id,b.dataset.action,b)};

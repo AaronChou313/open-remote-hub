@@ -13,8 +13,8 @@ def connection():
 
 
 def credential(role):
-    from app import passwords
-    return passwords.fingerprint() or 'unconfigured'
+    from app import passwords, cloud_agent
+    return cloud_agent.fingerprint() or passwords.fingerprint() or 'unconfigured'
 
 
 def create(token,role,expires):
@@ -24,8 +24,7 @@ def create(token,role,expires):
 
 
 def get(token):
-    from app import passwords
-    if not token or not passwords.record():return None
+    if not token or credential('admin') == 'unconfigured':return None
     with connection() as c:
         row=c.execute('SELECT role,expires,credential FROM sessions WHERE digest=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
     if row and row[1]>time.time() and row[2]==credential(row[0]):return dict(role=row[0],expires=row[1])

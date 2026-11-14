@@ -69,9 +69,8 @@ upstream = Upstream()
 
 
 def admin(cookie):
-    from app import passwords
     s = access.get(cookie)
-    return bool(passwords.record() and s and s['role'] == 'admin')
+    return bool(s and s['role'] == 'admin')
 
 
 def route_allowed(path, method):

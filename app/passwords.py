@@ -29,6 +29,9 @@ def fingerprint():
 
 
 def verify(password):
+    from app import cloud_agent
+    if cloud_agent.binding():
+        return False
     r = record()
     if not r:
         return False

@@ -30,7 +30,7 @@ def auth(c):
 
 
 def test_password_storage_and_token_retirement(c):
-    assert c.get('/api/auth/status').json()=={'needs_setup':True}
+    assert c.get('/api/auth/status').json()['needs_setup'] is True
     assert c.post('/api/login',json={'token':'retired-token'}).status_code==422
     assert c.post('/api/auth/setup',json={'password':PASSWORD}).status_code==403
     passwords.save(PASSWORD,initial=True)

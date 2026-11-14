@@ -171,6 +171,6 @@ def access_urls():
             address = ipaddress.ip_address(host)
         except ValueError:
             continue
-        if address.version == 4 and address.is_private and not address.is_loopback:
+        if address.version == 4 and (address.is_private or address in ipaddress.ip_network('100.64.0.0/10')) and not address.is_loopback:
             urls.append(f'{scheme}://{host}:{PORT}/')
     return urls

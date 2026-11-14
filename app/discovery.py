@@ -17,7 +17,12 @@ router = APIRouter()
 
 def allowed_origin(origin):
     origins = os.environ.get('ORH_DISCOVERY_ORIGINS', 'https://aaronchou313.github.io')
-    return origin in {value.strip() for value in origins.split(',') if value.strip()}
+    from app import cloud_agent
+    allowed = {value.strip() for value in origins.split(',') if value.strip()}
+    current = cloud_agent.binding()
+    if current:
+        allowed.add(current['cloud_url'])
+    return origin in allowed
 
 
 def identity():
@@ -62,4 +67,6 @@ def pairing(request: Request):
         urls = [url for url in urls if url not in (f'{request.url.scheme}://127.0.0.1:{PORT}', f'{request.url.scheme}://localhost:{PORT}', f'{request.url.scheme}://[::1]:{PORT}')]
     # A fragment stays in the browser. It isn't sent to the Pages hosting server.
     payload = dict(name=value['name'], instanceId=value['instance_id'], urls=urls)
-    return dict(**value, urls=urls, portal_url=PORTAL + '#add=' + quote(json.dumps(payload, ensure_ascii=False), safe=''))
+    from app import cloud_agent
+    destination = PORTAL if cloud_agent.binding() else PORTAL + '#add=' + quote(json.dumps(payload, ensure_ascii=False), safe='')
+    return dict(**value, urls=urls, portal_url=destination)
