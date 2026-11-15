@@ -159,11 +159,13 @@ def latest():
 def apply_update(release):
     target = Path(tempfile.gettempdir()) / ('ORH-Setup-' + release['version'] + '.exe')
     urllib.request.urlretrieve(release['url'], target)
-    stop_children()
-    subprocess.run([str(target), '/SILENT', '/CLOSEAPPLICATIONS', '/NORESTART'], timeout=600, check=False)
     installed = Path(os.environ.get('LOCALAPPDATA', '')) / 'Programs' / 'OpenRemoteHub' / 'OpenRemoteHub.exe'
-    if installed.is_file():
-        subprocess.Popen([str(installed)], close_fds=True)
+    stop_children()
+    # A running exe cannot replace itself: hand the install to a detached
+    # helper that waits for this process to exit, then upgrades and restarts.
+    helper = Path(tempfile.gettempdir()) / 'orh-update.cmd'
+    helper.write_text('@echo off\r\n:wait\r\ntasklist /FI "PID eq ' + str(os.getpid()) + '" 2>nul | find "' + str(os.getpid()) + '" >nul\r\nif not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\r\n"' + str(target) + '" /SILENT /CLOSEAPPLICATIONS /NORESTART\r\nstart "" "' + str(installed) + '"\r\ndel "%~f0"\r\n', encoding='ascii')
+    subprocess.Popen(['cmd', '/c', str(helper)], creationflags=0x00000008 | CREATE_NO_WINDOW, close_fds=True)
 
 
 def tray():

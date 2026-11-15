@@ -1,5 +1,5 @@
 #define MyAppName "OpenRemoteHub"
-#define MyAppVersion "0.5.10"
+#define MyAppVersion "0.5.11"
 
 [Setup]
 AppName={#MyAppName}
@@ -24,6 +24,18 @@ Source: "..\build\windows\OpenRemoteHub\*"; DestDir: "{app}"; Flags: recursesubd
 Name: "{userprograms}\OpenRemoteHub"; Filename: "{app}\OpenRemoteHub.exe"
 Name: "{userprograms}\OpenRemoteHub 停止"; Filename: "{app}\OpenRemoteHub.exe"; Parameters: "--stop"
 Name: "{userstartup}\OpenRemoteHub"; Filename: "{app}\OpenRemoteHub.exe"; Parameters: "--tray"
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssInstall then
+  begin
+    Exec(ExpandConstant('{app}\OpenRemoteHub.exe'), '--stop', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(1500);
+  end;
+end;
 
 [Run]
 Filename: "{app}\OpenRemoteHub.exe"; Description: "打开 OpenRemoteHub"; Flags: nowait postinstall skipifsilent
