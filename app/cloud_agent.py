@@ -162,16 +162,6 @@ def metadata():
                 addresses=urls,port=main.PORT)
 
 
-def begin_binding(base):
-    if binding():
-        raise ValueError('设备已经绑定，请先在 Cloud 设备列表中解绑')
-    base = cloud_url(base)
-    result = call(base,'/agent/bindings/start',metadata())
-    save(dict(status='pending',cloud_url=base,device_code=result['device_code'],
-              user_code=result['user_code'],verification_url=result['verification_url'],expires=time.time()+result['expires_in']))
-    return {key:result[key] for key in ('user_code','verification_url','expires_in')}
-
-
 def enroll(base, username, password):
     """Log in with the Cloud account and register this device in one step."""
     if binding():
@@ -282,15 +272,6 @@ def status():
 @router.get('/api/cloud/status')
 def api_status():
     return status()
-
-
-@router.post('/api/cloud/bind')
-async def bind_api(request: Request):
-    body = await request.json()
-    try:
-        return await asyncio.to_thread(begin_binding,body.get('cloud_url') or os.environ.get('ORH_CLOUD_URL',''))
-    except ValueError as error:
-        raise HTTPException(409,str(error)) from None
 
 
 @router.post('/api/cloud/login')
