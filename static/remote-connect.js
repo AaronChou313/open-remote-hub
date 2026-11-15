@@ -60,14 +60,14 @@ window.RemoteHubRemoteConnect = (() => {
     const engine = manager.engine;
     const active = manager.profiles.find((profile) => profile.active);
     const running = data.available && (!manager.managed || engine.enabled);
-    $("#rcProxyState").textContent = running ? "运行中" : manager.managed
+    ($("#rcProxyState")||{}).textContent = running ? "运行中" : manager.managed
       ? !engine.ready ? "后台离线" : engine.enabled ? "内核未就绪" : "已停止"
       : "未连接";
     $("#rcProxyState").classList.toggle("online", running);
-    $("#rcProxyAddress").textContent = manager.managed
+    ($("#rcProxyAddress")||{}).textContent = manager.managed
       ? active?.name || "尚未选择配置" : running ? "Clash / Mihomo" : "代理控制器不可用";
     const modes = {rule: "规则模式", global: "全局模式", direct: "直连模式"};
-    $("#rcProxySummary").textContent = running
+    ($("#rcProxySummary")||{}).textContent = running
       ? `${modes[data.mode] || data.mode} · ${data.connection_count} 个连接 · TUN ${data.tun_enabled ? "已启用" : "未启用"}`
       : manager.managed && engine.ready ? "Mihomo 后台已就绪" : "进入网络代理查看详情";
   }
@@ -78,17 +78,17 @@ window.RemoteHubRemoteConnect = (() => {
       if (owner()) updateProxySummary(data, manager);
     } catch (error) {
       if (!owner()) return;
-      $("#rcProxyState").textContent = "读取失败";
+      ($("#rcProxyState")||{}).textContent = "读取失败";
       $("#rcProxyState").classList.remove("online");
-      $("#rcProxyAddress").textContent = error.message;
-      $("#rcProxySummary").textContent = "";
+      ($("#rcProxyAddress")||{}).textContent = error.message;
+      ($("#rcProxySummary")||{}).textContent = "";
     }
   }
   function bindRustdesk() {
     let statusRequest;
     function updateStatus(value) {
       state = value;
-      $("#rcOnline").textContent = value.ready
+      ($("#rcOnline")||{}).textContent = value.ready
         ? value.accepting
           ? value.online
             ? "在线"
@@ -428,7 +428,7 @@ window.RemoteHubRemoteConnect = (() => {
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="mesh-hero"><div class="mesh-hero-head"><span id="rcHeroDot" class="mesh-dot"></span><div><h2>组网</h2><p id="rcOrnHost" class="muted">—</p></div><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管组网</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录组网 ${icon("external")}</a><a class="button" href="https://cloud.openremotehub.top/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p></div>
+<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="mesh-hero"><div class="mesh-hero-head"><span id="rcHeroDot" class="mesh-dot"></span><div><h2>组网</h2><p id="rcOrnHost" class="muted">—</p></div><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管组网</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录组网 ${icon("external")}</a><a class="button" href="https://cloud.openremotehub.top/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p></div><div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div>
 </section>
         <section id="rcOverview" hidden>
           <article class="panel rd-connection">
