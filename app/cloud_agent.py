@@ -73,10 +73,17 @@ def cloud_url(value):
     return value.rstrip('/')
 
 
+def http_client(timeout=12):
+    """Cloud client; honours an explicit proxy so a TUN is not required."""
+    proxy = (os.environ.get('ORH_CLOUD_PROXY') or os.environ.get('HTTPS_PROXY')
+             or os.environ.get('https_proxy') or '')
+    return httpx.Client(timeout=timeout, trust_env=bool(proxy), proxy=proxy or None)
+
+
 def call(base, path, body, credential=None):
     headers = {'Authorization':'Bearer '+credential} if credential else {}
     try:
-        with httpx.Client(timeout=12,trust_env=False) as client:
+        with http_client(12) as client:
             response = client.post(base+path,json=body,headers=headers)
     except httpx.HTTPError as error:
         try:
@@ -86,7 +93,8 @@ def call(base, path, body, credential=None):
             addrs=sorted({item[4][0] for item in _socket.getaddrinfo(host,443,type=_socket.SOCK_STREAM)})
         except OSError:
             addrs=[]
-        print('[cloud] 连接失败: '+repr(error)+' 地址='+','.join(addrs), flush=True)
+        import ssl as _ssl
+        print('[cloud] 连接失败: '+repr(error)+' 地址='+','.join(addrs)+' '+_ssl.OPENSSL_VERSION, flush=True)
         raise HTTPException(503,'暂时无法连接 Cloud，请稍后重试') from None
     if response.status_code >= 400:
         detail = response.json().get('detail','Cloud 请求失败') if response.headers.get('content-type','').startswith('application/json') else 'Cloud 请求失败'
@@ -100,7 +108,7 @@ def directory():
     if not value:
         return []
     try:
-        with httpx.Client(timeout=8, trust_env=False) as client:
+        with http_client(8) as client:
             response = client.get(value['cloud_url'] + '/agent/directory',
                                   headers={'Authorization': 'Bearer ' + value['credential']})
         return response.json() if response.status_code == 200 else []

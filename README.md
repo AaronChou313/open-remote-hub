@@ -349,6 +349,14 @@ Windows 版保留控制台核心、组网与远程桌面；终端、SSH、文件
 
 以下是从源码安装的方式，适合开发或自定义部署。
 
+
+### Cloud 连不上时
+
+若登录页提示「暂时无法连接 Cloud」，先确认这台机器能否用浏览器打开 `https://cloud.openremotehub.top`。部分国内链路会丢弃指向 `*.openremotehub.top` 的**经典 TLS 握手**（表现为 `WinError 10054`、`curl (35) Recv failure`）。可任选其一：
+
+- 设置 `ORH_CLOUD_PROXY=http://127.0.0.1:7890`（写入 `%LOCALAPPDATA%\OpenRemoteHub\.env` 后重启服务），并把该域名的规则改为走代理（而不是 `GEOIP,CN,DIRECT`）；代理支持自 0.5.13 起提供。
+- 使用 0.5.13 及以后的 Windows 安装包：它基于 Python 3.14 / OpenSSL 3.5，默认提供 ML-KEM 混合握手，可直接穿透该链路。
+
 **1. 安装 Python 3.11+**
 
 从 python.org 安装，勾选 *Add python.exe to PATH*。验证：
