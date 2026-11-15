@@ -20,10 +20,10 @@ window.RemoteHubLocalServices = (() => {
 
   async function render(check, force = false) {
     current = check;
-    const result = await api('/local-services' + (force ? '?force=true' : ''));
+    const [result, system] = await Promise.all([api('/local-services' + (force ? '?force=true' : '')), api('/system').catch(() => ({}))]);
     if (!check()) return;
     data = result;
-    $('#content').innerHTML = `<section><div class="entry-toolbar service-toolbar"><input id="serviceSearch" type="search" aria-label="搜索本地服务" placeholder="搜索服务、进程或端口" value="${esc(query)}"><div class="entry-toolbar-actions"><select id="serviceKind" aria-label="服务类型">${[['all','全部服务'],['web','Web / HTTP'],['network','监听端口'],['background','后台服务']].map(([value,label])=>`<option value="${value}" ${kind===value?'selected':''}>${label}</option>`).join('')}</select><label class="service-inactive"><input type="checkbox" id="serviceInactive" ${includeInactive?'checked':''}>包括未运行服务</label></div></div><div id="serviceSummary" class="service-summary"></div>${result.warnings.map(warning=>`<p class="muted service-warning">${esc(warning)}</p>`).join('')}<div id="serviceEntries"></div><div id="servicePaging" class="service-paging"></div></section>`;
+    $('#content').innerHTML = `<section><div class="entry-toolbar service-toolbar"><input id="serviceSearch" type="search" aria-label="搜索本地服务" placeholder="搜索服务、进程或端口" value="${esc(query)}"><div class="entry-toolbar-actions"><select id="serviceKind" aria-label="服务类型">${[['all','全部服务'],['web','Web / HTTP'],['network','监听端口'],['background','后台服务']].map(([value,label])=>`<option value="${value}" ${kind===value?'selected':''}>${label}</option>`).join('')}</select><label class="service-inactive"><input type="checkbox" id="serviceInactive" ${includeInactive?'checked':''}>包括未运行服务</label></div></div><div id="serviceSummary" class="service-summary"></div>${result.warnings.map(warning=>`<p class="muted service-warning">${esc(warning)}</p>`).join('')}<div id="serviceEntries"></div><div id="servicePaging" class="service-paging"></div>${system.processes?panel('活跃进程',procTable(system.processes.slice(0,25)),'<span class="badge">CPU 优先 · 前 25 项</span>','¹ 单进程 CPU 按逻辑核心计，可超过 100%。系统进程仅查看。'):''}</section>`;
     $('#serviceSearch').oninput = event => { query = event.target.value; page = 0; draw(); };
     $('#serviceKind').onchange = event => { kind = event.target.value; page = 0; draw(); };
     $('#serviceInactive').onchange = event => { includeInactive = event.target.checked; page = 0; draw(); };

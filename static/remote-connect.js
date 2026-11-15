@@ -5,7 +5,7 @@ window.RemoteHubRemoteConnect = (() => {
   let state;
   let original = {};
   let effectiveOriginal = {};
-  let tab = "status";
+  let tab = "lan";
   let requestedTab;
   let proxyVersion = 0;
   let operation = false;
@@ -423,15 +423,8 @@ window.RemoteHubRemoteConnect = (() => {
     return `<article class="rc-summary" data-rc-card="${target}"><div class="rc-summary-head"><h2>${icon(glyph)}${title}</h2><span class="rc-dot" id="${statusId}">读取中</span></div><p id="${addressId}" class="mono">—</p><small ${detailId ? `id="${detailId}"` : ""} class="muted">${detailId ? "" : "本机远程桌面服务"}</small><button class="rc-summary-open" data-rc-open="${target}" aria-label="打开${title}">查看详情 ${icon("chevron")}</button></article>`;
   }
   function markup() {
-    return `<div id="rcRoot" class="remote-connect" data-tab="status">
-<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="status" class="active">${icon("overview")}状态总览</button><button data-rc-tab="lan">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}组网</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
-<div class="rc-summaries">
-${summaryCard("lan", "network", "本地局域网", "rcLanState", "rcLanAddress", "rcLanSummary")}
-${summaryCard("network", "network", "组网", "rcTailState", "rcTailAddress", "rcTailCounts")}
-${summaryCard("nodebaby", "link", "节点小宝", "nbState", "nbAddress", "nbSummary")}
-${summaryCard("proxy", "settings", "网络代理", "rcProxyState", "rcProxyAddress", "rcProxySummary")}
-${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", null)}
-</div>
+    return `<div id="rcRoot" class="remote-connect" data-tab="lan">
+<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}组网</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
@@ -581,23 +574,23 @@ ${RemoteHubNodeBaby.markup()}
       Starting: "正在连接",
       NoState: "正在初始化",
     };
-    $("#rcTailState").textContent = !value.available
+    const setText = (id, text) => { const node = $("#" + id); if (node) node.textContent = text; };
+    setText("rcTailState", !value.available
       ? "未安装"
       : !value.reachable
         ? "不可用"
-        : labels[value.state] || value.state || "未知";
-    $("#rcTailState").classList.toggle("online", connected);
-    $("#rcTailAddress").textContent =
-      value.device?.addresses?.join(" · ") || "—";
-    $("#rcTailCounts").textContent = connected
+        : labels[value.state] || value.state || "未知");
+    $("#rcTailState")?.classList.toggle("online", connected);
+    setText("rcTailAddress", value.device?.addresses?.join(" · ") || "—");
+    setText("rcTailCounts", connected
       ? `${value.peers.filter((peer) => peer.online).length} / ${value.peers.length} 台其他设备在线`
-      : "当前未连接组网";
-    $("#rcNativeSummary").textContent = state?.ready
+      : "当前未连接组网");
+    setText("rcNativeSummary", state?.ready
       ? `${state.device_id} · ${state.connections ?? 0} 个远程连接`
-      : state?.message || "客户端未就绪";
-    $("#rcTailHostname").textContent = value.device?.hostname || "—";
-    $("#rcTailDns").textContent = value.device?.dns || "—";
-    $("#rcTailVersion").textContent = value.version || "—";
+      : state?.message || "客户端未就绪");
+    setText("rcTailHostname", value.device?.hostname || "—");
+    setText("rcTailDns", value.device?.dns || "—");
+    setText("rcTailVersion", value.version || "—");
     $("#rcTailNetwork").textContent = value.network || "—";
     $("#rcTailErrors").textContent = [
       value.error,
@@ -608,7 +601,7 @@ ${RemoteHubNodeBaby.markup()}
       .join("\n");
     $("#rcTailErrors").hidden = !$("#rcTailErrors").textContent;
     $("#rcTailToggle").textContent = connected ? "断开组网" : "连接组网";
-    $("#rcHeroDot").classList.toggle("online", connected);
+    $("#rcHeroDot")?.classList.toggle("online", connected);
     $("#rcTailNetcheck").disabled = !value.available;
     $("#rcTailToggle").disabled =
       !value.available || value.last_operation?.state === "pending";

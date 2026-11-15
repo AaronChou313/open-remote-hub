@@ -252,7 +252,9 @@ def logout(request:Request):
 def me(request:Request): return {'role':request.state.role,'host':host.info(),'zellij_port':ZPORT,'cloud':cloud_agent.status()}
 
 @app.get('/api/system')
-def system(): return {**latest,'host':host.info()}
+def system():
+    from app import gpu
+    return {**latest,'host':host.info(),'gpu':gpu.info()}
 
 
 @app.get('/api/capabilities')

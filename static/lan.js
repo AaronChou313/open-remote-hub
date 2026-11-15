@@ -12,6 +12,7 @@ window.RemoteHubLAN = (() => {
       <p id="lanMessage" class="muted" role="status"></p><div id="lanDevices" class="rc-peers"></div></section>`;
   }
   function mount(options) {
+    if (!$("#lanSearch")) return;
     context = options; data = null; request = null; scanning = false; search = ""; onlineOnly = false;
     $("#lanSearch").oninput = (event) => { search = event.target.value.toLowerCase(); drawDevices(); };
     $("#lanOnlineOnly").onchange = (event) => { onlineOnly = event.target.checked; drawDevices(); };
@@ -37,6 +38,7 @@ window.RemoteHubLAN = (() => {
     };
   }
   async function refresh() {
+    if (!$("#rcLanState")) return;
     if (scanning) return;
     if (request) return request;
     const owner = context;
