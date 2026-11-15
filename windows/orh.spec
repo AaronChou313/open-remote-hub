@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('app', 'app'), ('static', 'static'), ('scripts', 'scripts'), ('bin', 'bin'), ('windows/version.txt', '.')]
+ROOT = Path(SPECPATH).parent
+
+datas = [(str(ROOT / name), name) for name in ('app', 'static', 'scripts', 'bin')] + [(str(ROOT / 'windows' / 'version.txt'), '.')]
 hiddenimports = [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto',
     'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on',
@@ -14,7 +18,7 @@ for package in ('fastapi', 'uvicorn', 'starlette', 'pydantic', 'httpx', 'psutil'
     except Exception:
         pass
 
-a = Analysis(['windows/orh_launcher.py'], pathex=[], binaries=[], datas=datas,
+a = Analysis([str(ROOT / 'windows' / 'orh_launcher.py')], pathex=[], binaries=[], datas=datas,
              hiddenimports=hiddenimports, hookspath=[], runtime_hooks=[], excludes=[], noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='OpenRemoteHub', debug=False,
