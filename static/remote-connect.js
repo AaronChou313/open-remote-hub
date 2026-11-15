@@ -356,7 +356,7 @@ window.RemoteHubRemoteConnect = (() => {
               item.classList.toggle("active", item.dataset.rcTab === next),
             );
           if (next === "status") await Promise.all([RemoteHubLAN.refresh(), refreshProxySummary()]);
-          if (next === "network") await loadOrnConfig();
+          if (next === "network") await loadMeshConfig();
           if (next === "lan") await RemoteHubLAN.refresh();
           if (next === "proxy") await renderProxy();
           window.scrollTo?.(0, 0);
@@ -666,7 +666,7 @@ ${RemoteHubNodeBaby.markup()}
     );
   }
 
-  async function loadOrnConfig() {
+  async function loadMeshConfig() {
     try {
       const value = await api("/remote-connect/mesh/config");
       $("#rcOrnHostname").value = value.hostname || "";
@@ -980,6 +980,8 @@ ${RemoteHubNodeBaby.markup()}
       window.scrollTo?.(0, 0);
     }
     if (!operation) await controller.refresh();
+    if (window.ORH_CAPS?.rustdesk === false) document.querySelectorAll('[data-rc-tab="overview"],[data-rc-open="overview"]').forEach((item) => item.remove());
+    if (window.ORH_CAPS?.mesh === false) document.querySelectorAll('[data-rc-tab="network"],[data-rc-open="network"]').forEach((item) => item.remove());
     if (requestedTab) {
       const next = requestedTab;
       requestedTab = null;

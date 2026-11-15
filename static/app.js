@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let caps={};let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
 const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'仪表盘',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
@@ -25,7 +25,9 @@ async function withBusy(button,key,label,work){
  if(button){button.disabled=true;button.textContent=label;button.setAttribute('aria-busy','true')}
  try{return await work()}finally{pendingOperations.delete(key);if(button?.isConnected){button.disabled=false;if(markup!==undefined)button.innerHTML=markup;else button.textContent=text;button.removeAttribute('aria-busy')}}
 }
+const VIEW_CAP={docker:'docker',zellij:'zellij',ssh:'ssh',dsh:'dsh'};
 async function switchView(target){
+ if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false){notify('当前环境不支持该功能');return}
  if(target==='proxy'){target='remote';RemoteHubRemoteConnect.openTab('proxy')}
  if(target==='meshremote')RemoteHubRemoteConnect.openTab('network');
  document.body.dataset.module=target;
@@ -63,7 +65,7 @@ function procTable(list){return table(['进程 / 命令','PID','CPU¹','内存',
 function chart(data){if(data.length<2)return empty('正在采集真实数据，稍候即可查看趋势。');const w=900,h=170,left=34,right=12,top=15,bottom=28,start=data[0].time,end=data.at(-1).time;const x=t=>left+(t-start)/(end-start)*(w-left-right),y=v=>h-bottom-v/100*(h-top-bottom);const path=k=>data.map((p,i)=>`${i?'L':'M'}${x(p.time).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');return `<svg class="chart" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="CPU 与内存历史使用率">${[0,25,50,75,100].map(v=>`<line class="grid" x1="${left}" x2="${w-right}" y1="${y(v)}" y2="${y(v)}"/><text x="0" y="${y(v)+3}">${v}%</text>`).join('')}<path class="mem" d="${path('memory')}"/><path class="cpu" d="${path('cpu')}"/>${[0,.25,.5,.75,1].map(f=>`<text x="${left+f*(w-left-right)}" y="${h-4}" text-anchor="${f===0?'start':f===1?'end':'middle'}">${new Date((start+(end-start)*f)*1000).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</text>`).join('')}</svg>`}
 function quickCards(){
  const items=[['remote','网络连接','局域网、组网状态与网络代理','network'],['meshremote','组网与远程','对端设备、远程桌面与组网','share-2'],['zellij','终端','交互式终端会话','terminal'],['files','文件','浏览与编辑主机文件','folder'],['docker','容器','容器与镜像','boxes'],['services','本地服务','运行中的本地服务','list-start'],['ssh','SSH','主机、密钥与隧道','key-round'],['knowledge','知识库','笔记与文档','book-open'],['projects','项目','代码仓库','folder-git-2'],['environments','开发环境','隔离的运行环境','layers'],['dsh','DSH 工作台','AI 工作台','deepseek']];
- const available=items.filter(([view])=>document.querySelector('nav button[data-view="'+view+'"]'));
+ const available=items.filter(([view])=>document.querySelector('nav button[data-view="'+view+'"]')&&(!VIEW_CAP[view]||caps[VIEW_CAP[view]]!==false));
  return available.length?'<div class="quick-grid">'+available.map(([view,title,desc,ic])=>'<button class="quick-card" data-open-view="'+view+'"><span class="quick-icon">'+icon(ic)+'</span><strong>'+title+'</strong><small>'+desc+'</small></button>').join('')+'</div>':'';
 }
 async function overview(version){const [d,h]=await Promise.all([api('/system'),api('/history?hours='+chartHours)]);if(version!==renderVersion)return;const m=d.metrics,host=d.host;if(!m){$('#content').innerHTML=empty('正在进行首次系统采样…');return}$('#content').innerHTML=`<div class="host-strip"><span class="host-icon">${icon('server')}</span><div><strong>${esc(host.hostname)}</strong><small>${esc(host.system)} ${esc(host.version)} · ${esc(host.arch)} · ${host.cores} 核 CPU</small></div><div class="host-meta">${badge('running')}<br>已运行 ${uptime(Date.now()/1000-host.boot)}</div></div>${quickCards()}<div class="metrics">${[['CPU 使用率',m.cpu.toFixed(1),'%',`${host.cores} 个逻辑核心`,m.cpu],['内存使用率',m.memory.toFixed(1),'%',`${bytes(m.memory_used)} / ${bytes(m.memory_total)}`,m.memory],['磁盘使用率',m.disk.toFixed(1),'%',`${bytes(m.disk_used)} / ${bytes(m.disk_total)}`,m.disk],['网络吞吐',bytes(m.rx),'/s',`↑ ${bytes(m.tx)}/s  ·  ↓ 接收`,null]].map(([label,n,unit,detail,pct])=>`<div class="metric"><div class="metric-label">${label}<span>${icon(pct===null?'network':label.startsWith('CPU')?'cpu':label.startsWith('内存')?'memory':'disk')}</span></div><div class="metric-value">${n} <small>${unit}</small></div>${pct===null?'':`<div class="meter"><i style="width:${Math.min(100,pct)}%"></i></div>`}<small>${detail}</small></div>`).join('')}</div>${panel('资源趋势',`<div class="chart-wrap">${chart(h)}</div>`,`<div class="toolbar"><div class="legend"><span><b>●</b> CPU</span><span>● 内存</span></div><select id="historyHours" aria-label="历史时间范围">${[[1,'最近 1 小时'],[24,'最近 24 小时'],[168,'最近 7 天']].map(([v,l])=>`<option value="${v}" ${chartHours===v?'selected':''}>${l}</option>`).join('')}</select></div>`,'每 3 秒采样 · 本机 SQLite 保留 7 天')}${panel('活跃进程',procTable(d.processes.slice(0,25)),'<span class="badge">CPU 优先 · 前 25 项</span>','¹ 单进程 CPU 按逻辑核心计，可超过 100%。系统进程仅查看。')}`;$('#historyHours').onchange=e=>{chartHours=Number(e.target.value);refresh()};$('#updated').textContent='采样于 '+new Date(m.time*1000).toLocaleTimeString();if(d.error)throw Error(d.error)}
@@ -122,6 +124,8 @@ async function loadAuth() {
 async function enter() {
  try {
   me = await api('/me');
+  caps = await api('/capabilities').catch(() => ({}));
+  window.ORH_CAPS = caps;
   $('#role').textContent = me.role === 'admin' ? '管理员' : '只读';
   $('#changePassword').hidden = Boolean(me.cloud?.bound);
   $('#cloudBind').hidden = Boolean(me.cloud?.bound);
@@ -130,6 +134,11 @@ async function enter() {
   const portal = $('#portalLink');
   portal.href = (me.cloud?.base_url || 'https://cloud.openremotehub.top') + '/'; portal.title='打开 Cloud 门户';
   
+  for (const [viewName,capName] of Object.entries(VIEW_CAP)) {
+   if (caps[capName] === false) {
+    document.querySelectorAll('nav button[data-view="'+viewName+'"]').forEach((button)=>{button.disabled=true;button.classList.add('unavailable');button.title='当前环境不可用';});
+   }
+  }
   switchView(view);
  } catch (error) {
   if (!$('#login').hidden) $('#loginError').textContent = error.message;

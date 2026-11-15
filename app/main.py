@@ -254,6 +254,20 @@ def me(request:Request): return {'role':request.state.role,'host':host.info(),'z
 @app.get('/api/system')
 def system(): return {**latest,'host':host.info()}
 
+
+@app.get('/api/capabilities')
+def capabilities():
+    import shutil as _shutil
+    from app import mesh_runtime
+    from app.dsh import settings as dsh_settings
+    from app.remote_connect.rustdesk.settings import SOCKET
+    rustdesk = False
+    if not WINDOWS_EDITION:
+        rustdesk = SOCKET.exists() or bool(_shutil.which('rustdesk'))
+    return dict(docker=bool(_shutil.which('docker')), zellij=bool(_shutil.which('zellij')),
+                ssh=bool(_shutil.which('ssh')), rustdesk=rustdesk,
+                mesh=mesh_runtime.binary() is not None, dsh=bool(dsh_settings().get('enabled')))
+
 @app.get('/api/history')
 def history(hours:int=1):
     hours=max(1,min(hours,168))

@@ -295,6 +295,7 @@ def standalone_service():
         found = ('launchd', plist) if loaded else None
     elif sys.platform == 'win32':
         try:
+            # Legacy task name from the ORN era.
             result = subprocess.run(['schtasks', '/Query', '/TN', 'OpenRemoteHub ORN'], capture_output=True, text=True, timeout=30)
             found = ('scheduled-task', None) if result.returncode == 0 else None
         except (OSError, subprocess.SubprocessError):
@@ -310,29 +311,29 @@ def standalone_service():
 
 
 def disable_standalone():
-    """Stop and disable the separately installed ORN service, once."""
+    """Stop and disable the separately installed mesh service, once."""
     found = standalone_service()
     if not found:
-        return '没有发现独立的 ORN 服务'
+        return '没有发现独立的组网服务'
     kind, plist = found
     if kind == 'launchd':
         target = f'gui/{os.getuid()}'
         subprocess.run(['launchctl', 'bootout', target, str(plist)], capture_output=True, timeout=30)
         subprocess.run(['launchctl', 'disable', f'{target}/top.openremotehub.orn'], capture_output=True, timeout=30)
-        return '已停止并禁用独立 ORN LaunchAgent'
+        return '已停止并禁用独立组网 LaunchAgent'
     if kind == 'scheduled-task':
         subprocess.run(['schtasks', '/End', '/TN', 'OpenRemoteHub ORN'], capture_output=True, timeout=30)
         subprocess.run(['schtasks', '/Change', '/TN', 'OpenRemoteHub ORN', '/DISABLE'], capture_output=True, timeout=30)
-        return '已停止并禁用独立 ORN 计划任务'
+        return '已停止并禁用独立组网计划任务'
     _systemctl('disable', '--now', 'orh-mesh')
-    return '已停止并禁用独立 ORN systemd 服务'
+    return '已停止并禁用独立组网 systemd 服务'
 
 
 def takeover():
-    """Adopt an existing standalone ORN install without re-enrolling the device."""
+    """Adopt an existing standalone mesh install without re-enrolling the device."""
     global TAKEOVER, NOTE, ERROR, SERVICE_CACHE
     if not binary():
-        raise RuntimeError('未找到 ORN Agent 二进制，请先安装或设置 ORH_MESH_BIN')
+        raise RuntimeError('未找到组网组件二进制，请先安装或设置 ORH_MESH_BIN')
     previous = disable_standalone()
     SERVICE_CACHE = (0.0, None)
     for _ in range(40):
@@ -361,7 +362,7 @@ def config_view():
 
 
 def save_config(payload):
-    """Edit the local ORN identity and published services, then apply them."""
+    """Edit the local mesh identity and published services, then apply them."""
     current = read_config()
     hostname = (payload.get('hostname') or '').strip()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,62}', hostname):
