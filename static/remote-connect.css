@@ -915,3 +915,24 @@ body[data-module="remote"] [data-rc-tab="network"],body[data-module="remote"] [d
 body[data-module="remote"] [data-rc-card="network"],
 body[data-module="meshremote"] [data-rc-tab="status"],body[data-module="meshremote"] [data-rc-tab="lan"],
 body[data-module="meshremote"] [data-rc-tab="nodebaby"],body[data-module="meshremote"] [data-rc-tab="proxy"]{display:none}
+
+.mesh-hero{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px}
+.mesh-hero-head{display:flex;align-items:center;gap:12px}
+.mesh-hero-head h2{font-size:20px;margin:0}
+.mesh-hero-head p{margin:2px 0 0}
+.mesh-hero-head .rc-tail-actions{margin-left:auto;flex-wrap:wrap}
+.mesh-dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.mesh-dot.online{background:var(--green)}
+.mesh-peers{display:grid;gap:12px;margin-top:14px}
+.peer-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:10px}
+.peer-head{display:flex;align-items:center;gap:10px}
+.peer-name{display:flex;flex-direction:column;gap:2px}
+.peer-name small{color:var(--muted)}
+.peer-path{margin-left:auto;font-size:11px;padding:3px 9px;border-radius:999px;background:var(--bg);color:var(--muted)}
+.peer-path.direct{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.peer-path.relay{background:var(--soft);color:var(--accent)}
+.peer-ips{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.peer-ips span{background:var(--bg);border-radius:6px;padding:3px 8px}
+.peer-note{margin:0;font-size:12px;color:var(--muted)}
+.peer-card .rc-peer-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:720px){.mesh-hero-head{flex-wrap:wrap}.mesh-hero-head .rc-tail-actions{margin-left:0}}

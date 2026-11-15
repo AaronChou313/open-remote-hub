@@ -435,10 +435,8 @@ ${summaryCard("overview", "server", "RustDesk", "rcOnline", "rcNativeSummary", n
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="rc-tail-toolbar"><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管组网</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录组网 ${icon("external")}</a></div><p id="rcOrnHost" class="muted"></p><a class="button" href="https://cloud.openremotehub.top/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p>
-<details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
-<details class="rc-network-details rc-orn-admin"><summary>组网管理</summary><p class="muted">组网地址由控制服务自动分配；这里修改设备名称、控制服务和本机发布到组网的端口，保存后会重启组网组件。其他设备的改名或解绑请在 Cloud 设备目录完成。</p><form id="rcOrnForm"><label>设备名称<input id="rcOrnHostname" maxlength="63" required autocomplete="off"></label><label>控制服务<input id="rcOrnControl" required autocomplete="off"></label><label>发布端口<textarea id="rcOrnPublish" rows="3" spellcheck="false" placeholder="8765=127.0.0.1:8765"></textarea></label><div class="rc-form-actions"><span id="rcOrnNotice" class="muted" hidden></span><button id="rcOrnSave" type="submit" class="primary">保存并重启</button><button id="rcOrnRestart" type="button">重启组网</button><button id="rcOrnLeave" type="button" class="rc-destructive">解绑本机设备</button></div></form></details>
-<div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div></section>
+<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="mesh-hero"><div class="mesh-hero-head"><span id="rcHeroDot" class="mesh-dot"></span><div><h2>组网</h2><p id="rcOrnHost" class="muted">—</p></div><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管组网</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录组网 ${icon("external")}</a><a class="button" href="https://cloud.openremotehub.top/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p></div>
+</section>
         <section id="rcOverview" hidden>
           <article class="panel rd-connection">
             <div class="section-heading"><h2>连接信息</h2><span id="rcVersion" class="version-label">—</span></div>
@@ -610,6 +608,7 @@ ${RemoteHubNodeBaby.markup()}
       .join("\n");
     $("#rcTailErrors").hidden = !$("#rcTailErrors").textContent;
     $("#rcTailToggle").textContent = connected ? "断开组网" : "连接组网";
+    $("#rcHeroDot").classList.toggle("online", connected);
     $("#rcTailNetcheck").disabled = !value.available;
     $("#rcTailToggle").disabled =
       !value.available || value.last_operation?.state === "pending";
@@ -713,13 +712,14 @@ ${RemoteHubNodeBaby.markup()}
           .includes(query.toLowerCase()),
     );
     $("#rcPeerList").innerHTML = rows.length
-      ? table(
-          ["设备", "组网地址", "连接状态", "累计收发", "操作"],
-          rows.map(
-            (peer) =>
-              `<tr><td><strong>${esc(peer.hostname === "localhost" && peer.dns ? peer.dns.split(".")[0] : peer.hostname || peer.dns || "未命名设备")}</strong><small>${esc(peer.os)}</small></td><td class="mono">${peer.addresses.map((address) => `<span>${esc(address)}</span>`).join("")}</td><td><span class="rc-dot ${peer.online ? "online" : ""}">${peer.online ? "在线" : "离线"}</span><small>${peer.online ? (peer.route === "direct" ? "直连" : peer.route === "relay" ? "中继 · " + esc(peer.relay) : "按需建立连接") : peer.last_seen && !peer.last_seen.startsWith("0001") ? "上次在线 " + new Date(peer.last_seen).toLocaleString() : "暂无近期连接"}${peer.console === false ? " · 仅远程桌面" : ""}</small></td><td><small>↑ ${bytes(peer.tx)}</small><small>↓ ${bytes(peer.rx)}</small></td><td><div class="rc-peer-actions"><button data-peer-console="${esc(peer.id)}" ${peer.console === false ? "disabled title=\"此设备没有 ORH 控制台，仅提供远程桌面等组网服务\"" : ""}>${icon("external")}控制台</button><button class="primary" data-peer-desktop="${esc(peer.id)}">${icon("server")}远程桌面</button><button data-peer-ping="${esc(peer.id)}">${icon("diagnose")}检测</button><button data-peer-copy="${esc(peer.id)}">${icon("copy")}复制 IP</button></div></td></tr>`,
-          ),
-        )
+      ? `<div class="mesh-peers">${rows.map((peer) => {
+          const name = peer.hostname === "localhost" && peer.dns ? peer.dns.split(".")[0] : peer.hostname || peer.dns || "未命名设备";
+          const path = peer.online ? (peer.route === "direct" ? "直连" : peer.route === "relay" ? "中继" : "待连接") : "离线";
+          const recent = peer.last_seen && !peer.last_seen.startsWith("0001")
+            ? (peer.online ? "最近活跃 " + new Date(peer.last_seen).toLocaleTimeString() : "上次在线 " + new Date(peer.last_seen).toLocaleString())
+            : "暂无近期连接";
+          return `<article class="peer-card"><div class="peer-head"><span class="rc-dot ${peer.online ? "online" : ""}"></span><div class="peer-name"><strong>${esc(name)}</strong><small>${esc(peer.os)}${peer.console === false ? " · 仅远程桌面" : ""}</small></div><span class="peer-path ${peer.route === "direct" ? "direct" : peer.route === "relay" ? "relay" : ""}">${path}</span></div><div class="peer-ips mono">${peer.addresses.map((address) => `<span>${esc(address)}</span>`).join("")}</div><p class="peer-note">${recent}</p><div class="rc-peer-actions"><button data-peer-console="${esc(peer.id)}" ${peer.console === false ? 'disabled title="此设备没有 ORH 控制台，仅提供远程桌面等组网服务"' : ""}>${icon("external")}控制台</button><button class="primary" data-peer-desktop="${esc(peer.id)}">${icon("server")}远程桌面</button><button data-peer-ping="${esc(peer.id)}">${icon("diagnose")}检测</button><button data-peer-copy="${esc(peer.id)}">${icon("copy")}复制 IP</button></div></article>`;
+        }).join("")}</div>`
       : empty(
           query || onlyOnline ? "没有匹配的组网设备" : "当前组网中没有其他设备",
         );
