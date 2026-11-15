@@ -275,6 +275,14 @@ def enroll_device(body: Metadata, request: Request, user=Depends(account)):
             db.execute('INSERT INTO devices (instance_id,owner_id,credential_hash,name,os,agent_addresses,port,last_seen,created,kind) VALUES (?,?,?,?,?,?,?,?,?,?)',
                        (instance,user['id'],digest(credential),metadata['name'],metadata['os'],json.dumps(metadata['addresses']),metadata['port'],0,now,metadata.get('kind','orh')))
         db.execute('DELETE FROM bindings WHERE instance_id=?',(instance,))
+        # A reinstall registers under the same hostname; retire the offline ghost.
+        stale = db.execute('SELECT instance_id FROM devices WHERE owner_id=? AND name=? AND instance_id<>? AND last_seen<?',
+                           (user['id'],metadata['name'],instance,now-600)).fetchall()
+        for ghost in stale:
+            db.execute('DELETE FROM mesh_nodes WHERE device_id=?',(ghost['instance_id'],))
+            db.execute('DELETE FROM tickets WHERE instance_id=?',(ghost['instance_id'],))
+            db.execute('DELETE FROM bindings WHERE instance_id=?',(ghost['instance_id'],))
+            db.execute('DELETE FROM devices WHERE instance_id=?',(ghost['instance_id'],))
     return dict(ok=True,instance_id=instance,device_token=credential,
                 cloud_url=os.environ.get('ORH_CLOUD_PUBLIC_URL','https://cloud.openremotehub.top'))
 

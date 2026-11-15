@@ -283,3 +283,16 @@ def test_agent_enroll_logs_in_with_account(monkeypatch,tmp_path):
     assert calls[1][0]=='/api/devices/enroll' and calls[1][2]=='account-token'
     value=cloud_agent.state()
     assert value['status']=='bound' and value['credential']=='device-token' and value['owner_id']=='owner'
+
+
+def test_enrollment_retires_offline_duplicate(cloud):
+    headers,user = signup(cloud,'dup-user')
+    login = cloud.post('/api/login',json={'username':'dup-user','password':'test-password-42'}).json()
+    account = {'Authorization':'Bearer '+login['token']}
+    def enroll(identifier):
+        meta=dict(instance_id=identifier,name='Same host',os='Darwin',addresses=['http://100.66.11.9:8765'],port=8765)
+        assert cloud.post('/api/devices/enroll',headers=account,json=meta).status_code==200
+    first=str(uuid.uuid4());second=str(uuid.uuid4())
+    enroll(first);enroll(second)
+    devices=cloud.get('/api/devices',headers=account).json()
+    assert [d['instance_id'] for d in devices]==[second]
