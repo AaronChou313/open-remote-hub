@@ -97,3 +97,13 @@ events.get('orh:authenticated')({detail:{device_id:'different-device', host:{}}}
 assert.match(status.textContent, /身份不匹配/);
 assert.equal(node('#shell').hidden, true);
 console.log('Client UI passed device selection, Cloud errors, path status, native terminal routing and unsaved-edit navigation.');
+
+let redirected;
+const loginLocation = {hash:'#ticket=single-use', search:'?android_client=1&device_id=remote', pathname:'/auth/cloud', replace:value => {redirected=value;}};
+await vm.runInNewContext(fs.readFileSync('static/cloud-auth.js','utf8'), {
+  URLSearchParams, location:loginLocation,
+  history:{replaceState(_state,_title,address) {loginLocation.search=new URL(address,'http://local').search;}},
+  fetch:async () => ({ok:true,json:async () => ({})}),
+  document:{querySelector:node},
+});
+assert.equal(redirected,'/?android_client=1&device_id=remote#overview');
