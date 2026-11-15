@@ -3,9 +3,9 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'remote', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
+const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'仪表盘',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
 function updateSidebar(){
  document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
@@ -27,6 +27,9 @@ async function withBusy(button,key,label,work){
 }
 async function switchView(target){
  if(target==='proxy'){target='remote';RemoteHubRemoteConnect.openTab('proxy')}
+ if(target==='meshremote')RemoteHubRemoteConnect.openTab('network');
+ document.body.dataset.module=target;
+ if(/Windows/i.test(navigator.userAgent))document.body.dataset.platform='windows';
  if(target==='tasks')target='services';
  if(view!==target&&window.RemoteHubRemoteConnect&&!await RemoteHubRemoteConnect.canLeave())return;
  if(view!==target&&window.RemoteHubApplications&&!RemoteHubApplications.canLeave())return;
@@ -97,37 +100,22 @@ async function refresh(force=false){
  if($('#shell').hidden)return;
  if(busy){refreshQueued=true;return}
  const version=++renderVersion,target=view;busy=true;$('#refresh').disabled=true;
- try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,remote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
+ try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,remote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),meshremote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
  catch(e){if(version===renderVersion){if($('#content').textContent==='正在读取本机数据…')$('#content').innerHTML=empty('暂时无法读取，请点击刷新重试。');showError(e.name==='TimeoutError'?Error('读取超时，请稍后刷新。现有任务不会因此停止。'):e,false)}}
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
-let needsSetup=false;
 async function loadAuth() {
  try {
   const status = await api('/auth/status');
-  needsSetup = status.needs_setup;
   const bound = Boolean(status.cloud?.bound);
   $('#cloudLogin').hidden = !bound;
   $('#cloudBlock').hidden = bound;
-  showLocalFields(false);
   if (bound) $('#loginHelp').textContent = '此设备使用已绑定的 ORH 账号登录。';
   else $('#loginHelp').textContent = '使用 ORH 账号登录，本机会自动注册并接入组网。';
  } catch (error) {$('#loginError').textContent=error.message;}
 }
-function showLocalFields(show){
- $('#password').hidden = !show;
- $('#passwordLabel').hidden = !show;
- $('#loginSubmit').hidden = !show;
- $('#setupConfirm').hidden = !show || !needsSetup;
- if (!show) return;
- $('#password').autocomplete = needsSetup ? 'new-password':'current-password';
- $('#passwordLabel').textContent = needsSetup ? '设置登录密码':'登录密码';
- $('#loginSubmit').textContent = needsSetup ? '设置密码并进入 →':'进入控制台 →';
- $('#loginHelp').textContent = needsSetup ? '首次使用，请在本机设置你自己的密码。密码仅保存为加盐哈希。':'使用自设密码登录。登录后进入终端无需再次认证。';
-}
 async function enter() {
  try {
-  if ((await api('/auth/status')).needs_setup) {showLogin(); await loadAuth(); return;}
   me = await api('/me');
   $('#role').textContent = me.role === 'admin' ? '管理员' : '只读';
   $('#changePassword').hidden = Boolean(me.cloud?.bound);
@@ -154,7 +142,7 @@ $('#cloudLoginSubmit').onclick = async () => {
  } catch (error) {$('#loginError').textContent = error.message;}
  finally {button.disabled = false;}
 };
-$('#loginForm').onsubmit=async e=>{e.preventDefault();const button=$('#loginSubmit');button.disabled=true;try{if(needsSetup&&$('#password').value!==$('#passwordConfirm').value)throw Error('两次输入的密码不一致');await api(needsSetup?'/auth/setup':'/login',{password:$('#password').value});$('#loginForm').reset();$('#loginError').textContent='';needsSetup=false;await enter()}catch(e){$('#loginError').textContent=e.message;await loadAuth()}finally{button.disabled=false}};
+$('#loginForm').onsubmit=event=>{event.preventDefault();if(!$('#cloudBlock').hidden)$('#cloudLoginSubmit').click()};
 
 $('#cloudBind').onclick = async () => {
  $('#cloudBindDialog').showModal();

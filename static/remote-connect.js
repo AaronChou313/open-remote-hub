@@ -667,6 +667,21 @@ ${RemoteHubNodeBaby.markup()}
     );
   }
 
+  async function loadOrnConfig() {
+    try {
+      const value = await api("/remote-connect/mesh/config");
+      $("#rcOrnHostname").value = value.hostname || "";
+      $("#rcOrnControl").value = value.control_url || "";
+      $("#rcOrnPublish").value = Object.entries(value.publish || {})
+        .map(([port, target]) => `${port}=${target}`)
+        .join("\n");
+      $("#rcOrnNotice").hidden = true;
+    } catch (error) {
+      $("#rcOrnNotice").textContent = error.message;
+      $("#rcOrnNotice").hidden = false;
+    }
+  }
+
   function updateOrn(value) {
     if (!value) return;
     const label = !value.available
@@ -882,20 +897,6 @@ ${RemoteHubNodeBaby.markup()}
         const result = await api("/remote-connect/tailscale/netcheck", {});
         if (current()) output("组网网络诊断", result.output);
       });
-    async function loadOrnConfig() {
-      try {
-        const value = await api("/remote-connect/mesh/config");
-        $("#rcOrnHostname").value = value.hostname || "";
-        $("#rcOrnControl").value = value.control_url || "";
-        $("#rcOrnPublish").value = Object.entries(value.publish || {})
-          .map(([port, target]) => `${port}=${target}`)
-          .join("\n");
-        $("#rcOrnNotice").hidden = true;
-      } catch (error) {
-        $("#rcOrnNotice").textContent = error.message;
-        $("#rcOrnNotice").hidden = false;
-      }
-    }
     function publishMap() {
       const result = {};
       $("#rcOrnPublish").value

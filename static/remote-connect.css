@@ -908,3 +908,10 @@ body.dark #rcOverview {
 .remote-connect:not([data-tab="status"]) .rc-summary-head { margin-bottom: 10px; }
 
 .remote-connect .rc-summary-open svg { transform: rotate(-90deg); }
+
+body[data-platform="windows"] [data-rc-tab="overview"],body[data-platform="windows"] [data-rc-open="overview"]{display:none}
+
+body[data-module="remote"] [data-rc-tab="network"],body[data-module="remote"] [data-rc-tab="overview"],
+body[data-module="remote"] [data-rc-card="network"],
+body[data-module="meshremote"] [data-rc-tab="status"],body[data-module="meshremote"] [data-rc-tab="lan"],
+body[data-module="meshremote"] [data-rc-tab="nodebaby"],body[data-module="meshremote"] [data-rc-tab="proxy"]{display:none}
