@@ -15,7 +15,7 @@ hiddenimports = [
     'app.remote_connect.tailscale', 'app.windows_compat', 'app.platforms',
     'app.network', 'app.dsh', 'app.dsh_gateway', 'app.discovery', 'app.passwords', 'app.access',
 ]
-for package in ('fastapi', 'uvicorn', 'starlette', 'pydantic', 'httpx', 'psutil', 'websockets', 'yaml', 'anyio'):
+for package in ('fastapi', 'uvicorn', 'starlette', 'pydantic', 'httpx', 'psutil', 'websockets', 'yaml', 'anyio', 'pystray', 'PIL', 'six'):
     try:
         collected, binaries, imports = collect_all(package)
         datas += collected

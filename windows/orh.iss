@@ -1,5 +1,5 @@
 #define MyAppName "OpenRemoteHub"
-#define MyAppVersion "0.5.8"
+#define MyAppVersion "0.5.9"
 
 [Setup]
 AppName={#MyAppName}
@@ -14,6 +14,8 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\OpenRemoteHub.exe
 DisableProgramGroupPage=yes
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "..\build\windows\OpenRemoteHub\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
@@ -21,7 +23,7 @@ Source: "..\build\windows\OpenRemoteHub\*"; DestDir: "{app}"; Flags: recursesubd
 [Icons]
 Name: "{userprograms}\OpenRemoteHub"; Filename: "{app}\OpenRemoteHub.exe"
 Name: "{userprograms}\OpenRemoteHub 停止"; Filename: "{app}\OpenRemoteHub.exe"; Parameters: "--stop"
-Name: "{userstartup}\OpenRemoteHub"; Filename: "{app}\OpenRemoteHub.exe"; Parameters: "--serve"
+Name: "{userstartup}\OpenRemoteHub"; Filename: "{app}\OpenRemoteHub.exe"; Parameters: "--tray"
 
 [Run]
 Filename: "{app}\OpenRemoteHub.exe"; Description: "打开 OpenRemoteHub"; Flags: nowait postinstall skipifsilent

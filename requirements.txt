@@ -4,3 +4,6 @@ psutil==7.2.2
 websockets==17.4
 httpx==0.28.1
 PyYAML==6.0.3
+pystray==0.19.5
+Pillow==11.0.0
+six==1.16.0
