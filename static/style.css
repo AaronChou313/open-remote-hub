@@ -61,3 +61,5 @@ nav{max-height:none;min-height:0;overflow-y:auto}.workspace:has(#dshFrame) main{
 .quick-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--soft);color:var(--accent)}
 .quick-card strong{font-size:14px}
 .quick-card small{color:var(--muted);font-size:12px;line-height:1.5}
+
+.section-title{font-size:13px;font-weight:600;color:var(--muted);margin:22px 0 10px;letter-spacing:.04em}
