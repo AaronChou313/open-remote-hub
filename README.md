@@ -345,7 +345,7 @@ Windows 版保留控制台核心、组网与远程桌面；终端、SSH、文件
 
 从本仓库 Release 下载 `ORH-Setup-x.y.z.exe`，双击安装即可，不需要 Git 或 Python。安装到 `%LOCALAPPDATA%\Programs\OpenRemoteHub`，数据保存在 `%LOCALAPPDATA%\OpenRemoteHub`；开始菜单有「OpenRemoteHub」与「OpenRemoteHub 停止」，并会随登录自启。首次打开用 ORH 账号登录，设备自动注册入网。
 
-安装包未做代码签名，SmartScreen 提示时选择「更多信息 → 仍要运行」。卸载会停止服务并保留数据目录。
+安装后常驻系统托盘：菜单可「打开控制台 / 检查更新 / 安装更新 / 停止并退出」，重复启动只会打开控制台；更新会从 GitHub Release 下载新的安装包并静默升级。托盘与后台服务随登录自启。安装包未做代码签名，SmartScreen 提示时选择「更多信息 → 仍要运行」。卸载会停止服务并保留数据目录。
 
 以下是从源码安装的方式，适合开发或自定义部署。
 
