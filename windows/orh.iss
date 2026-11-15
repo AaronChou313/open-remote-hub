@@ -1,5 +1,5 @@
 #define MyAppName "OpenRemoteHub"
-#define MyAppVersion "0.5.16"
+#define MyAppVersion "0.5.17"
 
 [Setup]
 AppName={#MyAppName}
