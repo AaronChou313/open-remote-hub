@@ -127,7 +127,6 @@ async function enter() {
   caps = await api('/capabilities').catch(() => ({}));
   window.ORH_CAPS = caps;
   $('#role').textContent = me.role === 'admin' ? '管理员' : '只读';
-  $('#changePassword').hidden = Boolean(me.cloud?.bound);
   $('#cloudBind').hidden = Boolean(me.cloud?.bound);
   $('#login').hidden = true;
   $('#shell').hidden = false;
@@ -181,11 +180,11 @@ $('#cloudBindForm').onsubmit = async event => {
  } catch (error) {$('#agentBindError').textContent=error.message;}
  finally {button.disabled=false;}
 };
-$('#changePassword').onclick=()=>{$('#passwordForm').reset();$('#passwordError').textContent='';$('#passwordDialog').showModal()};$('#cancelPassword').onclick=()=>$('#passwordDialog').close();$('#passwordForm').onsubmit=async e=>{e.preventDefault();try{if($('#newPassword').value!==$('#newPasswordConfirm').value)throw Error('两次输入的新密码不一致');await api('/auth/password',{password:$('#newPassword').value});$('#passwordForm').reset();$('#passwordDialog').close();notify('密码已更新，其他登录已失效')}catch(e){$('#passwordError').textContent=e.message}};
+
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});$('#content').addEventListener('click',e=>{const card=e.target.closest('[data-open-view]');if(card&&card.dataset.openView!==view)switchView(card.dataset.openView)});
 $('#content').onclick=e=>{const b=e.target.closest('button[data-kind]');if(b)act(b.dataset.kind,b.dataset.id,b.dataset.action,b)};
 $('#refresh').onclick=()=>refresh(true);$('#theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('orh-theme',document.body.classList.contains('dark')?'dark':'light');updateThemeControl()};$('#logout').onclick=async()=>{try{await api('/logout',{});showLogin()}catch(e){showError(e)}};$('#closeOutput').onclick=()=>$('#outputDialog').close();$('#outputDialog').onclose=()=>{if(stream){stream.close();stream=null}};
-setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#passwordDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
+setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');
