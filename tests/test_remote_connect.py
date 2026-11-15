@@ -325,3 +325,16 @@ def test_cloud_account_login_page(workspace,monkeypatch):
     assert response.cookies.get('orh')
     monkeypatch.setattr(cloud_agent,'binding',lambda:dict(instance_id='device'))
     assert http.post('/api/auth/cloud/login',json={'cloud_url':'https://cloud.example','username':'aaron','password':'secret'}).status_code==409
+
+
+def test_peer_console_uses_account_ticket(workspace,monkeypatch):
+    http,_,_ = workspace
+    from app.remote_connect import api as rc
+    from app import cloud_agent
+    monkeypatch.setattr(rc.tailscale,'request',lambda path,body=None,timeout=0:{'url':'http://orh-x.localhost:1234/auth/cloud/enter'})
+    monkeypatch.setattr(rc,'peer_address',lambda value:'100.64.0.9')
+    monkeypatch.setattr(cloud_agent,'directory',lambda:[{'id':'device','mesh':{'ips':['100.64.0.9']}}])
+    monkeypatch.setattr(cloud_agent,'ticket',lambda device,address:'http://100.64.0.9:8765/auth/cloud#ticket=abc&state=')
+    response=http.post('/api/remote-connect/peers/console',json={'peer_ip':'100.64.0.9'})
+    assert response.status_code==200,response.text
+    assert response.json()['url']=='http://orh-x.localhost:1234/auth/cloud#ticket=abc&state='

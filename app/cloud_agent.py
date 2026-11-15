@@ -171,8 +171,21 @@ def enroll(base, username, password):
     result = call(base,'/api/devices/enroll',metadata(),account)
     save(dict(status='bound',cloud_url=base,credential=result['device_token'],
               owner_id=user['id'],username=user.get('username'),instance_id=result['instance_id'],
-              portal_url=base))
+              portal_url=base,account_token=account,token_expires=login.get('expires',0)))
     return dict(instance_id=result['instance_id'],username=user.get('username'),cloud_url=base)
+
+
+def ticket(device_id,address):
+    """Short-lived console ticket for another device, using the account session."""
+    value=binding()
+    token=value.get('account_token') if value else None
+    if not value or not token or float(value.get('token_expires') or 0)<=time.time():
+        return None
+    try:
+        return call(value['cloud_url'],f'/api/devices/{device_id}/ticket',
+                    {'address':address,'state':''},token).get('url')
+    except (HTTPException,ValueError,OSError):
+        return None
 
 
 def synchronize():

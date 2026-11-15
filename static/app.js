@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'remote', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
 const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'系统概览',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'本地服务',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';

@@ -265,8 +265,20 @@ def peer_address(value):
 
 @router.post('/peers/console')
 def peer_console(value=Depends(body)):
+    from app import cloud_agent
     address = peer_address(value)
     result = tailscale.request('/console', {'peer_ip': address, 'device_id': value.get('device_id') or ''}, timeout=30)
+    url = result.get('url', '')
+    device_id = value.get('device_id') or ''
+    if not device_id:
+        for device in cloud_agent.directory():
+            if address in ((device.get('mesh') or {}).get('ips') or []):
+                device_id = device.get('id') or device.get('instance_id') or ''
+                break
+    if device_id and '/auth/cloud/enter' in url:
+        link = cloud_agent.ticket(device_id, f'http://{address}:8765')
+        if link and '#' in link:
+            result['url'] = url.split('/auth/cloud/enter')[0] + '/auth/cloud' + link[link.index('#'):]
     audit(address, 'mesh-console')
     return result
 
