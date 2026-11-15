@@ -51,7 +51,7 @@ def install_files():
 
 def healthy():
     try:
-        with urllib.request.urlopen(URL + 'api/health', timeout=1) as response:
+        with urllib.request.urlopen(URL + 'api/auth/status', timeout=1) as response:
             return response.status == 200
     except OSError:
         return False

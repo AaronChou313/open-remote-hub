@@ -32,7 +32,7 @@ jobs:
           for ($i = 0; $i -lt 45; $i++) {
             Start-Sleep -Seconds 1
             try {
-              $response = Invoke-WebRequest "http://127.0.0.1:8765/api/health" -UseBasicParsing -TimeoutSec 2
+              $response = Invoke-WebRequest "http://127.0.0.1:8765/api/auth/status" -UseBasicParsing -TimeoutSec 2
               if ($response.StatusCode -eq 200) { $ok = $true; break }
             } catch {}
           }
