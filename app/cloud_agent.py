@@ -79,7 +79,14 @@ def call(base, path, body, credential=None):
         with httpx.Client(timeout=12,trust_env=False) as client:
             response = client.post(base+path,json=body,headers=headers)
     except httpx.HTTPError as error:
-        print('[cloud] 连接失败: '+repr(error), flush=True)
+        try:
+            import socket as _socket
+            from urllib.parse import urlsplit as _urlsplit
+            host=_urlsplit(base).hostname
+            addrs=sorted({item[4][0] for item in _socket.getaddrinfo(host,443,type=_socket.SOCK_STREAM)})
+        except OSError:
+            addrs=[]
+        print('[cloud] 连接失败: '+repr(error)+' 地址='+','.join(addrs), flush=True)
         raise HTTPException(503,'暂时无法连接 Cloud，请稍后重试') from None
     if response.status_code >= 400:
         detail = response.json().get('detail','Cloud 请求失败') if response.headers.get('content-type','').startswith('application/json') else 'Cloud 请求失败'

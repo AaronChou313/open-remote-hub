@@ -64,6 +64,12 @@ def healthy():
 
 def serve():
     install_files()
+    if sys.platform == 'win32':
+        import ctypes
+        mutex = ctypes.windll.kernel32.CreateMutexW(None, False, 'OpenRemoteHub.Server')
+        if ctypes.windll.kernel32.GetLastError() == 183:
+            return
+        globals()['_SERVER_MUTEX'] = mutex
     runtime = APP / '.runtime'
     runtime.mkdir(parents=True, exist_ok=True)
     (runtime / 'server.pid').write_text(str(os.getpid()), encoding='ascii')
