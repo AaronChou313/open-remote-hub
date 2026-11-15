@@ -192,6 +192,7 @@ def _spawn():
         log.parent.mkdir(mode=0o700, exist_ok=True)
         with log.open('ab') as output:
             child = subprocess.Popen([str(executable), '-config', str(config_path())], cwd=str(ROOT),
+                                     creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if sys.platform=='win32' else 0,
                                      stdin=subprocess.DEVNULL, stdout=output, stderr=output, start_new_session=True)
         _record(child)
         with LOCK:

@@ -157,6 +157,8 @@ async def security(request:Request, call_next):
     if request.url.path.startswith('/api/') and request.url.path not in ('/api/login','/api/auth/status','/api/auth/setup','/api/auth/cloud/login'):
         s=access.get(request.cookies.get('orh',''))
         if not s or s['expires']<time.time():
+            if request.url.path in ('/api/me','/api/overview'):
+                print('[auth] 会话无效 '+' '.join([request.method,request.url.path,request.headers.get('host','')]), flush=True)
             return JSONResponse({'detail':'请登录'},401)
         request.state.role=s['role']
         if request.method!='GET' and request.url.path!='/api/logout' and s['role']!='admin':
@@ -228,7 +230,9 @@ def cloud_login(body: CloudLogin, request: Request):
     try:
         cloud_agent.enroll(body.cloud_url or os.environ.get('ORH_CLOUD_URL', ''), body.username, body.password)
     except ValueError as error:
+        print('[login] Cloud 登录失败: '+str(error), flush=True)
         raise HTTPException(409, str(error)) from None
+    print('[login] 已登录 '+body.username+'，设备注册完成', flush=True)
     return login_response(request)
 
 

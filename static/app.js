@@ -147,7 +147,7 @@ $('#cloudLoginSubmit').onclick = async () => {
  const button = $('#cloudLoginSubmit');
  button.disabled = true; $('#loginError').textContent = '';
  try {
-  await api('/api/auth/cloud/login',{cloud_url:$('#cloudServer').value.trim(),
+  await api('/auth/cloud/login',{cloud_url:$('#cloudServer').value.trim(),
    username:$('#cloudUser').value.trim(),password:$('#cloudPassword').value});
   $('#cloudPassword').value = '';
   await enter();
