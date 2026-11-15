@@ -341,6 +341,14 @@ git clone <仓库地址> src/<仓库目录>
 
 Windows 版保留控制台核心、组网与远程桌面；终端、SSH、文件、DSH、项目、开发环境在 Windows 上隐藏（Zellij / Unix PTY / Unix Socket 不可用），RustDesk 设置页也不可用，但远程桌面仍由组网组件调用已安装的 RustDesk。
 
+**最快方式：安装包（推荐）**
+
+从本仓库 Release 下载 `ORH-Setup-x.y.z.exe`，双击安装即可，不需要 Git 或 Python。安装到 `%LOCALAPPDATA%\Programs\OpenRemoteHub`，数据保存在 `%LOCALAPPDATA%\OpenRemoteHub`；开始菜单有「OpenRemoteHub」与「OpenRemoteHub 停止」，并会随登录自启。首次打开用 ORH 账号登录，设备自动注册入网。
+
+安装包未做代码签名，SmartScreen 提示时选择「更多信息 → 仍要运行」。卸载会停止服务并保留数据目录。
+
+以下是从源码安装的方式，适合开发或自定义部署。
+
 **1. 安装 Python 3.11+**
 
 从 python.org 安装，勾选 *Add python.exe to PATH*。验证：

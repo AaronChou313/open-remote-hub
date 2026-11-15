@@ -27,3 +27,4 @@ docs/*
 /client/android/.gradle/
 /client/android/local.properties
 *.aar
+windows/__pycache__/
