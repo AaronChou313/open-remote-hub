@@ -77,6 +77,16 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 	gatewayOrigin := &url.URL{Scheme: "http", Host: origin.Hostname() + ":" + strconv.Itoa(gatewayPort)}
 	gatewayTarget := &url.URL{Scheme: "http", Host: net.JoinHostPort(ip, "8767")}
 	mainTarget, mainOrigin := target, origin
+	frontend, _ := url.Parse(m.Frontend)
+	localTransport := &http.Transport{ResponseHeaderTimeout: 12 * time.Second, IdleConnTimeout: 60 * time.Second}
+	replacements := []string{mainTarget.String(), mainOrigin.String(), gatewayTarget.String(), gatewayOrigin.String()}
+	if m.Frontend != "" {
+		replacements = append(replacements, m.Frontend, mainOrigin.String())
+	}
+	if m.FrontendGateway != "" {
+		replacements = append(replacements, m.FrontendGateway, gatewayOrigin.String())
+	}
+	originRewriter := strings.NewReplacer(replacements...)
 	makeServer := func(target, origin *url.URL) *http.Server {
 		proxy := &httputil.ReverseProxy{
 			Transport: transport,
@@ -90,7 +100,7 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 				request.Out.Header.Set("Accept-Encoding", "identity")
 			},
 			ModifyResponse: func(response *http.Response) error {
-				response.Header.Set("Content-Security-Policy", strings.NewReplacer(mainTarget.String(), mainOrigin.String(), gatewayTarget.String(), gatewayOrigin.String()).Replace(response.Header.Get("Content-Security-Policy")))
+				response.Header.Set("Content-Security-Policy", originRewriter.Replace(response.Header.Get("Content-Security-Policy")))
 				if response.Request.URL.Path == "/api/dsh/status" && response.StatusCode == 200 {
 					var value map[string]any
 					err := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&value)
@@ -145,6 +155,16 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 				http.Error(w, "控制台连接中断，请返回组网页面重新连接", http.StatusBadGateway)
 			},
 		}
+		frontendProxy := *proxy
+		frontendProxy.Transport = localTransport
+		frontendProxy.Rewrite = func(request *httputil.ProxyRequest) {
+			request.SetURL(frontend)
+			request.Out.Host = frontend.Host
+			if request.In.Header.Get("Origin") != "" {
+				request.Out.Header.Set("Origin", frontend.String())
+			}
+			request.Out.Header.Del("Forwarded")
+		}
 		server := &http.Server{ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		server.ConnContext = func(ctx context.Context, connection net.Conn) context.Context {
 			return context.WithValue(ctx, connectionKey{}, &consoleConn{connection: connection})
@@ -180,7 +200,12 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 			if websocket {
 				defer func() { link.connection.Close(); server.ConnState(link.connection, http.StateClosed) }()
 			}
-			proxy.ServeHTTP(w, r)
+			clientResource := r.Method == "GET" && (r.URL.Path == "/" || r.URL.Path == "/auth/cloud" || strings.HasPrefix(r.URL.Path, "/static/"))
+			if target == mainTarget && m.Frontend != "" && clientResource {
+				frontendProxy.ServeHTTP(w, r)
+			} else {
+				proxy.ServeHTTP(w, r)
+			}
 		})
 		return server
 	}
@@ -191,7 +216,12 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 	tunnel.DeviceID = identity.InstanceID
 	tunnel.URL = origin.String()
 	tunnel.GatewayPort = gatewayPort
-	tunnel.cleanup = func() { server.Close(); gatewayServer.Close(); transport.CloseIdleConnections() }
+	tunnel.cleanup = func() {
+		server.Close()
+		gatewayServer.Close()
+		transport.CloseIdleConnections()
+		localTransport.CloseIdleConnections()
+	}
 	entry := tunnel.Entry
 	m.mu.Unlock()
 	go server.Serve(tunnel.listener)

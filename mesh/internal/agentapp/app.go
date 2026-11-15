@@ -45,6 +45,12 @@ func Start(path, version, auth, controlURL string, debug bool) (*App, error) {
 		return nil, err
 	}
 	forwards := forward.New(node)
+	if address := cfg.Publish[8765]; address != "" {
+		forwards.Frontend = "http://" + address
+	}
+	if address := cfg.Publish[8767]; address != "" {
+		forwards.FrontendGateway = "http://" + address
+	}
 	handler := &api.Server{Node: node, Forwards: forwards, Token: token, Config: cfg, ConfigPath: path, Version: version, Started: time.Now(), Platform: runtime.GOOS}
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{Node: node, API: handler, Config: cfg, Token: token, cancel: cancel, done: make(chan struct{})}

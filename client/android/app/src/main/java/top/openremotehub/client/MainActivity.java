@@ -29,7 +29,7 @@ public final class MainActivity extends Activity {
     private EditText cloudAddress, cloudUser, cloudPassword;
     private Button cloudLoginButton;
     private String latestUpdateUrl = "";
-    private boolean boundBefore;
+    private boolean boundBefore, needsAccountLogin;
     private Button backgroundButton;
     private String pendingDesktop;
     private GridLayout devices;
@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
     private LinearLayout card() {
         LinearLayout layout = column(); layout.setPadding(dp(20),dp(16),dp(20),dp(16));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(color(R.color.card)); background.setCornerRadius(dp(16));
+        background.setColor(color(R.color.card)); background.setCornerRadius(dp(26));
         background.setStroke(dp(1),color(R.color.outline)); layout.setBackground(background);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1,-2); params.bottomMargin = dp(16);
         layout.setLayoutParams(params); return layout;
@@ -96,7 +96,7 @@ public final class MainActivity extends Activity {
     private Button primary(String label, Work work) {
         Button button = button(label, work);
         GradientDrawable background = new GradientDrawable();
-        background.setColor(color(R.color.accent)); background.setCornerRadius(dp(12));
+        background.setColor(color(R.color.accent)); background.setCornerRadius(dp(24));
         button.setBackground(background); button.setTextColor(Color.WHITE);
         button.setTypeface(null, Typeface.BOLD); button.setTextSize(14);
         button.setPadding(dp(18), dp(10), dp(18), dp(10));
@@ -191,7 +191,7 @@ public final class MainActivity extends Activity {
                     .putString("url",base)
                     .putString("user",result.optString("username")).apply();
                 onUI(() -> {
-                    cloudPassword.setText("");
+                    cloudPassword.setText(""); needsAccountLogin=false;
                     info("已登录 " + result.optString("username") + "，正在入网…");
                     previous = ""; refresh();
                 });
@@ -394,13 +394,21 @@ public final class MainActivity extends Activity {
         boolean bound=cloud!=null&&cloud.optBoolean("bound");
         if (bound&&!boundBefore) info("已绑定 ORH 账号");
         boundBefore=bound;
-        binding.setVisibility(bound?View.GONE:View.VISIBLE);
+        binding.setVisibility(bound&&!needsAccountLogin?View.GONE:View.VISIBLE);
         if (cloud!=null&&!cloud.optString("error").isEmpty()) info(cloud.optString("error"));
         devices.removeAllViews();
         int columns=getResources().getConfiguration().screenWidthDp>=720?2:1;
         devices.setColumnCount(columns);
-        for (int index=0;index<peers.length();index++) {
-            JSONObject peer=peers.optJSONObject(index); if (peer==null) continue;
+        JSONArray targets=directory==null?new JSONArray():directory;
+        for (int index=0;index<targets.length();index++) {
+            JSONObject targetDevice=targets.optJSONObject(index);
+            if (targetDevice==null||targetDevice.optBoolean("self")) continue;
+            JSONObject targetMesh=targetDevice.optJSONObject("mesh");
+            JSONArray targetIPs=targetMesh==null?null:targetMesh.optJSONArray("ips");
+            String targetIP=targetIPs==null?"":targetIPs.optString(0);
+            JSONObject matched=null;
+            for(int item=0;item<peers.length();item++) if(targetIP.equals(ips(peers.optJSONObject(item)))) matched=peers.optJSONObject(item);
+            final JSONObject peer=matched==null?new JSONObject():matched;
             LinearLayout entry=card();
             GridLayout.LayoutParams params=new GridLayout.LayoutParams();
             params.width=0; params.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
@@ -408,27 +416,30 @@ public final class MainActivity extends Activity {
             LinearLayout head=new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(Gravity.CENTER_VERTICAL);
             TextView dot=text("●",12,false); dot.setTextColor(color(peer.optBoolean("online")?R.color.success:R.color.muted));
             dot.setPadding(0,0,dp(7),0); head.addView(dot);
-            TextView name=text(peer.optString("hostname"),19,true); name.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); head.addView(name);
+            TextView name=text(targetDevice.optString("name"),19,true); name.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); head.addView(name);
             String path=peer.optString("path");
             head.addView(chip("direct".equals(path)?"直连":"relay".equals(path)?"中继":"待连接"));
             entry.addView(head);
-            TextView detail=text(ips(peer)+(peer.optBoolean("online")?" · 在线":" · 离线"),13,false);
+            TextView detail=text(targetDevice.optString("os")+" · Cloud 心跳"+(targetDevice.optBoolean("online")?"在线":"离线")+" · "+targetIP,13,false);
             detail.setTextColor(color(R.color.muted)); entry.addView(detail);
-            String ip=ips(peer);
-            boolean console=consoleAvailable(directory,ip);
-            if (!console) detail.setText(detail.getText()+" · 仅远程桌面");
+            String ip=targetIP;
+            String deviceID=targetDevice.optString("instance_id");
+            boolean console=!ip.isEmpty()&&consoleAvailable(directory,ip)&&running;
+            if (!console) detail.setText(detail.getText()+" · 未发布 Agent 或 Mesh 未连接");
             LinearLayout actions=new LinearLayout(this);
             actions.addView(secondary("检测", () -> {
                 JSONObject result=(JSONObject)api("/ping",new JSONObject().put("peer_ip",ip),"POST");
                 onUI(() -> info(result.optString("Err").isEmpty()?peer.optString("hostname")+" · "+Math.round(result.optDouble("LatencySeconds")*1000)+" ms":result.optString("Err")));
             }));
-            Button consoleButton=secondary("控制台", () -> {
-                JSONObject result=(JSONObject)api("/console",new JSONObject().put("peer_ip",ip),"POST");
+            Button consoleButton=secondary("进入工作区", () -> {
+                JSONObject result=(JSONObject)api("/console",new JSONObject().put("peer_ip",ip).put("device_id",deviceID),"POST");
                 String address=result.optString("url");
-                String ticket=ticketFor(ip);
+                Uri gateway=Uri.parse(address);
+                String ticket=ticketFor(deviceID,gateway.getScheme()+"://"+gateway.getAuthority());
                 if (ticket!=null && ticket.contains("#")) address=address.replace("/auth/cloud/enter","/auth/cloud")+ticket.substring(ticket.indexOf('#'));
-                final String target=address;
-                onUI(() -> openConsole(target,ip,peer.optString("hostname")));
+                String controllerIP=device==null?"":ips(device);
+                final String target=Uri.parse(address).buildUpon().appendQueryParameter("android_client","1").appendQueryParameter("device_id",deviceID).appendQueryParameter("device_name",targetDevice.optString("name")).appendQueryParameter("peer_ip",controllerIP).build().toString();
+                onUI(() -> openConsole(target,ip,targetDevice.optString("name")));
             });
             consoleButton.setEnabled(console);
             actions.addView(consoleButton);
@@ -437,31 +448,26 @@ public final class MainActivity extends Activity {
                 String address=desktopAddress(ip);
                 onUI(() -> desktop(address));
             });
-            desktop.setEnabled(peer.optBoolean("online")); entry.addView(desktop); devices.addView(entry);
+            desktop.setEnabled(running&&!ip.isEmpty()&&targetMesh!=null&&targetMesh.optJSONArray("services")!=null&&targetMesh.optJSONArray("services").toString().contains("21118")); entry.addView(desktop); devices.addView(entry);
         }
-        if (peers.length()==0) {
+        if (devices.getChildCount()==0) {
             TextView empty=text("还没有其他设备。\n把另一台电脑或平板绑定到同一账号后会显示在这里。",14,false);
             empty.setTextColor(color(R.color.muted)); devices.addView(empty);
         }
     }
-    private String ticketFor(String peerIp) {
+    private String ticketFor(String deviceID,String callback) throws Exception {
+        SharedPreferences saved=getSharedPreferences("cloud",MODE_PRIVATE);
+        String token=saved.getString("token",""), base=saved.getString("url","");
         try {
-            SharedPreferences saved=getSharedPreferences("cloud",MODE_PRIVATE);
-            String token=saved.getString("token",""), base=saved.getString("url","");
-            if (token.isEmpty() || base.isEmpty()) return null;
-            JSONArray devices=(JSONArray)cloudCall(base+"/api/devices",token,"GET",null);
-            String id=null;
-            for (int index=0;index<devices.length() && id==null;index++) {
-                JSONObject device=devices.optJSONObject(index); if (device==null) continue;
-                JSONObject mesh=device.optJSONObject("mesh"); JSONArray ips=mesh==null?null:mesh.optJSONArray("ips");
-                for (int item=0;ips!=null&&item<ips.length();item++) if (peerIp.equals(ips.optString(item))) id=device.optString("instance_id");
+            if (token.isEmpty()||base.isEmpty()) throw new Exception("Cloud 401");
+            JSONObject ticket=(JSONObject)cloudCall(base+"/api/devices/"+deviceID+"/ticket",token,"POST",new JSONObject().put("address",callback).put("state",""));
+            return ticket.getString("url");
+        } catch(Exception failure) {
+            if (failure.getMessage()!=null&&failure.getMessage().contains("401")) {
+                onUI(() -> {needsAccountLogin=true;binding.setVisibility(View.VISIBLE);});
+                throw new Exception("账号会话已过期，请在登录区域重新登录");
             }
-            if (id==null || id.isEmpty()) return null;
-            JSONObject ticket=(JSONObject)cloudCall(base+"/api/devices/"+id+"/ticket",token,"POST",new JSONObject().put("address","http://"+peerIp+":8765").put("state",""));
-            return ticket.optString("url");
-        } catch (Exception error) {
-            Diagnostics.log("console","票据获取失败，使用网页授权："+error.getMessage());
-            return null;
+            throw failure;
         }
     }
     private Object cloudCall(String address,String token,String method,JSONObject body) throws Exception {
@@ -487,7 +493,7 @@ public final class MainActivity extends Activity {
         return value.startsWith("[")?new JSONArray(value):new JSONObject(value);
     }
     private void openConsole(String url,String ip,String name) {
-        Diagnostics.log("console","打开 "+name+" · "+url);
+        Diagnostics.log("console","打开设备工作区 "+name);
         startActivity(new Intent(this,ConsoleActivity.class)
             .putExtra("url",url).putExtra("peer_ip",ip).putExtra("name",name));
     }

@@ -63,3 +63,5 @@ nav{max-height:none;min-height:0;overflow-y:auto}.workspace:has(#dshFrame) main{
 .quick-card small{color:var(--muted);font-size:12px;line-height:1.5}
 
 .section-title{font-size:13px;font-weight:600;color:var(--muted);margin:22px 0 10px;letter-spacing:.04em}
+
+.module-list{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 24px}.module-row{padding:24px 0;border-bottom:1px solid var(--line)}.module-row:last-child{border:0}.module-summary{display:flex;gap:16px;align-items:center;margin-bottom:10px}.module-row p{margin:8px 0;font-size:13px}.module-command{display:block;overflow:auto;padding:12px;background:var(--bg);margin:12px 0;font-size:13px}.module-row .toolbar{margin-top:16px}

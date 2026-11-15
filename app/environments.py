@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app import file_access as fs, workspace_store as store
 from app.workspace_commands import run
+from app.runtime import interpreter
 
 router=APIRouter(prefix='/api/environments',tags=['environments'])
 mutex=threading.RLock();cached=None;cached_at=0
@@ -168,7 +169,7 @@ def plan(body):
         try:os.stat(name,dir_fd=fd,follow_symlinks=False)
         except FileNotFoundError:pass
         else:raise HTTPException(409,'环境目录已存在，不允许覆盖或复用')
-    value=dict(project=p['id'],revision=p['revision'],root=p['root'],path=path,absolute_path=str(Path(absolute(p))/body.name),argv=[sys.executable,'-I','-m','venv',body.name],effect='创建全新 Python venv，包含本机 bundled pip；不联网安装包，不覆盖目录，不自动绑定')
+    value=dict(project=p['id'],revision=p['revision'],root=p['root'],path=path,absolute_path=str(Path(absolute(p))/body.name),argv=[interpreter(),'-I','-m','venv',body.name],effect='创建全新 Python venv，包含本机 bundled pip；不联网安装包，不覆盖目录，不自动绑定')
     value['digest']=hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
     return value
 
@@ -186,7 +187,7 @@ def create(body:Create):
             os.mkdir(name,0o700,dir_fd=fd)
             child=os.open(name,fs.DIR,dir_fd=fd)
             try:
-                result=run([sys.executable,'-I','-m','venv','.'],cwd_fd=child,timeout=45,limit=65536)
+                result=run([interpreter(),'-I','-m','venv','.'],cwd_fd=child,timeout=45,limit=65536)
             except HTTPException as e:raise HTTPException(e.status_code,'环境创建未完成，目录已保留供检查；未覆盖其他内容、未绑定。'+str(e.detail))
             finally:os.close(child)
         from app.main import audit

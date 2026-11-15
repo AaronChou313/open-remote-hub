@@ -21,7 +21,7 @@ cfg=settings()
 # One ORH install owns the ORN data plane; this foreground entry starts and reaps it.
 mesh_runtime.start_supervisor()
 try:
-    if cfg['enabled']:
+    if cfg['gateway_port'] != PORT:
         import socket
         from app.dsh_gateway import Dispatch
         sockets=[]

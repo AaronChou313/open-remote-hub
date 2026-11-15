@@ -114,7 +114,7 @@ window.RemoteHubWorkspace=(()=>{
   }
   if(token!==selectionVersion||!check())return;
   state.selected={...f,path};state.dirty=false;state.text=loaded;
-  $('#fileDetail').innerHTML=panel(path,`<div class="file-detail-body"><div class="toolbar">${f.kind==='file'?`<a class="button" href="/api${endpoint('download',{path})}">${icon('download')}下载</a>`:''}${admin()&&!readOnly?'<button data-file-op="copy">复制</button><button data-file-op="move">移动</button><button data-file-op="rename">重命名</button><button class="danger" data-file-op="delete">删除</button>':''}<button id="fileClose">关闭详情</button></div>${detail}</div>`);
+  $('#fileDetail').innerHTML=panel(path,`<div class="file-detail-body"><div class="toolbar">${f.kind==='file'?`<a class="button" href="/api${endpoint('download',{path})}" download>${icon('download')}下载</a>`:''}${admin()&&!readOnly?'<button data-file-op="copy">复制</button><button data-file-op="move">移动</button><button data-file-op="rename">重命名</button><button class="danger" data-file-op="delete">删除</button>':''}<button id="fileClose">关闭详情</button></div>${detail}</div>`);
   showFilePreview();
   $('#fileEditor')?.addEventListener('input',()=>{state.dirty=true;$('#fileDirty').textContent='未保存'});
   bind('#fileClose',closeFilePreview);
@@ -136,6 +136,7 @@ window.RemoteHubWorkspace=(()=>{
   const values=await form('打开目录终端',[{name:'session',label:'选择已有会话，或新建',options:[['','新建会话'],...sessions.map(s=>[s.name,s.name+(s.status==='running'?'':'（已退出）')])]},{name:'name',label:'新会话名称',value:preferred,required:false}],'进入终端 ↗');if(!values)return;
   const name=values.session||values.name;if(!name)throw Error('请选择会话或填写新会话名称');
   const url='/terminal/open/'+encodeURIComponent(name)+'?'+query({root,path});
+  if(window.ORHClientWorkspace?.openTerminal(url))return;
   const tab=window.open(url,'_blank');if(!tab)throw Error('请允许弹出终端标签页后重试');tab.opener=null;
  }
  async function addProject(root,path){const values=await form('添加本地项目',[{name:'name',label:'项目名称',value:path.split('/').at(-1)||'项目'},{name:'path',label:'根目录下的项目路径',value:path,required:false}],'添加项目');if(!values)return;const result=await api('/projects',{root,path:values.path,name:values.name});state.project=result.id;switchView('projects')}
@@ -172,7 +173,7 @@ window.RemoteHubWorkspace=(()=>{
    const sessions=(await api('/zellij')).sessions;
    const v=await form('项目终端',[{name:'session',label:'已有会话（保留原目录）或新建',options:[['','新建会话'],...sessions.map(s=>[s.name,s.name])]},{name:'name',label:'新会话名称',value:p.session||'',required:false}],'进入终端 ↗');if(!v)return;
    const name=v.session||v.name;if(!name)throw Error('请选择会话或填写名称');
-   const tab=window.open('/terminal/open/'+encodeURIComponent(name)+'?'+query({project:p.id,revision:p.revision}),'_blank');if(!tab)throw Error('请允许打开终端标签页');tab.opener=null;
+   const terminalURL='/terminal/open/'+encodeURIComponent(name)+'?'+query({project:p.id,revision:p.revision});if(window.ORHClientWorkspace?.openTerminal(terminalURL))return;const tab=window.open(terminalURL,'_blank');if(!tab)throw Error('请允许打开终端标签页');tab.opener=null;
   });
   bind('#projectBind',async()=>{
    const envs=(await api('/environments')).environments;

@@ -3,9 +3,9 @@ const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=
 const bytes=n=>{n=Number(n);if(!Number.isFinite(n))return '—';const units=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<4){n/=1024;i++}return `${n.toFixed(i?1:0)} ${units[i]}`};
 const uptime=s=>{s=Math.max(0,s);return `${Math.floor(s/86400)} 天 ${Math.floor(s%86400/3600)} 小时`};
 let renderVersion=0;
-let caps={};let view=typeof location!=='undefined'&&['#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
+let caps={};let view=typeof location!=='undefined'&&['#overview','#modules','#proxy','#remote','#network'].includes(location.hash)?location.hash.slice(1):localStorage.getItem('orh-view')||'overview', me, busy=false, stream, chartHours=1,refreshQueued=false;
 const pendingOperations=new Set();
-const titles={remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'仪表盘',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'进程与服务',meshremote:'组网与远程',applications:'我的应用'};
+const titles={modules:'功能管理',remote:'网络连接',knowledge:'知识库',ssh:'SSH 管理',proxy:'网络代理',overview:'仪表盘',docker:'容器与镜像',zellij:'终端管理',files:'文件管理',projects:'项目管理',environments:'开发环境',dsh:'DeepSeek Harness',services:'进程与服务',meshremote:'组网与远程',applications:'我的应用'};
 let sidebarCollapsed=localStorage.getItem('orh-sidebar-collapsed')==='true';
 function updateSidebar(){
  document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
@@ -18,21 +18,21 @@ $('#sidebarToggle').onclick=()=>{sidebarCollapsed=!sidebarCollapsed;localStorage
 if(view==='network')view='remote';
 if(view==='tasks')view='services';
 if(localStorage.getItem('orh-theme')==='dark'||(!localStorage.getItem('orh-theme')&&matchMedia('(prefers-color-scheme: dark)').matches))document.body.classList.add('dark');
-async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?((path.startsWith('/environments')||path.startsWith('/local-services')||path.startsWith('/remote-connect'))?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error}return d}
+async function api(path,body){const r=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-ORH-Request':'1'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(body===undefined?((path.startsWith('/environments')||path.startsWith('/local-services')||path.startsWith('/remote-connect'))?30000:10000):(path.startsWith('/proxy/manager')?90000:60000))});let d;try{d=await r.json()}catch{throw Error('服务器返回异常响应')}if(r.status===401){showLogin();throw Error(d.detail||'请重新登录')}if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:d.detail?.message||JSON.stringify(d.detail));error.status=r.status;throw error}return d}
 async function withBusy(button,key,label,work){
  if(pendingOperations.has(key))return;pendingOperations.add(key);
  const text=button?.textContent,markup=button?.innerHTML;
  if(button){button.disabled=true;button.textContent=label;button.setAttribute('aria-busy','true')}
  try{return await work()}finally{pendingOperations.delete(key);if(button?.isConnected){button.disabled=false;if(markup!==undefined)button.innerHTML=markup;else button.textContent=text;button.removeAttribute('aria-busy')}}
 }
-const VIEW_CAP={docker:'docker',zellij:'zellij',ssh:'ssh',dsh:'dsh'};
+const VIEW_CAP={docker:'docker',zellij:'terminal',files:'files',ssh:'ssh',dsh:'dsh',services:'services',projects:'projects',environments:'environments',knowledge:'knowledge'};
 async function switchView(target){
- if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false){notify('当前环境不支持该功能');return}
+ if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false){notify('请在功能管理中启用或检查依赖');target='modules'}
  if(target==='proxy'){target='remote';RemoteHubRemoteConnect.openTab('proxy')}
  if(target==='meshremote')RemoteHubRemoteConnect.openTab('network');
  if(target==='remote')RemoteHubRemoteConnect.openTab('lan');
  document.body.dataset.module=target;
- if(/Windows/i.test(navigator.userAgent))document.body.dataset.platform='windows';
+ document.body.dataset.platform=me?.host?.system==='Windows'?'windows':'unix';
  if(target==='tasks')target='services';
  if(view!==target&&window.RemoteHubRemoteConnect&&!await RemoteHubRemoteConnect.canLeave())return;
  if(view!==target&&window.RemoteHubApplications&&!RemoteHubApplications.canLeave())return;
@@ -47,7 +47,7 @@ async function switchView(target){
  $('#title').textContent=titles[view];$('#breadcrumb').textContent='工作空间 / '+titles[view];
  $('#error').hidden=true;$('#content').innerHTML=empty('正在读取本机数据…');refresh();
 }
-function showLogin(){window.RemoteHubRemoteConnect?.reset();window.RemoteHubApplications?.reset();window.RemoteHubLocalServices?.reset();window.RemoteHubKnowledge?.reset();window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
+function showLogin(){window.dispatchEvent?.(new CustomEvent('orh:login-required'));window.RemoteHubRemoteConnect?.reset();window.RemoteHubApplications?.reset();window.RemoteHubLocalServices?.reset();window.RemoteHubKnowledge?.reset();window.RemoteHubSSH?.reset();window.RemoteHubWorkspace?.reset();renderVersion++;busy=false;window.RemoteHubSessions?.close();$('#login').hidden=false;$('#shell').hidden=true;if(stream)stream.close();$('#content').replaceChildren();loadAuth()}
 function notify(text){$('#toast').textContent=text;$('#toast').hidden=false;setTimeout(()=>$('#toast').hidden=true,3500)}
 function showError(e,operation=true){$('#error').textContent=e.message;$('#error').dataset.kind=operation?'operation':'load';$('#error').hidden=false;if(!operation)$('#connection').textContent='更新失败 · 保留最近数据'}
 async function confirmAction(title,message){if($('#confirmDialog').open)return false;$('#confirmTitle').textContent=title;$('#confirmMessage').textContent=message;$('#confirmDialog').returnValue='cancel';$('#confirmDialog').showModal();return new Promise(resolve=>$('#confirmDialog').addEventListener('close',()=>resolve($('#confirmDialog').returnValue==='confirm'),{once:true}))}
@@ -95,6 +95,7 @@ async function overview(version){
 async function dockerView(version){const d=await api('/docker');if(version!==renderVersion)return;$('#content').innerHTML=panel('容器',d.containers.length?`<div class="container-grid">${d.containers.map(c=>{const s=d.stats.find(x=>x.ID===c.ID||c.ID.startsWith(x.ID)||x.Name===c.Names);return `<article class="container-card"><div class="container-heading"><h3 class="mono">${esc(c.Names)}</h3>${badge(c.State)}</div><p class="container-image mono">${esc(c.Image)}</p><p class="muted">${esc(c.Status)}</p><dl class="container-stats"><div><dt>CPU</dt><dd>${s?esc(s.CPUPerc):'—'}</dd></div><div><dt>内存</dt><dd>${s?esc(s.MemUsage):'—'}</dd></div></dl><div class="container-ports"><small>${c.State==='running'?'端口映射':'配置端口（未监听）'}</small><p class="mono">${esc(c.Ports||c.ConfiguredPorts)||'无映射'}</p></div><div class="toolbar">${buttons('docker',c.ID,c.State==='running'?[['stop','停止'],['restart','重启']]:[['start','启动']])}<button data-kind="docker" data-id="${c.ID}" data-action="detail" aria-label="${esc(c.Names)} 详情">详情</button><button data-kind="docker" data-id="${c.ID}" data-action="logs" aria-label="${esc(c.Names)} 日志">日志</button></div></article>`}).join('')}</div>`:empty('Docker 当前没有容器。'),`<span class="badge">${d.containers.length} 个容器</span>`,'资源占用来自 Docker 实时统计；停止的容器显示为空。')+panel('本地镜像',d.images.length?table(['镜像仓库','标签','大小','创建时间'],d.images.map(i=>`<tr><td class="mono">${esc(i.Repository)}</td><td>${esc(i.Tag)}</td><td>${esc(i.Size)}</td><td>${esc(i.CreatedSince)}</td></tr>`)):empty('暂无镜像'));}
 async function zellijView(version){return RemoteHubSessions.render(me,api,()=>version===renderVersion)}
 function mountTerminal(name){
+ if(window.ORHClientWorkspace?.openTerminal('/terminal/open/'+encodeURIComponent(name)))return true;
  const url='/terminal/open/'+encodeURIComponent(name),tab=window.open(url,'_blank');
  if(tab){tab.opener=null;return true}
  $('#error').replaceChildren(document.createTextNode('浏览器阻止了新标签页。'));
@@ -130,7 +131,7 @@ async function refresh(force=false){
  if($('#shell').hidden)return;
  if(busy){refreshQueued=true;return}
  const version=++renderVersion,target=view;busy=true;$('#refresh').disabled=true;
- try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,remote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),meshremote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
+ try{if($('#error').dataset.kind!=='operation')$('#error').hidden=true;await ({overview,modules:v=>RemoteHubModules.render(()=>v===renderVersion),remote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),meshremote:v=>RemoteHubRemoteConnect.render(()=>v===renderVersion),knowledge:v=>RemoteHubKnowledge.render(()=>v===renderVersion),ssh:v=>RemoteHubSSH.render(()=>v===renderVersion),proxy:v=>RemoteHubProxy.render(()=>v===renderVersion),docker:dockerView,zellij:zellijView,applications:v=>RemoteHubApplications.render(()=>v===renderVersion),services:v=>RemoteHubLocalServices.render(()=>v===renderVersion,force),dsh:v=>RemoteHubDsh.render(()=>v===renderVersion),files:v=>RemoteHubWorkspace.files(()=>v===renderVersion),projects:v=>RemoteHubWorkspace.projects(()=>v===renderVersion),environments:v=>RemoteHubWorkspace.environments(()=>v===renderVersion)}[target])(version);if(version===renderVersion)$('#connection').textContent='已连接'}
  catch(e){if(version===renderVersion){if($('#content').textContent==='正在读取本机数据…')$('#content').innerHTML=empty('暂时无法读取，请点击刷新重试。');showError(e.name==='TimeoutError'?Error('读取超时，请稍后刷新。现有任务不会因此停止。'):e,false)}}
  finally{if(version===renderVersion){busy=false;$('#refresh').disabled=false;if(refreshQueued){refreshQueued=false;queueMicrotask(refresh)}}}
 }
@@ -153,14 +154,10 @@ async function enter() {
   $('#cloudBind').hidden = Boolean(me.cloud?.bound);
   $('#login').hidden = true;
   $('#shell').hidden = false;
+  window.dispatchEvent?.(new CustomEvent('orh:authenticated', {detail:me}));
   const portal = $('#portalLink');
   portal.href = (me.cloud?.base_url || 'https://cloud.openremotehub.top') + '/'; portal.title='打开 Cloud 门户';
   
-  for (const [viewName,capName] of Object.entries(VIEW_CAP)) {
-   if (caps[capName] === false) {
-    document.querySelectorAll('nav button[data-view="'+viewName+'"]').forEach((button)=>{button.disabled=true;button.classList.add('unavailable');button.title='当前环境不可用';});
-   }
-  }
   switchView(view);
  } catch (error) {
   if (!$('#login').hidden) $('#loginError').textContent = error.message;
@@ -207,7 +204,7 @@ $('#cloudBindForm').onsubmit = async event => {
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{if(b.dataset.view!==view)switchView(b.dataset.view)});$('#content').addEventListener('click',e=>{const card=e.target.closest('[data-open-view]');if(card&&card.dataset.openView!==view)switchView(card.dataset.openView)});
 $('#content').onclick=e=>{const b=e.target.closest('button[data-kind]');if(b)act(b.dataset.kind,b.dataset.id,b.dataset.action,b)};
 $('#refresh').onclick=()=>refresh(true);$('#theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('orh-theme',document.body.classList.contains('dark')?'dark':'light');updateThemeControl()};$('#logout').onclick=async()=>{try{await api('/logout',{});showLogin()}catch(e){showError(e)}};$('#closeOutput').onclick=()=>$('#outputDialog').close();$('#outputDialog').onclose=()=>{if(stream){stream.close();stream=null}};
-setInterval(()=>{if(!['files','projects','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
+setInterval(()=>{if(!['modules','files','projects','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!document.hidden&&!pendingOperations.size&&!$('#nameDialog').open&&!$('#sessionDialog').open&&!$('#outputDialog').open&&!window.RemoteHubApplications?.isOpen()&&!window.RemoteHubLocalServices?.isOpen()&&!(view==='services'&&document.activeElement?.closest('.service-toolbar'))&&!$('#confirmDialog').open)refresh()},5000);
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pendingOperations.size&&!['files','environments','dsh','proxy','ssh','knowledge','applications','remote'].includes(view)&&!$('#workspaceDialog').open&&!$('#workspaceDetailDialog').open)refresh()});
 $('#cancelName').onclick=()=>$('#nameDialog').close('cancel');

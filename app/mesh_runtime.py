@@ -74,7 +74,7 @@ def token_path():
 def log_path():
     # Kept independent from app.main so CLI helpers can stop the agent without
     # importing the whole console (and its platform shims).
-    return ROOT / '.runtime' / 'mesh.log'
+    return Path(os.environ.get('ORH_DATA_DIR', str(ROOT / '.runtime'))) / 'mesh.log'
 
 
 def pid_path():
@@ -122,7 +122,11 @@ def published():
     """Ports this ORH exposes through the mesh: console, gateway and RustDesk."""
     from app.main import PORT
     gateway = int(os.environ.get('ORH_DSH_GATEWAY_PORT', '8767'))
-    return {'21118': '127.0.0.1:21118', str(PORT): f'127.0.0.1:{PORT}', str(gateway): f'127.0.0.1:{gateway}'}
+    from app.modules import enabled
+    value = {'8765': f'127.0.0.1:{PORT}', '8767': f'127.0.0.1:{gateway}'}
+    if enabled('desktop'):
+        value['21118'] = '127.0.0.1:21118'
+    return value
 
 
 def ensure_config():

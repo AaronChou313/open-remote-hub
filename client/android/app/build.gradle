@@ -7,13 +7,29 @@ android {
         testInstrumentationRunner 'top.openremotehub.client.CompatibilityChecks'
         minSdk 26
         targetSdk 35
-        versionCode 15
-        versionName '0.5.4'
+        versionCode 600
+        versionName rootProject.file('../../VERSION').text.trim()
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    buildTypes { debug { debuggable true } }
+    signingConfigs {
+        if (System.getenv('ORH_ANDROID_KEYSTORE')) {
+            release {
+                storeFile file(System.getenv('ORH_ANDROID_KEYSTORE'))
+                storePassword System.getenv('ORH_ANDROID_PASSWORD')
+                keyAlias 'openremotehub'
+                keyPassword System.getenv('ORH_ANDROID_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            if (System.getenv('ORH_ANDROID_KEYSTORE')) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
 }
 dependencies { implementation files('libs/orh-client.aar') }

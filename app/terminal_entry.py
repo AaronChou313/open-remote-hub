@@ -34,6 +34,9 @@ def _ensure_web():
 
 def prepare(name,cwd=None):
     from app import main
+    if main.WINDOWS_EDITION:
+        from app.conpty import prepare as windows_prepare
+        return windows_prepare(name, cwd)
     main.zname(name)
     with lock:
         session_lock=session_locks.setdefault(name,threading.RLock())

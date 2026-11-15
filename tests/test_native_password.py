@@ -27,6 +27,8 @@ def c(tmp_path,monkeypatch):
 def auth(c):
     passwords.save(PASSWORD,initial=True)
     assert c.post('/api/login',json={'password':PASSWORD}).status_code==200
+    for module in ('terminal','docker'):
+        assert c.post('/api/modules/'+module+'/enable',json={}).status_code==200
 
 
 def test_password_storage_and_token_retirement(c):

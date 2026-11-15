@@ -69,7 +69,8 @@ def start():
 def watch(stop):
     while not stop.wait(5):
         try:
-            if autostart():
+            from app.modules import enabled
+            if enabled('desktop') and autostart():
                 start()
         except (NativeError, OSError):
             # A live GUI may be starting. Its PID remains authoritative and the

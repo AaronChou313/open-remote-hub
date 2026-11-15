@@ -124,9 +124,9 @@ def effective_addresses(row):
 def public_device(row):
     with database() as db:
         mesh=headscale.public_mesh(db,row['instance_id'])
-    return dict(kind=row['kind'],mesh=mesh,instance_id=row['instance_id'], name=row['display_name'] or row['name'],
+    return dict(kind=row['kind'],mesh=mesh,instance_id=row['instance_id'], name=row['display_name'] or row['name'],note=row['note'],
                 agent_name=row['name'], os=row['os'], addresses=effective_addresses(row),
-                preferred=row['preferred'], port=row['port'], last_seen=row['last_seen'],
+                manual_addresses=json.loads(row['manual_addresses']),agent_addresses=json.loads(row['agent_addresses']),preferred=row['preferred'], port=row['port'], last_seen=row['last_seen'],
                 online=time.time() - row['last_seen'] < 100)
 
 
@@ -194,7 +194,7 @@ def logout(user=Depends(account)):
 
 
 class Metadata(BaseModel):
-    kind: str = Field(default='orh',pattern=r'^(orh|orn|mesh)$')
+    kind: str = Field(default='orh',pattern=r'^(orh|orn|mesh|controller-only)$')
     instance_id: uuid.UUID
     name: str = Field(min_length=1,max_length=160)
     os: str = Field(max_length=160)
@@ -324,6 +324,8 @@ def devices(user=Depends(account)):
 class DeviceEdit(BaseModel):
     name: str | None = Field(default=None,min_length=1,max_length=160)
     addresses: list[str] | None = Field(default=None,max_length=64)
+    manual_addresses: list[str] | None = Field(default=None,max_length=64)
+    note: str | None = Field(default=None,max_length=1000)
     preferred: str | None = Field(default=None,max_length=2048)
 
 
@@ -334,17 +336,22 @@ def edit_device(identifier: str, body: DeviceEdit, user=Depends(account)):
         row = db.execute('SELECT * FROM devices WHERE instance_id=? AND owner_id=?',(identifier,user['id'])).fetchone()
         if not row:
             raise HTTPException(404,'设备不存在')
-        urls = effective_addresses(row) if body.addresses is None else addresses(body.addresses)
+        automatic = json.loads(row['agent_addresses'])
+        if body.manual_addresses is not None:
+            manual = addresses(body.manual_addresses)
+            excluded = set(json.loads(row['excluded_addresses']))
+            urls = list(dict.fromkeys([url for url in automatic if url not in excluded] + manual))
+        else:
+            urls = effective_addresses(row) if body.addresses is None else addresses(body.addresses)
+            excluded = (set(json.loads(row['excluded_addresses'])) | (set(automatic)-set(urls))) - set(urls)
+            manual = [url for url in urls if url not in automatic]
         if not urls and row['kind']=='orh':
             raise HTTPException(422,'请保留至少一个访问地址')
-        automatic = json.loads(row['agent_addresses'])
-        excluded = (set(json.loads(row['excluded_addresses'])) | (set(automatic)-set(urls))) - set(urls)
-        manual = [url for url in urls if url not in automatic]
         preferred = normalized_address(body.preferred) if body.preferred else None
         if preferred and preferred not in urls:
             raise HTTPException(422,'首选地址需在设备地址列表中')
-        db.execute('UPDATE devices SET display_name=?,manual_addresses=?,excluded_addresses=?,preferred=? WHERE instance_id=?',
-                   (body.name or row['display_name'],json.dumps(manual),json.dumps(list(excluded)),preferred,identifier))
+        db.execute('UPDATE devices SET display_name=?,manual_addresses=?,excluded_addresses=?,preferred=?,note=? WHERE instance_id=?',
+                   (body.name or row['display_name'],json.dumps(manual),json.dumps(list(excluded)),preferred,row['note'] if body.note is None else body.note,identifier))
     return {'ok':True}
 
 
@@ -485,6 +492,6 @@ app.mount('/assets', StaticFiles(directory=str(web),check_dir=False), name='asse
 
 @app.get('/{asset}')
 def static_asset(asset: str):
-    if asset not in ('portal.js','cloud.js','portal.css','hosts.mjs','icons.svg','favicon.svg','icons-LICENSE.txt'):
+    if asset not in ('theme.js','cloud.js','portal.css','orh-logo.png','icons.svg','favicon.svg','icons-LICENSE.txt'):
         raise HTTPException(404)
     return FileResponse(web/asset)

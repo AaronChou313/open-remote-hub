@@ -162,6 +162,10 @@ connections = {}
 @router.websocket('/terminal/ws/{path:path}')
 async def native_socket(ws: WebSocket, path: str):
     from app import main
+    from app.modules import enabled
+    if not enabled('terminal'):
+        await ws.close(code=1008)
+        return
     token = ws.cookies.get('orh', '')
     authority = f'{ws.headers.get("host")}'
     scheme='https' if ws.url.scheme=='wss' else 'http'

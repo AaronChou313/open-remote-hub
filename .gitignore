@@ -15,16 +15,22 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .DS_Store
+/build/
+/dist/
 # Historical local reports contain host process output and screenshots.
 docs/*
 !docs/architecture.md
 !docs/validation.md
 !docs/dsh-recovery.md
+!docs/client-first.md
 
 /cloud/bin/
 /bin/
 /client/android/app/build/
 /client/android/.gradle/
 /client/android/local.properties
+/client/android/build/
+/client/android/app/libs/*-sources.jar
+/client/android/app/src/main/assets/workspace/
 *.aar
 windows/__pycache__/

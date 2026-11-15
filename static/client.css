@@ -1,0 +1,51 @@
+.client-page { min-width: 0; min-height: 100dvh; }
+body.android-client.client-workspace { padding-top:0; }
+body.android-client .client-workspacebar { display:none; }
+body.android-client.client-workspace aside { top:0; height:100dvh; }
+.client-header { position: static; min-height: 84px; padding: 16px 40px; gap: 32px; flex-wrap: wrap; }
+.client-header .brand { margin: 0; flex-shrink: 0; }
+.client-header nav { display: flex; flex-direction: row; gap: 8px; margin: 0; overflow: auto; }
+.client-header nav button { width: auto; white-space: nowrap; padding: 10px 16px; }
+.client-header [aria-current=page] { color: var(--accent); background: var(--soft); }
+.client-main { max-width: 1120px; margin: 0 auto; padding: 48px 40px; }
+.client-main .page-heading { align-items: center; }
+.client-main .muted { font-size: 14px; line-height: 1.7; }
+#clientNotice:empty { display: none; }
+#clientError { color: var(--red); line-height: 1.6; }
+.client-device { display: flex; align-items: center; gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.client-device:first-child { border-top: 1px solid var(--line); }
+.client-device-info { flex: 1; min-width: 0; }
+.client-device h2 { margin: 0 0 7px; font-size: 18px; overflow-wrap: anywhere; }
+.client-device p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }
+.client-device .toolbar { flex-shrink: 0; }
+.client-details { margin: 16px 0 32px; }
+.client-details > div { display: grid; grid-template-columns: 180px minmax(0, 1fr); padding: 16px 0; border-bottom: 1px solid var(--line); gap: 20px; font-size: 14px; }
+.client-details dt { color: var(--muted); }
+.client-details dd { margin: 0; overflow-wrap: anywhere; }
+.client-workspacebar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.client-workspacebar strong { overflow-wrap: anywhere; }
+.client-workspacebar [role=status] { color: var(--muted); font-size: 13px; margin-left: auto; }
+body.client-workspace { padding-top: 66px; }
+body.client-workspace .client-workspacebar { position: fixed; inset: 0 0 auto; min-height: 66px; z-index: 20; }
+body.client-workspace aside { top: 66px; height: calc(100dvh - 66px); }
+body.client-workspace .account-actions #cloudBind, body.client-workspace .account-actions #portalLink { display: none; }
+body.client-workspace [data-view=meshremote], body.client-workspace [data-peer-console], body.client-workspace [data-peer-desktop] { display: none; }
+@media (max-width: 760px) {
+  body.android-client.client-workspace aside {height:auto;top:auto;}
+  .client-header { padding: 18px 20px 12px; gap: 16px; }
+  .client-header nav { width: 100%; padding-bottom: 4px; }
+  .client-header nav button { min-height: 44px; padding: 10px 12px; }
+  .client-main { padding: 28px 20px; }
+  .client-device { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .client-device .toolbar { width: 100%; }
+  .client-device button { min-height: 44px; }
+  .client-details > div { grid-template-columns: 1fr; gap: 8px; }
+  body.client-workspace { padding-top: 108px; }
+  body.client-workspace .client-workspacebar { min-height: 108px; padding: 10px 16px; }
+  .client-workspacebar [role=status] { margin-left: 0; width: 100%; }
+  body.client-workspace aside { top: auto; height: auto; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .client-device { transition: background-color .16s ease-out; }
+  .client-device:hover { background-color: var(--soft); }
+}

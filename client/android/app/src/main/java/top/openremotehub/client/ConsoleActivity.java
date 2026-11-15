@@ -1,12 +1,16 @@
 package top.openremotehub.client;
 
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.content.*;
 import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Environment;
 import android.view.*;
 import android.webkit.*;
 import android.widget.*;
@@ -24,6 +28,32 @@ public final class ConsoleActivity extends Activity {
     private String url;
     private String peer;
     private LinearLayout error;
+    private TextView link;
+    private boolean agentReady;
+    private ValueCallback<Uri[]> fileCallback;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable poll = new Runnable() {
+        @Override public void run() {
+            new Thread(() -> {
+                String route="Mesh 尚未连接";
+                try {
+                    org.json.JSONArray peers=(org.json.JSONArray)LocalApi.call("/peers",null,"GET");
+                    route="链路尚未建立";
+                    for(int i=0;i<peers.length();i++) {
+                        JSONObject value=peers.getJSONObject(i);
+                        org.json.JSONArray ips=value.optJSONArray("ips");
+                        if(ips==null) continue;
+                        for(int j=0;j<ips.length();j++) if(peer.equals(ips.optString(j))) {
+                            route="direct".equals(value.optString("path"))?"P2P 直连":"relay".equals(value.optString("path"))?"DERP 中继":"链路尚未建立";
+                        }
+                    }
+                } catch(Exception unavailable) { route="Mesh 不可达"; }
+                final String label=route;
+                main.post(() -> {if(!isDestroyed()) link.setText((agentReady?"Agent 已连接":"等待 Agent 响应")+" · "+label);});
+            }).start();
+            main.postDelayed(this,5000);
+        }
+    };
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -38,6 +68,7 @@ public final class ConsoleActivity extends Activity {
         }
         build(name == null ? "控制台" : name);
         web.loadUrl(url);
+        main.post(poll);
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -60,9 +91,14 @@ public final class ConsoleActivity extends Activity {
         label.setEllipsize(android.text.TextUtils.TruncateAt.END);
         label.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         bar.addView(label);
+        bar.addView(iconButton("我的设备", () -> finish()));
+        bar.addView(iconButton("工作区", () -> web.loadUrl(Uri.parse(url).buildUpon().path("/").fragment("overview").build().toString())));
         bar.addView(iconButton("刷新", () -> reload()));
-        bar.addView(iconButton("浏览器", () -> openExternally()));
         root.addView(bar);
+        link=new TextView(this);
+        link.setTextSize(12); link.setTextColor(getColor(R.color.muted));
+        link.setPadding(dp(16),0,dp(16),dp(6));
+        root.addView(link);
 
         FrameLayout frame = new FrameLayout(this);
         frame.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -77,9 +113,54 @@ public final class ConsoleActivity extends Activity {
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        web.setWebChromeClient(new WebChromeClient());
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface public void returnToDevices() { runOnUiThread(() -> finish()); }
+            @JavascriptInterface public void agentReady(boolean ready) { agentReady=ready; }
+            @JavascriptInterface public void openTerminal(String address) {
+                Uri target=Uri.parse(address), origin=Uri.parse(url);
+                if(isLocal(target)&&origin.getAuthority().equals(target.getAuthority())&&target.getPath()!=null&&target.getPath().startsWith("/terminal/open/")) runOnUiThread(() -> web.loadUrl(address));
+            }
+        }, "ORHAndroid");
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams parameters) {
+                if(fileCallback!=null) fileCallback.onReceiveValue(null);
+                fileCallback=callback;
+                Intent choose=parameters.createIntent();
+                try {startActivityForResult(choose,41);return true;}
+                catch(ActivityNotFoundException unavailable) {fileCallback=null;return false;}
+            }
+        });
+        web.setDownloadListener((address,userAgent,contentDisposition,mimeType,length) -> {
+            if(!isLocal(Uri.parse(address))) {toast("请从设备工作区下载文件");return;}
+            String filename=URLUtil.guessFileName(address,contentDisposition,mimeType);
+            DownloadManager.Request request=new DownloadManager.Request(Uri.parse(address));
+            String cookie=CookieManager.getInstance().getCookie(address);
+            if(cookie!=null) request.addRequestHeader("Cookie",cookie);
+            request.setTitle(filename).setMimeType(mimeType)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(this,Environment.DIRECTORY_DOWNLOADS,filename);
+            getSystemService(DownloadManager.class).enqueue(request);
+            toast("已开始下载 "+filename);
+        });
         web.setBackgroundColor(getColor(R.color.surface));
         web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri address=request.getUrl(), origin=Uri.parse(url);
+                if(!"GET".equals(request.getMethod())||!origin.getAuthority().equals(address.getAuthority())) return null;
+                String path=address.getPath(), asset;
+                if("/".equals(path)) asset="index.html";
+                else if("/auth/cloud".equals(path)) asset="cloud-auth.html";
+                else if(path!=null&&path.startsWith("/static/")) asset=path.substring(8);
+                else return null;
+                if(asset.contains("..")) return null;
+                String mime=asset.endsWith(".js")?"application/javascript":asset.endsWith(".css")?"text/css":asset.endsWith(".html")?"text/html":asset.endsWith(".svg")?"image/svg+xml":asset.endsWith(".png")?"image/png":"application/octet-stream";
+                try {
+                    java.util.Map<String,String> headers=new java.util.HashMap<>();
+                    headers.put("Cache-Control","no-store");
+                    headers.put("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src http://*.localhost:*; connect-src 'self'; base-uri 'none'; form-action 'self'");
+                    return new WebResourceResponse(mime,"UTF-8",200,"OK",headers,getAssets().open("workspace/"+asset));
+                } catch(java.io.IOException unavailable) { return null; }
+            }
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri target = request.getUrl();
                 if (isLocal(target) || isCloud(target)) return false;
@@ -101,6 +182,7 @@ public final class ConsoleActivity extends Activity {
 
             @Override public void onPageFinished(WebView view, String address) {
                 if (error != null) error.setVisibility(View.GONE);
+                if(isLocal(Uri.parse(address))) view.evaluateJavascript("window.open=function(url){ORHAndroid.openTerminal(new URL(url,location.href).href);return {opener:null};};document.querySelectorAll('a[target=_blank]').forEach(function(a){if(a.pathname.indexOf('/terminal/open/')===0)a.removeAttribute('target');});",null);
             }
         });
         web.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
@@ -170,30 +252,8 @@ public final class ConsoleActivity extends Activity {
             web.loadUrl(url);
             return;
         }
-        // A restarted core allocates a new port, so ask for a fresh URL.
-        new Thread(() -> {
-            try {
-                JSONObject result = (JSONObject) LocalApi.call("/console", new JSONObject().put("peer_ip", peer), "POST");
-                String next = result.optString("url");
-                if (next.isEmpty()) throw new Exception("未返回控制台地址");
-                url = next;
-                runOnUiThread(() -> {
-                    error.setVisibility(View.GONE);
-                    web.loadUrl(url);
-                    Diagnostics.log("console", "控制台已重新建立 " + url);
-                });
-            } catch (Exception failure) {
-                runOnUiThread(() -> fail("重新连接失败：" + failure.getMessage()));
-            }
-        }, "mesh-console").start();
-    }
-
-    private void openExternally() {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (ActivityNotFoundException error) {
-            toast("此设备没有可用的浏览器");
-        }
+        error.setVisibility(View.GONE);
+        web.reload();
     }
 
     private void toast(String message) {
@@ -206,6 +266,8 @@ public final class ConsoleActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        main.removeCallbacks(poll);
+        if(fileCallback!=null) fileCallback.onReceiveValue(null);
         Diagnostics.log("console", "关闭控制台");
         if (web != null) {
             web.setWebChromeClient(null);
@@ -214,5 +276,13 @@ public final class ConsoleActivity extends Activity {
             web = null;
         }
         super.onDestroy();
+    }
+
+    @Override protected void onActivityResult(int request,int result,Intent data) {
+        super.onActivityResult(request,result,data);
+        if(request==41&&fileCallback!=null) {
+            fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));
+            fileCallback=null;
+        }
     }
 }

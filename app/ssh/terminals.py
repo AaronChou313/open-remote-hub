@@ -102,9 +102,10 @@ def launch(host, new=False, key=None):
         row = dict(host=host, session=name, key=key, signature=signature, created=time.time(),
                    state='starting', hostname=values.get('hostname'), port=values.get('port'))
         store.put('terminal', token, row)
+        from app.runtime import script
         command = ['zellij', '--config', str(main.ROOT / 'config/zellij.kdl'), 'attach',
-                   '--create-background', name, '--', sys.executable, str(main.ROOT / 'scripts/ssh_terminal.py'),
-                   '--data', str(main.DATA), '--ssh-dir', str(store.root()), '--launch', token]
+                   '--create-background', name, '--', *script('ssh_terminal.py',
+                   '--data', str(main.DATA), '--ssh-dir', str(store.root()), '--launch', token)]
         try:
             main.cli(command, 10, cwd=str(Path.home()))
         except Exception:

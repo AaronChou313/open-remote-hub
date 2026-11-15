@@ -19,6 +19,8 @@ def base():return f"http://127.0.0.1:{settings()['port']}"
 
 
 def authorized(token):
+    from app.modules import enabled
+    if not enabled('dsh'):return False
     s=access.get(token)
     return bool(s and s['role']=='admin')
 

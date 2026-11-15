@@ -22,6 +22,47 @@ func (d mappedDialer) Dial(ctx context.Context, network, address string) (net.Co
 	return (&net.Dialer{}).DialContext(ctx, network, d.target)
 }
 
+func TestConsoleUsesControllerUIAndTargetAPI(t *testing.T) {
+	const id = "f57bc9e0-1f1e-4c96-b4f8-c9e3be1f41c9"
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openremotehub" {
+			json.NewEncoder(w).Encode(map[string]string{"service": "openremotehub", "instance_id": id})
+			return
+		}
+		io.WriteString(w, "target:"+r.URL.Path)
+	}))
+	defer remote.Close()
+	frontend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "controller:"+r.URL.Path)
+	}))
+	defer frontend.Close()
+	remoteURL, _ := url.Parse(remote.URL)
+	manager := New(mappedDialer{target: remoteURL.Host})
+	manager.Frontend = frontend.URL
+	defer manager.Close()
+	entry, err := manager.CreateConsole(context.Background(), "100.64.0.20", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin, _ := url.Parse(entry.URL)
+	transport := &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort("127.0.0.1", origin.Port()))
+	}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	for path, expected := range map[string]string{"/": "controller:/", "/auth/cloud": "controller:/auth/cloud", "/static/app.js": "controller:/static/app.js", "/api/me": "target:/api/me", "/terminal/open/test": "target:/terminal/open/test"} {
+		response, err := client.Get(entry.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil || string(body) != expected {
+			t.Fatalf("%s received %q, want %q (%v)", path, body, expected, err)
+		}
+	}
+}
+
 func TestConsoleOriginCookieRedirectAndWebSocket(t *testing.T) {
 	const id = "f57bc9e0-1f1e-4c96-b4f8-c9e3be1f41c9"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

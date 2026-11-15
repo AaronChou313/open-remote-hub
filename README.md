@@ -1,10 +1,16 @@
 # OpenRemoteHub
 
-原生运行的个人服务器控制台，管理系统状态、Docker、Zellij、文件、项目与本地服务，并集中保存 Web 应用入口。默认只监听 localhost，使用自设密码登录。
+跨平台远程连接与设备管理客户端。在同一个 ORH 窗口选择本机或同账号电脑，使用目标设备的系统状态、Docker、终端、文件、项目与服务。Cloud 管账号与设备元数据，Mesh 优先直连、必要时使用 DERP，Agent 常驻电脑后台。
 
 ## 入口与账号
 
-ORH 只有一个账号：**ORH 账号**。安装后在本地控制台首次登录即完成设备注册与组网入网，之后所有日常操作都在本地 ORH：默认「设备」视图列出本机与对端，控制台与远程桌面就在卡片上。对端控制台使用 90 秒账号票据在本地打开，不经过 Cloud 授权页。
+主要入口为 **ORH Client**。首次登录 ORH 账号完成设备注册与入网，随后进入“我的设备”。远端工作区复用目标专用短期 Ticket 和 Mesh 网关，在同一客户端窗口中打开。关闭窗口后后台 Agent、Mesh 与用户任务继续运行。现有浏览器控制台保留为调试和应急入口。
+
+macOS/Linux 源码安装可运行 `.venv/bin/pip install -r client/requirements.txt`，随后执行 `.venv/bin/python scripts/client.py`。Windows 安装包由托盘“打开 OpenRemoteHub”启动窗口。Client 的 Cookie 与窗口偏好保存在本机私有目录。
+
+Linux 桌面还需要可用的 GTK/WebKit 或 Qt WebEngine 环境。使用 Qt 时可安装 `.venv/bin/pip install 'pywebview[qt]>=6,<7'`。无头电脑继续通过现有服务启动 Agent/Mesh。
+
+本轮采用规划中的过渡期页面复用，模块仍由目标 Agent 提供。实现范围和后续批次见 [客户端优先迁移](docs/client-first.md)。
 
 `cloud.openremotehub.top` 是账号后台，只用于注册/登录、设备目录、下载与吊销，平时不需要访问；它不再提供设备控制台或远程桌面入口。
 
@@ -44,9 +50,9 @@ ORH 只有一个账号：**ORH 账号**。安装后在本地控制台首次登�
 
 ## Cloud 账号与 Agent
 
-Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个人主机运行现有全部管理功能。浏览器从 Cloud 获得一次性 Ticket 后直接导航到 Agent，Agent 向 Cloud 兑换并建立原有管理员 Cookie。Zellij、Docker、文件等请求从浏览器直接到 Agent。Cloud 在线状态依据最近 100 秒内的心跳，浏览器地址检测结果单独展示。
+Cloud 管理账号、设备目录、绑定关系和心跳，Agent 在个人主机运行管理功能。Client 选择设备后建立 Mesh 网关并取得一次性 Ticket，目标 Agent 兑换后建立原有管理员 Cookie。Zellij、Docker、文件等业务请求经 Mesh 直接访问 Agent。Cloud 在线状态依据最近 100 秒内的心跳，端到端 API 可达性与组网路径单独展示。
 
-前端入口为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在任意主机安装 ORH 并打开控制台，用 Cloud 账号登录即可：本机自动注册、组网自动入网，不再有绑定码或跳转确认页。
+账号后台为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在电脑安装 ORH 并打开 Client，用 Cloud 账号登录即可完成本机注册与组网入网。
 
 ```sh
 # 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
@@ -56,7 +62,7 @@ Cloud 管理公共账号、设备目录、绑定关系和心跳，Agent 在个�
 
 登录一次后，Agent 保存私有 `.runtime/cloud-binding.json`（设备令牌，不含账号密码），每 30 秒上报名称、系统、端口、局域网 / 组网地址，重启后自动恢复。设备 UUID 沿用 `.runtime/instance-id`，在新主机部署时应生成自己的 UUID。设备凭据、账号令牌和 Ticket 都不提交到 Git。首次登录会用 Cloud 账号注册设备；同一账号再次登录会轮换设备令牌。
 
-Cloud 设备卡片支持改名、编辑地址、设置首选入口、连接检测和解绑，手动地址及名称不会被心跳覆盖。Agent 在心跳响应中同步这些地址的主机名，沿用原监听端口的 Host / Origin 校验。点击“打开控制台”或某个地址会签发 90 秒、目标设备专用、单次兑换的 Ticket，使用顶层导航进入 Agent，浏览器跨域探测失败时也可以直接进入。直接访问 Agent IP 时点击“使用 Cloud 账号登录”，完成 Cloud 授权后自动返回。新浏览器登录同一 Cloud 账号即可读取同一设备目录。
+Cloud 设备卡片支持改名、编辑手动访问地址、设置首选入口和解绑，手动地址及名称不会被心跳覆盖。组网 IP 由控制平面分配。Agent 在心跳响应中同步访问主机名，沿用原监听端口的 Host / Origin 校验。Client 为所选设备签发 90 秒、目标专用、单次兑换的 Ticket。浏览器独立调试入口继续保留 Cloud 授权登录。
 
 已登录 Cloud 的设备使用 Cloud 登录，本机密码入口隐藏。未绑定模式保留原有本机密码。Cloud 退出会撤销 Cloud 会话与尚未使用的 Ticket；已建立的 Agent Cookie 通过 Agent 退出、到期或解绑撤销。Cloud 解绑后，Agent 在下次成功联系 Cloud 时撤销绑定和本机会话。主机睡眠或断网期间无法即时接收解绑状态。
 

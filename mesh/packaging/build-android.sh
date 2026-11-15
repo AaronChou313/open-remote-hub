@@ -12,6 +12,12 @@ export PATH
 mkdir -p client/android/app/libs client/android/app/src/main/assets dist
 python3 mesh/packaging/notices.py
 cp dist/THIRD_PARTY_NOTICES.txt client/android/app/src/main/assets/THIRD_PARTY_NOTICES.txt
+rm -rf client/android/app/src/main/assets/workspace
+cp -R static client/android/app/src/main/assets/workspace
 (cd mesh && gomobile bind -target=android/arm64 -androidapi=26 -trimpath -ldflags='-s -w' -javapkg=top.openremotehub.client.core -o ../client/android/app/libs/orh-client.aar ./mobile)
-(cd client/android && ./gradlew --no-daemon clean assembleDebug assembleDebugAndroidTest lintDebug)
-cp client/android/app/build/outputs/apk/debug/app-debug.apk dist/orh-client-android-debug.apk
+if [ "${ORH_ANDROID_RELEASE:-0}" = 1 ]; then
+  (cd client/android && ./gradlew --no-daemon clean assembleRelease lintRelease)
+else
+  (cd client/android && ./gradlew --no-daemon clean assembleDebug assembleDebugAndroidTest lintDebug)
+  cp client/android/app/build/outputs/apk/debug/app-debug.apk dist/orh-client-android-debug.apk
+fi

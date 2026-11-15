@@ -165,7 +165,8 @@ def start():
         plan=main.DATA/'dsh-launch.json'
         plan.write_text(json.dumps(dict(argv=argv,home=cfg['home'],port=cfg['port'],data=str(main.DATA))))
         plan.chmod(0o600)
-        wrapper=[str(main.ROOT/'.venv/bin/python'),str(main.ROOT/'scripts/dsh_host.py'),str(plan)]
+        from app.runtime import script
+        wrapper=script('dsh_host.py',plan)
         env={k:v for k,v in os.environ.items() if not k.startswith('ORH_')}
         log=main.DATA/'dsh-supervisor.log'
         fd=os.open(log,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600);os.fchmod(fd,0o600)
