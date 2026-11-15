@@ -78,7 +78,8 @@ def call(base, path, body, credential=None):
     try:
         with httpx.Client(timeout=12,trust_env=False) as client:
             response = client.post(base+path,json=body,headers=headers)
-    except httpx.HTTPError:
+    except httpx.HTTPError as error:
+        print('[cloud] 连接失败: '+repr(error), flush=True)
         raise HTTPException(503,'暂时无法连接 Cloud，请稍后重试') from None
     if response.status_code >= 400:
         detail = response.json().get('detail','Cloud 请求失败') if response.headers.get('content-type','').startswith('application/json') else 'Cloud 请求失败'
