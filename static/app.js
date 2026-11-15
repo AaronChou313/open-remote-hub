@@ -74,7 +74,7 @@ async function overview(version){
   api('/system'),
   api('/remote-connect').catch(()=>({})),
   api('/remote-connect/lan').catch(()=>({})),
-  api('/remote-connect/proxy/manager').catch(()=>({}))
+  api('/proxy/manager').catch(()=>({}))
  ]);
  if(version!==renderVersion)return;
  const m=d.metrics,host=d.host;
@@ -88,7 +88,7 @@ async function overview(version){
  ];
  const metric=([label,n,unit,detail,pct,ic])=>`<div class="metric"><div class="metric-label">${label}<span>${icon(ic)}</span></div><div class="metric-value"${unit?'':' style="font-size:18px"'}>${n}${unit?' <small>'+unit+'</small>':''}</div>${pct==null?'':`<div class="meter"><i style="width:${Math.min(100,pct)}%"></i></div>`}<small>${detail}</small></div>`;
  const info=(title,value,detail)=>`<div class="metric"><div class="metric-label">${title}<span>${icon('network')}</span></div><div class="metric-value" style="font-size:20px">${value}</div><small>${detail}</small></div>`;
- $('#content').innerHTML=`<div class="host-strip"><span class="host-icon">${icon('server')}</span><div><strong>${esc(host.hostname)}</strong><small>${esc(host.system)} ${esc(host.version)} · ${esc(host.arch)} · ${host.cores} 核 CPU</small></div><div class="host-meta">${badge('running')}<br>已运行 ${uptime(Date.now()/1000-host.boot)}</div></div><div class="metrics">${cards.map(metric).join('')}</div><h2 class="section-title">网络</h2><div class="metrics">${info('组网',t.state==='Running'?'已连接':'未连接',(t.device?.addresses||[]).join(' · ')||'—')}${info('网络代理',proxy.running?'运行中':(proxy.managed?'已配置':'未启用'),proxy.address||'在「网络连接」中配置')}${info('局域网',(lan.interfaces||[]).length+' 个接口',(lan.devices||[]).length+' 台设备'+(lan.dns?.length?' · DNS '+lan.dns.join(' · '):''))}${info('网络吞吐',bytes(m.rx)+'/s','↑ '+bytes(m.tx)+'/s · ↓ 接收')}</div>`;
+ $('#content').innerHTML=`<div class="host-strip"><span class="host-icon">${icon('server')}</span><div><strong>${esc(host.hostname)}</strong><small>${esc(host.system)} ${esc(host.version)} · ${esc(host.arch)} · ${host.cores} 核 CPU</small></div><div class="host-meta">${badge('running')}<br>已运行 ${uptime(Date.now()/1000-host.boot)}</div></div><div class="metrics">${cards.map(metric).join('')}</div><h2 class="section-title">网络</h2><div class="metrics">${info('组网',t.state==='Running'?'已连接':'未连接',(t.device?.addresses||[]).join(' · ')||'—')}${info('网络代理',proxy.engine?.ready?'运行中':(proxy.managed?'已配置':'未启用'),proxy.engine?.enabled?'系统代理已接管':'在「网络连接」中配置')}${info('局域网',(lan.interfaces||[]).length+' 个接口',(lan.devices||[]).length+' 台设备'+(lan.dns?.length?' · DNS '+lan.dns.join(' · '):''))}${info('网络吞吐',bytes(m.rx)+'/s','↑ '+bytes(m.tx)+'/s · ↓ 接收')}</div>`;
  $('#updated').textContent='采样于 '+new Date(m.time*1000).toLocaleTimeString();
  if(d.error)throw Error(d.error);
 }
