@@ -109,9 +109,9 @@ async function loadAuth() {
   const bound = Boolean(status.cloud?.bound);
   $('#cloudLogin').hidden = !bound;
   $('#cloudBlock').hidden = bound;
-  showLocalFields(bound);
-  if (bound) $('#loginHelp').textContent = '此设备使用已绑定的 Cloud 账号登录。';
-  else $('#loginHelp').textContent = '使用 Cloud 账号登录，本机会自动注册并接入组网。';
+  showLocalFields(false);
+  if (bound) $('#loginHelp').textContent = '此设备使用已绑定的 ORH 账号登录。';
+  else $('#loginHelp').textContent = '使用 ORH 账号登录，本机会自动注册并接入组网。';
  } catch (error) {$('#loginError').textContent=error.message;}
 }
 function showLocalFields(show){
@@ -143,11 +143,6 @@ async function enter() {
   else showError(error);
  }
 }
-$('#cloudLocalFallback').onclick = event => {
- event.preventDefault();
- $('#cloudBlock').hidden = true;
- showLocalFields(true);
-};
 $('#cloudLoginSubmit').onclick = async () => {
  const button = $('#cloudLoginSubmit');
  button.disabled = true; $('#loginError').textContent = '';

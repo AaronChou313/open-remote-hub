@@ -157,15 +157,15 @@ public final class MainActivity extends Activity {
         return input;
     }
     private void buildLoginCard() {
-        binding.addView(text("登录 Cloud 账号", 20, true));
-        binding.addView(muted("登录后自动注册这台设备并接入组网，不再需要绑定码。"));
-        cloudAddress = field("Cloud 服务地址", false);
+        binding.addView(text("登录 ORH 账号", 20, true));
+        binding.addView(muted("登录后自动注册这台设备并接入组网。"));
+        cloudAddress = field("ORH 服务地址", false);
         cloudAddress.setText("https://cloud.openremotehub.top");
         cloudUser = field("账号", false);
         cloudPassword = field("密码", true);
         binding.addView(cloudAddress); binding.addView(cloudUser); binding.addView(cloudPassword);
         LinearLayout row = new LinearLayout(this);
-        cloudLoginButton = primary("登录并绑定", () -> {});
+        cloudLoginButton = primary("登录并注册", () -> {});
         cloudLoginButton.setOnClickListener(view -> loginCloud());
         row.addView(cloudLoginButton);
         row.addView(secondary("注册账号", () -> {
@@ -392,7 +392,7 @@ public final class MainActivity extends Activity {
         powerNotice.setVisibility(backgroundAllowed()?View.GONE:View.VISIBLE);
         JSONObject cloud=self.optJSONObject("cloud");
         boolean bound=cloud!=null&&cloud.optBoolean("bound");
-        if (bound&&!boundBefore) info("已绑定 Cloud 账号");
+        if (bound&&!boundBefore) info("已绑定 ORH 账号");
         boundBefore=bound;
         binding.setVisibility(bound?View.GONE:View.VISIBLE);
         if (cloud!=null&&!cloud.optString("error").isEmpty()) info(cloud.optString("error"));
