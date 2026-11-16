@@ -123,6 +123,9 @@ def install_files():
             pass
         addresses = {ip for ip in addresses if not ip.startswith('127.') and ip != '0.0.0.0'}
         env.write_text('ORH_HOST=127.0.0.1\nORH_PORT=8765\nORH_ALLOWED_HOSTS=' + ','.join(sorted(addresses)) + '\nORH_FILE_ROOTS=' + json.dumps([str(Path.home())], ensure_ascii=False) + '\nORH_DSH_ENABLED=0\n', encoding='utf-8')
+    elif 'ORH_FILE_ROOTS' not in {line.split('=', 1)[0].strip() for line in env.read_text(encoding='utf-8').splitlines() if '=' in line}:
+        with env.open('a', encoding='utf-8') as output:
+            output.write('\nORH_FILE_ROOTS=' + json.dumps([str(Path.home())], ensure_ascii=False) + '\n')
     stamp.write_text(version(), encoding='utf-8')
 
 

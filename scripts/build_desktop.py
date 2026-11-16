@@ -59,7 +59,7 @@ def main():
         (autostart/'openremotehub.desktop').write_text('[Desktop Entry]\nType=Application\nName=OpenRemoteHub background\nExec=/usr/bin/openremotehub --tray\nTerminal=false\nX-GNOME-Autostart-enabled=true\n')
         control = stage/'DEBIAN'
         control.mkdir()
-        (control/'control').write_text(f'Package: openremotehub\nVersion: {VERSION}\nArchitecture: {ARCH}\nMaintainer: OpenRemoteHub\nSection: net\nPriority: optional\nDepends: libnss3, libxkbcommon0, libxcb-cursor0, libasound2, libegl1, libgl1, libdbus-1-3, libxcomposite1, libxdamage1, libxrandr2, libxtst6, libxkbcommon-x11-0\nDescription: OpenRemoteHub desktop Client, Agent and private Mesh\n')
+        (control/'control').write_text(f'Package: openremotehub\nVersion: {VERSION}\nArchitecture: {ARCH}\nMaintainer: OpenRemoteHub\nSection: net\nPriority: optional\nDepends: libnss3, libxkbcommon0, libxcb-cursor0, libasound2, libegl1, libgl1, libdbus-1-3, libxcomposite1, libxdamage1, libxrandr2, libxtst6, libxkbcommon-x11-0, libxcb-icccm4, libxcb-keysyms1, libxcb-shape0, libglib2.0-0, libfontconfig1\nDescription: OpenRemoteHub desktop Client, Agent and private Mesh\n')
         run('dpkg-deb', '--build', '--root-owner-group', stage, DIST/f'OpenRemoteHub-{VERSION}-linux-{ARCH}.deb')
     else:
         raise SystemExit('Use windows/build.ps1 on Windows')
