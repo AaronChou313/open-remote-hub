@@ -11,7 +11,7 @@
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.detail || '登录失败，请重试。');
-    location.replace('/' + (context.has('client') || context.has('android_client') ? '?' + context.toString() + '#overview' : ''));
+    location.replace(context.has('client_entry') ? '/client' : '/' + (context.has('client') || context.has('android_client') ? '?' + context.toString() + '#overview' : ''));
   } catch (error) {
     document.querySelector('#cloudMessage').textContent = error.message;
     document.querySelector('#cloudRetry').hidden = false;

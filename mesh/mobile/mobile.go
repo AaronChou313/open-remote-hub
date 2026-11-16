@@ -15,6 +15,7 @@ import (
 
 var mu sync.Mutex
 var running *agentapp.App
+var version = "development"
 
 func Start(directory, hostname string) error {
 	mu.Lock()
@@ -41,7 +42,7 @@ func Start(directory, hostname string) error {
 			return err
 		}
 	}
-	app, err := agentapp.Start(path, "0.6.0", "", "", false)
+	app, err := agentapp.Start(path, version, "", "", false)
 	if err != nil {
 		return err
 	}

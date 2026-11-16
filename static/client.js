@@ -151,7 +151,7 @@ document.querySelectorAll('[data-page]').forEach(button => button.onclick = () =
 });
 select('#clientRefresh').onclick = refreshDevices;
 select('#clientLogout').onclick = async () => {
-  try { await request('/logout', {}); await showLogin(); }
+  try { await request('/auth/client/logout', {}); await showLogin(); }
   catch (error) { select('#clientError').textContent = error.message; select('#clientError').hidden = false; }
 };
 setInterval(() => { if (!document.hidden && !select('#clientShell').hidden) refreshDevices(); }, 15000);

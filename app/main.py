@@ -280,6 +280,15 @@ def logout(request:Request):
     access.revoke(request.cookies.get('orh',''))
     r=JSONResponse({'ok':True});r.delete_cookie('orh');return r
 
+
+@app.post('/api/auth/client/logout')
+def client_logout(request: Request):
+    with cloud_agent.lock:
+        current = cloud_agent.binding()
+        if current:
+            cloud_agent.save(dict(current, account_token='', token_expires=0))
+    return logout(request)
+
 @app.get('/api/me')
 def me(request:Request): return {'role':request.state.role,'device_id':discovery.identity()['instance_id'],'host':host.info(),'zellij_port':ZPORT,'cloud':cloud_agent.status()}
 
