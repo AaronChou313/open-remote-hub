@@ -70,6 +70,23 @@ def test_linux_upgrade_restarts_existing_user_service(monkeypatch):
     assert calls == [['systemctl', '--user', 'restart', 'openremotehub.service']]
 
 
+def test_installer_gives_legacy_windows_config_its_default_file_root(tmp_path, monkeypatch):
+    bundle = tmp_path / 'bundle'
+    bundle.mkdir()
+    (bundle / 'VERSION').write_text('0.6.2')
+    app = tmp_path / 'installed'
+    app.mkdir()
+    env = app / '.env'
+    env.write_text('ORH_PORT=8765\nORH_DSH_ENABLED=0\n')
+    monkeypatch.setattr(launcher, 'BUNDLE', bundle)
+    monkeypatch.setattr(launcher, 'APP', app)
+    launcher.install_files()
+    assert 'ORH_FILE_ROOTS=' + json.dumps([str(Path.home())], ensure_ascii=False) in env.read_text()
+    env.write_text('ORH_FILE_ROOTS=[]\n')
+    launcher.install_files()
+    assert env.read_text() == 'ORH_FILE_ROOTS=[]\n'
+
+
 @pytest.fixture
 def directory(monkeypatch, workspace):
     rows = [dict(instance_id=LOCAL, name='Mac', os='Darwin', online=True),
