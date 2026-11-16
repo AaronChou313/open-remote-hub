@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         if: runner.os == 'Linux'
       - name: Select portable Linux TLS runtime
         if: runner.os == 'Linux'
