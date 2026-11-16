@@ -16,8 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        if: runner.os != 'macOS'
         with:
           python-version: '3.12'
+      - name: Select current macOS TLS runtime
+        if: runner.os == 'macOS'
+        run: |
+          brew install python@3.14
+          "$(brew --prefix python@3.14)/bin/python3.14" -m venv .build-venv
+          echo "$PWD/.build-venv/bin" >> "$GITHUB_PATH"
+      - name: Report packaged TLS runtime
+        run: python -c "import ssl; print(ssl.OPENSSL_VERSION)"
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.4'
