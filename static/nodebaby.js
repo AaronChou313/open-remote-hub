@@ -10,13 +10,14 @@ window.RemoteHubNodeBaby = (() => {
 
   function markup() {
     return `<section id="rcNodeBaby" hidden>
-      <div class="rc-tail-toolbar"><div class="rc-tail-actions">
+      <div class="rc-tail-toolbar"><div class="rc-tail-actions"><span id="nbState" class="badge">—</span>
         <button id="nbOpen" disabled>${icon("external")}在主机打开客户端</button>
         <button id="nbCheckAll">${icon("diagnose")}全部检测</button><label class="rc-online-filter"><input type="checkbox" id="nbAutoCheck" checked>自动检测</label>
         <button id="nbRefresh">${icon("refresh")}刷新状态</button>
       </div><a class="button" href="https://yc.iepose.com/" target="_blank" rel="noopener">节点小宝管理后台 ${icon("external")}</a></div>
       <p id="nbError" class="rc-error" role="alert" hidden></p>
       <dl class="rc-tail-identity rc-node-identity">
+        <div><dt>组网地址</dt><dd id="nbAddress">—</dd></div>
         <div><dt>服务版本</dt><dd id="nbVersion">—</dd></div>
         <div><dt>虚拟网卡</dt><dd id="nbTun">—</dd></div>
         <div><dt>后台进程</dt><dd id="nbPid">—</dd></div>
@@ -65,7 +66,6 @@ window.RemoteHubNodeBaby = (() => {
     const preferred = state.addresses.find((address) => address === location.hostname)
       || state.addresses.find((address) => address.startsWith("10.")) || state.addresses[0];
     $("#nbAddress").textContent = preferred || "—";
-    $("#nbSummary").textContent = `${state.mappings.length} 条原生映射`;
     $("#nbVersion").textContent = state.version || "—";
     $("#nbTun").textContent = state.ready ? (state.tun_ready ? "已就绪" : "未就绪") : "—";
     $("#nbPid").textContent = state.pid ? `PID ${state.pid}` : "—";

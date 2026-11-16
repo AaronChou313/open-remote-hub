@@ -13,17 +13,21 @@ function element(){
 for(const id of ['#content','#updated','#outputDialog','#confirmDialog'])nodes.set(id,element());
 const document={hidden:false,querySelector:s=>nodes.get(s)||null,querySelectorAll:()=>[]};
 const ctx=vm.createContext({window:{addEventListener(){},scrollTo(){}},document,Date,JSON,Object,Promise,
- setInterval(){},setTimeout(){},icon:()=>'',esc:String,empty:String,me:{role:'admin'},
+ location:{hostname:'localhost'},Set,setInterval(){},setTimeout(){},bytes:String,table:()=>'',icon:()=>'',esc:String,empty:String,me:{role:'admin'},
  showError:error=>errors.push(error.message),notify(){},confirmAction:async()=>true,withBusy:async(b,k,l,work)=>work(),
- RemoteHubLAN:{markup:()=>'<section id="rcLAN"></section>',mount(){},refresh:async()=>{lanRefreshes++}},
- RemoteHubNodeBaby:{markup:()=>'<section id="rcNodeBaby"></section>',mount(){},update(){}},
  RemoteHubProxyManager:{canLeave:async()=>true},
  RemoteHubProxy:{render:async(check,target)=>{assert.equal(check(),true);assert.equal(target,'#rcNetworkProxy');proxyRenders++}},
  api:async path=>{
-  calls.push(path);assert.equal(path,'/remote-connect');
-  return {rustdesk:{ready:false,processes:[],connections:0},tailscale:{available:true,reachable:true,state:'Running',peers:[],device:{addresses:[]},health:[]},mesh:{available:true},lan_urls:[]};
+  calls.push(path);
+  if(path==='/remote-connect/lan'){lanRefreshes++;return {interfaces:[],devices:[],gateways:[],dns:[],warnings:[]}}
+  assert.equal(path,'/remote-connect');
+  return {rustdesk:{ready:false,processes:[],connections:0},tailscale:{available:true,reachable:true,state:'Running',peers:[],device:{addresses:[]},health:[]},mesh:{available:true},nodebaby:{available:false,addresses:[],mappings:[]},lan_urls:[]};
  }});
-vm.runInContext(fs.readFileSync('static/remote-connect.js','utf8'),ctx);
+for(const file of ['lan','nodebaby','remote-connect']){
+ vm.runInContext(fs.readFileSync('static/'+file+'.js','utf8'),ctx);
+ if(file==='lan')ctx.RemoteHubLAN=ctx.window.RemoteHubLAN;
+ if(file==='nodebaby')ctx.RemoteHubNodeBaby=ctx.window.RemoteHubNodeBaby;
+}
 const view=ctx.window.RemoteHubRemoteConnect;
 await view.render(()=>true);
 assert.equal(lanRefreshes,1);
