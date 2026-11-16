@@ -42,3 +42,32 @@ await ctx.RemoteHubLAN.render(()=>true);
 assert.equal(lanRefreshes,1);
 assert.deepEqual(errors,[]);
 console.log('RustDesk and LAN render independently without unrelated module requests.');
+
+// In-page links from backup settings and legacy URLs use the same navigation.
+const appSource=fs.readFileSync('static/app.js','utf8');
+const routing=appSource.slice(appSource.indexOf("window.addEventListener?.('hashchange'"),appSource.indexOf("\n$('#cloudRegister')",appSource.indexOf("window.addEventListener?.('hashchange'")));
+let hashHandler,openedView;
+const routeLocation={hash:''};
+const routeContext=vm.createContext({window:{addEventListener:(name,handler)=>{hashHandler=handler}},location:routeLocation,
+ titles:{lan:'LAN',nodebaby:'NodeBaby',proxy:'Proxy',desktop:'Desktop',mesh:'Mesh'},$:()=>({hidden:false}),switchView:async target=>{openedView=target}});
+vm.runInContext(routing,routeContext);
+for(const [hash,target] of [['#lan','lan'],['#nodebaby','nodebaby'],['#proxy','proxy'],['#desktop','desktop'],['#network','mesh'],['#remote','lan']]){
+ routeLocation.hash=hash;await hashHandler();assert.equal(openedView,target);
+}
+console.log('Backup-settings links and legacy module routes open the correct standalone page.');
+
+// Enabled Mihomo can reach its built-in installer before a broker exists.
+const navigationSource=appSource.slice(appSource.indexOf('async function switchView(target)'),appSource.indexOf('function showLogin()'));
+const navigationNodes=new Map();
+const navigation=vm.createContext({window:{scrollTo(){}},document:{body:{dataset:{}},querySelectorAll:()=>[]},
+ view:'overview',caps:{proxy:false,enabled_modules:['proxy']},VIEW_CAP:{proxy:'proxy'},titles:{proxy:'Proxy',modules:'Modules'},
+ me:{host:{system:'Darwin',hostname:'QA'}},renderVersion:0,busy:false,localStorage:{setItem(){}},empty:String,
+ $:selector=>{if(!navigationNodes.has(selector))navigationNodes.set(selector,{dataset:{}});return navigationNodes.get(selector)},
+ notify(){},refresh(){}});
+vm.runInContext(navigationSource,navigation);
+await vm.runInContext("switchView('proxy')",navigation);
+assert.equal(navigation.view,'proxy');
+navigation.view='overview';navigation.caps.enabled_modules=[];
+await vm.runInContext("switchView('proxy')",navigation);
+assert.equal(navigation.view,'modules');
+console.log('Enabled proxy reaches first-use installation, and disabled proxy opens module management.');

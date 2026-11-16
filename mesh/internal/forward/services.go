@@ -18,6 +18,9 @@ import (
 
 // openService runs on the viewing device, beside its per-device console gateway.
 func (m *Manager) openService(w http.ResponseWriter, r *http.Request, ip, device string, target *url.URL, client *http.Client) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	fail := func(code int, message string) {

@@ -43,7 +43,7 @@ async function switchView(target){
  if(target==='remote')target='lan';
  if(view!==target&&window.RemoteHubMesh&&!await RemoteHubMesh.canLeave())return;
  if(view!==target&&window.RemoteHubAgentSettings&&!await RemoteHubAgentSettings.canLeave())return;
- if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false){notify('请在功能管理中启用或检查依赖');target='modules'}
+ if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false&&!(target==='proxy'&&caps.enabled_modules?.includes('proxy'))){notify('请在功能管理中启用或检查依赖');target='modules'}
  document.body.dataset.module=target;
  document.body.dataset.platform=me?.host?.system==='Windows'?'windows':'unix';
  if(target==='tasks')target='services';
@@ -226,13 +226,9 @@ window.addEventListener?.('beforeunload',e=>{if(window.RemoteHubSSH?.isDirty()||
 enter();
 
 window.addEventListener?.('hashchange',async()=>{
- const target={'#network':'remote','#remote':'remote','#proxy':'proxy'}[location.hash];
- if(!target||$('#shell').hidden)return;
- if(view==='remote'){
-  if(!await RemoteHubRemoteConnect.canLeave())return;
-  if(!await RemoteHubProxyManager.canLeave())return;
- }
- switchView(target);
+ const target={'#network':'mesh','#remote':'lan'}[location.hash]||location.hash.slice(1);
+ if(!titles[target]||$('#shell').hidden)return;
+ await switchView(target);
 });
 
 $('#cloudRegister').onclick = () => { if (!$('#cloudBlock').hidden) $('#cloudRegister').href = $('#cloudServer').value.trim().replace(/\/+$/, '') + '/#register'; };

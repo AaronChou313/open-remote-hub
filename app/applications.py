@@ -133,7 +133,10 @@ async def tunnel(ws: WebSocket, key: str):
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         writer.close()
-        await writer.wait_closed()
+        try:
+            await writer.wait_closed()
+        except OSError:
+            pass
         try:
             await ws.close()
         except (RuntimeError, WebSocketDisconnect):

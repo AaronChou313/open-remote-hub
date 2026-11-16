@@ -330,6 +330,7 @@ window.RemoteHubRemoteConnect = (() => {
               <dl class="rd-facts"><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
               <a id="rcConnectHere" class="button rd-open-client" href="#">${icon("external")}在当前设备的 RustDesk 中打开</a>
             </div>
+            <p class="muted small">当前设备需先<a href="https://rustdesk.com/download" target="_blank" rel="noopener">安装 RustDesk</a>。被控 Mac 还需在系统设置中授权屏幕录制和辅助功能。</p>
             <div class="rd-runtime">
               <div class="rd-runtime-heading"><h3>运行管理</h3><button id="rcOpenNative" class="text-button">在主机打开客户端 ${icon("external")}</button></div>
               <div class="rd-runtime-controls">
