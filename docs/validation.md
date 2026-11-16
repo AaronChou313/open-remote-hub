@@ -10,6 +10,8 @@ Windows 安装包构建后执行实际 Agent，检查新安装默认关闭模块
 
 本机已安装 macOS 应用并使用用户 LaunchAgent，沿用原有设备身份与账号绑定。原生窗口显示同账号 Mac 和 Windows，读取本机系统指标和模块状态。早期原生窗口已验证 Zellij 输入、子窗口关闭和重新接入，关闭全部界面后 Agent 与 Mesh 仍继续运行。
 
+最终 0.6.5 在 Windows 实机完成安装升级。实际打包进程创建原生 WebView，使用保存的账号进入设备目录，随后关闭测试窗口。通过 Mesh 验证 ConPTY 命令、尺寸变化、会话重连、文件上传、Range 下载和回收恢复，显式停止后台后确认打包 Mesh 退出并重新启动。反向由 Windows 的打包运行时连接 Mac，读取系统信息并启动、停止、重启专门创建的 Docker 测试容器。测试容器、辅助脚本、临时安装文件及测试任务已清理。
+
 Android 35 ARM64 模拟器使用正式签名 APK，实际接入同一账号 Mesh，连接安装版 Mac Agent。通过目标 Ticket、系统 API、终端真实输入输出、关闭 WebSocket 后重新接入、文件上传、Range 下载和回收恢复。正常网络记录为 P2P 直连。临时关闭目标直连传输后，同一组终端与文件测试在 DERP 中继路径重复通过，随后恢复正常组网配置。测试会话和测试文件已清理。
 
 Cloud 元数据更新已部署，HTTPS 健康接口成功，Headscale 正常运行。设备备注、手动地址及 `controller-only` 由对应 API 测试覆盖。
@@ -20,4 +22,4 @@ macOS 的自启、桌面连接、文件传输全部使用 LaunchServices。回�
 
 ## 平台范围
 
-CI 验证对应操作系统上的实际程序执行。Android 真实手机/平板的厂商后台策略、不同运营商网络的稳定性、屏幕录制和辅助功能权限、登录前桌面访问依赖具体设备与系统设置。macOS 包尚未获得 Apple 开发者公证，Windows 包尚无 Authenticode 证书。
+CI 验证对应操作系统上的实际程序执行。macOS 包要求 macOS 15 及以上，Linux DEB 面向 Ubuntu 22.04 / Debian 12 及以上。Android 真实手机/平板的厂商后台策略、不同运营商网络的稳定性、屏幕录制和辅助功能权限、登录前桌面访问依赖具体设备与系统设置。macOS 包尚未获得 Apple 开发者公证，Windows 包尚无 Authenticode 证书。
