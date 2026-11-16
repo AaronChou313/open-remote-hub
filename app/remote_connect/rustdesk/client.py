@@ -3,6 +3,7 @@ import os
 import plistlib
 import re
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -50,6 +51,17 @@ def processes():
     return result
 
 
+def launch(*arguments):
+    argv = [str(BINARY), *arguments]
+    if sys.platform == 'darwin':
+        bundle = next((parent for parent in BINARY.parents if parent.suffix.lower() == '.app'), BINARY)
+        # LaunchServices assigns screen-capture permission to RustDesk itself.
+        argv = ['/usr/bin/open', '-n', '-a', str(bundle), '--args', *arguments]
+    with (data_dir() / 'rustdesk.log').open('ab') as output:
+        subprocess.Popen(argv, stdout=output, stderr=output,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
+
+
 def start():
     with lock:
         try:
@@ -60,16 +72,15 @@ def start():
                 raise NativeError('RustDesk 进程已存在，本机接口尚未就绪，请稍后刷新')
         if not BINARY.is_file():
             raise NativeError('未找到已安装的 RustDesk 客户端')
-        with (data_dir() / 'rustdesk.log').open('ab') as output:
-            subprocess.Popen([str(BINARY), '--server'], stdout=output, stderr=output,
-                             stdin=subprocess.DEVNULL, start_new_session=True)
+        launch('--server')
         return dict(reused=False)
 
 
 def watch(stop):
     while not stop.wait(5):
         try:
-            if autostart():
+            from app.modules import enabled
+            if enabled('desktop') and autostart():
                 start()
         except (NativeError, OSError):
             # A live GUI may be starting. Its PID remains authoritative and the
@@ -197,7 +208,5 @@ def connect(value, mode):
     if mode not in ('desktop', 'files'):
         raise ValueError('请选择桌面连接或文件传输')
     flag = '--connect' if mode == 'desktop' else '--file-transfer'
-    with (data_dir() / 'rustdesk.log').open('ab') as output:
-        subprocess.Popen([str(BINARY), flag, value], stdout=output, stderr=output,
-                         stdin=subprocess.DEVNULL, start_new_session=True)
+    launch(flag, value)
     return dict(target=value, location='host', mode=mode)

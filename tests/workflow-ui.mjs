@@ -45,18 +45,11 @@ await run("withBusy(document.querySelector('#iconBusy'),'icon:busy','启动中�
 assert.match(node('#iconBusy').innerHTML,/icons.svg#play/,'Busy state restores SVG markup');
 console.log('Workflow UI: start, destructive confirmation, direct terminal entry, saved-session links, local-services navigation, duplicate protection passed.');
 
-node('#newPassword').value='1';node('#newPasswordConfirm').value='1';
-await node('#passwordForm').onsubmit({preventDefault(){}});
-assert.equal(run('calls.at(-1).p'),'/auth/password');
-assert.deepEqual(JSON.parse(run('JSON.stringify(calls.at(-1).b)')),{password:'1'});
 const passwordMarkup=fs.readFileSync('static/index.html','utf8');
-for(const id of ['password','passwordConfirm','newPassword','newPasswordConfirm']){
-  const input=passwordMarkup.match(new RegExp('<input[^>]*id="'+id+'"[^>]*>'))?.[0];
-  assert.ok(input);
-  assert.doesNotMatch(input,/minlength|maxlength|required/,'password input has no length constraint');
-}
-assert.doesNotMatch(passwordMarkup,/id="currentPassword"/);
-console.log('Password form uses current admin session and accepts unrestricted passwords.');
+assert.match(passwordMarkup,/id="cloudUser"/);
+assert.match(passwordMarkup,/id="cloudPassword"/);
+assert.match(passwordMarkup,/data-view="modules"/);
+console.log('Cloud account login and optional module management are available.');
 
 node('#sidebarToggle').onclick();
 assert.equal(node('body').classList.contains('sidebar-collapsed'),true);

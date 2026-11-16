@@ -40,7 +40,9 @@ def state():
 def save(value):
     with lock:
         previous = state()
-        if previous != value and ('bound' in (previous.get('status'),value.get('status'))):
+        identity_keys = ('status', 'cloud_url', 'owner_id', 'credential', 'instance_id')
+        changed_identity = any(previous.get(key) != value.get(key) for key in identity_keys)
+        if changed_identity and ('bound' in (previous.get('status'),value.get('status'))):
             from app import access
             access.revoke_all()
         path = state_path()
@@ -102,7 +104,7 @@ def call(base, path, body, credential=None):
     return response.json()
 
 
-def directory():
+def directory(strict=False):
     """Cloud device directory for this account, or [] when unavailable."""
     value = binding()
     if not value:
@@ -111,8 +113,14 @@ def directory():
         with http_client(8) as client:
             response = client.get(value['cloud_url'] + '/agent/directory',
                                   headers={'Authorization': 'Bearer ' + value['credential']})
-        return response.json() if response.status_code == 200 else []
+        if response.status_code == 200:
+            return response.json()
+        if strict:
+            raise HTTPException(response.status_code, 'Cloud 设备目录读取失败，请检查账号登录状态')
+        return []
     except (httpx.HTTPError, ValueError):
+        if strict:
+            raise HTTPException(503, 'Cloud 不可达，请检查网络后刷新设备列表') from None
         return []
 
 
@@ -181,16 +189,20 @@ def enroll(base, username, password):
     return dict(instance_id=result['instance_id'],username=user.get('username'),cloud_url=base)
 
 
-def ticket(device_id,address):
+def ticket(device_id,address,strict=False):
     """Short-lived console ticket for another device, using the account session."""
     value=binding()
     token=value.get('account_token') if value else None
     if not value or not token or float(value.get('token_expires') or 0)<=time.time():
+        if strict:
+            raise HTTPException(401, '账号会话已过期，请在本机重新登录 ORH 后连接')
         return None
     try:
         return call(value['cloud_url'],f'/api/devices/{device_id}/ticket',
                     {'address':address,'state':''},token).get('url')
     except (HTTPException,ValueError,OSError):
+        if strict:
+            raise
         return None
 
 
@@ -229,7 +241,8 @@ def synchronize():
         last_error = ''
         from app.remote_connect import tailscale
         try:
-            tailscale.request('/cloud/adopt',dict(base_url=value['cloud_url'],device_id=value['instance_id'],device_token=value['credential'],console_port=main.PORT,gateway_port=int(os.environ.get('ORH_DSH_GATEWAY_PORT','8767'))))
+            from app.modules import status as module_status
+            tailscale.request('/cloud/adopt',dict(base_url=value['cloud_url'],device_id=value['instance_id'],device_token=value['credential'],console_port=main.PORT,gateway_port=int(os.environ.get('ORH_DSH_GATEWAY_PORT','8767')),desktop_enabled=module_status('desktop')['state']=='ready'))
             mesh_error = ''
         except tailscale.TailscaleError as error:
             mesh_error = str(error)

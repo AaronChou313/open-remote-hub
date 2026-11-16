@@ -31,7 +31,11 @@ func (s *Server) metadata() map[string]any {
 	s.cloudMu.RLock()
 	cfg := s.Config
 	s.cloudMu.RUnlock()
-	return map[string]any{"instance_id": cfg.Cloud.DeviceID, "name": cfg.Hostname, "os": runtime.GOOS, "addresses": []string{}, "port": 4789, "kind": "orn"}
+	kind := "mesh"
+	if runtime.GOOS == "android" {
+		kind = "controller-only"
+	}
+	return map[string]any{"instance_id": cfg.Cloud.DeviceID, "name": cfg.Hostname, "os": runtime.GOOS, "addresses": []string{}, "port": 4789, "kind": kind}
 }
 func (s *Server) cloudBind(w http.ResponseWriter, r *http.Request) {
 	s.syncMu.Lock()
@@ -257,11 +261,12 @@ func (s *Server) cloudAdopt(w http.ResponseWriter, r *http.Request) {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
 	var input struct {
-		BaseURL     string `json:"base_url"`
-		DeviceID    string `json:"device_id"`
-		DeviceToken string `json:"device_token"`
-		ConsolePort int    `json:"console_port"`
-		GatewayPort int    `json:"gateway_port"`
+		BaseURL        string `json:"base_url"`
+		DeviceID       string `json:"device_id"`
+		DeviceToken    string `json:"device_token"`
+		ConsolePort    int    `json:"console_port"`
+		GatewayPort    int    `json:"gateway_port"`
+		DesktopEnabled *bool  `json:"desktop_enabled,omitempty"`
 	}
 	if err := body(w, r, &input); err != nil {
 		fail(w, 400, err)
@@ -319,6 +324,13 @@ func (s *Server) cloudAdopt(w http.ResponseWriter, r *http.Request) {
 	if input.GatewayPort > 0 {
 		publish[8767] = fmt.Sprintf("127.0.0.1:%d", input.GatewayPort)
 	}
+	if input.DesktopEnabled != nil {
+		if *input.DesktopEnabled {
+			publish[21118] = "127.0.0.1:21118"
+		} else {
+			delete(publish, 21118)
+		}
+	}
 	s.Config.Publish = publish
 	err = state.Save(s.ConfigPath, s.Config)
 	s.cloudMu.Unlock()
@@ -356,10 +368,6 @@ func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
 	s.cloudMu.RLock()
 	bound, deviceID, hostname := s.Config.Cloud.Bound, s.Config.Cloud.DeviceID, s.Config.Hostname
 	s.cloudMu.RUnlock()
-	if bound {
-		fail(w, 409, fmt.Errorf("设备已经绑定，请先在 Cloud 设备目录解绑"))
-		return
-	}
 	var login struct {
 		Token string `json:"token"`
 		User  struct {
@@ -375,6 +383,32 @@ func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, 502, fmt.Errorf("Cloud 登录响应无效"))
 		return
 	}
+	if bound {
+		s.cloudMu.RLock()
+		currentBase := s.Config.Cloud.BaseURL
+		s.cloudMu.RUnlock()
+		var directory []map[string]any
+		if currentBase != base {
+			fail(w, 409, fmt.Errorf("请使用已绑定的 Cloud 服务登录"))
+			return
+		}
+		if err = cloudclient.Call(r.Context(), base, "/api/devices", login.Token, nil, &directory); err != nil {
+			fail(w, 503, err)
+			return
+		}
+		owned := false
+		for _, device := range directory {
+			if device["instance_id"] == deviceID {
+				owned = true
+			}
+		}
+		if !owned {
+			fail(w, 403, fmt.Errorf("请使用此设备所属的账号登录"))
+			return
+		}
+		reply(w, map[string]any{"ok": true, "instance_id": deviceID, "username": login.User.Username, "cloud_url": base, "account_token": login.Token})
+		return
+	}
 	if deviceID == "" {
 		var id [16]byte
 		rand.Read(id[:])
@@ -384,6 +418,9 @@ func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
 		deviceID = value[:8] + "-" + value[8:12] + "-" + value[12:16] + "-" + value[16:20] + "-" + value[20:]
 	}
 	metadata := map[string]any{"kind": "mesh", "instance_id": deviceID, "name": hostname, "os": runtime.GOOS, "addresses": []string{}, "port": 4789}
+	if runtime.GOOS == "android" {
+		metadata["kind"] = "controller-only"
+	}
 	var enrolled struct {
 		DeviceToken string `json:"device_token"`
 	}

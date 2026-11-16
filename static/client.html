@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>OpenRemoteHub · 我的设备</title>
+  <link rel="icon" href="/static/orh-logo.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/client.css">
+  <link rel="stylesheet" href="/static/theme.css">
+  <script defer src="/static/client.js"></script>
+</head>
+<body class="client-page">
+  <section id="clientLogin" class="login" hidden>
+    <form id="clientLoginForm">
+      <div class="brandmark"><img src="/static/orh-logo.png" alt=""></div>
+      <h1>OpenRemoteHub</h1>
+      <p>登录后连接你的电脑。</p>
+      <label for="clientCloud">ORH 服务地址</label>
+      <input id="clientCloud" type="url" value="https://cloud.openremotehub.top" required>
+      <label for="clientUser">ORH 账号</label>
+      <input id="clientUser" autocomplete="username" required>
+      <label for="clientPassword">密码</label>
+      <input id="clientPassword" type="password" autocomplete="current-password" required>
+      <button id="clientSignIn" class="primary" type="submit">登录</button>
+      <p id="clientLoginError" role="alert"></p>
+    </form>
+  </section>
+  <div id="clientShell" hidden>
+    <header class="client-header">
+      <a class="brand" href="/client"><span class="brandmark"><img src="/static/orh-logo.png" alt=""></span><span>OpenRemoteHub</span></a>
+      <nav aria-label="客户端导航">
+        <button type="button" data-page="devices" aria-current="page"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg><span>我的设备</span></button>
+        <button type="button" data-page="diagnostics"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#network"></use></svg><span>连接诊断</span></button>
+        <button type="button" data-page="settings"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#settings-2"></use></svg><span>设置与账号</span></button>
+      </nav>
+    </header>
+    <main class="client-main">
+      <div class="page-heading"><h1 id="clientTitle" tabindex="-1">我的设备</h1><button id="clientRefresh" type="button">刷新</button></div>
+      <p id="clientError" role="alert" hidden></p>
+      <p id="clientNotice" class="muted" role="status"></p>
+      <section id="clientDevices" aria-label="设备列表"></section>
+      <section id="clientDiagnostics" hidden>
+        <dl id="clientHealth" class="client-details"></dl>
+        <a id="clientMeshSettings" class="button" href="/#network">打开本机组网设置</a>
+      </section>
+      <section id="clientSettings" hidden>
+        <dl id="clientAccount" class="client-details"></dl>
+        <div class="toolbar"><button id="clientTheme" type="button">切换主题</button><a id="clientCloudAdmin" class="button" href="https://cloud.openremotehub.top/">账号与设备后台</a><button id="clientLogout" type="button">退出登录</button></div>
+        <p class="muted">关闭窗口后，后台 Agent、组网与现有任务继续运行。停止后台请使用托盘或菜单栏中的「停止后台并退出」。</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -10,6 +10,8 @@ from app import mesh_runtime
 
 @pytest.fixture(autouse=True)
 def clean_state(monkeypatch, tmp_path):
+    from app import modules
+    monkeypatch.setattr(modules, 'state_path', lambda: tmp_path / 'modules.json')
     monkeypatch.setattr(mesh_runtime, 'log_path', lambda: tmp_path / 'orn.log')
     monkeypatch.setattr(mesh_runtime, 'pid_path', lambda: tmp_path / 'orn.pid')
     monkeypatch.setattr(mesh_runtime, 'RESTARTS', 0)
@@ -51,7 +53,7 @@ def test_binary_and_config_from_environment(monkeypatch, tmp_path):
     path = tmp_path / 'orn' / 'config.json'
     value = json.loads(path.read_text())
     assert value['api_addr'] == '127.0.0.1:4789'
-    assert value['publish']['21118'] == '127.0.0.1:21118'
+    assert '21118' not in value['publish']
     assert value['publish']['8765'].startswith('127.0.0.1:')
     assert oct(path.stat().st_mode & 0o777) == '0o600'
     assert mesh_runtime.token_path() == tmp_path / 'orn' / 'api.token'

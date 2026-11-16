@@ -21,7 +21,10 @@ def run(argv,cwd_fd=None,timeout=8,limit=256*1024,extra_env=None):
     if cwd_fd is not None:
         # macOS /dev/fd/N cannot be chdir'ed. fchdir in a tiny isolated child
         # avoids unsafe preexec_fn in this multithreaded server.
-        argv=[sys.executable,'-I','-c','import os,sys;os.fchdir(int(sys.argv[1]));os.execvpe(sys.argv[2],sys.argv[2:],os.environ)',str(cwd_fd),*argv]
+        if getattr(sys, 'frozen', False):
+            argv=[sys.executable,'--cwd-exec',str(cwd_fd),*argv]
+        else:
+            argv=[sys.executable,'-I','-c','import os,sys;os.fchdir(int(sys.argv[1]));os.execvpe(sys.argv[2],sys.argv[2:],os.environ)',str(cwd_fd),*argv]
     try:
         p=subprocess.Popen(argv,pass_fds=(cwd_fd,) if cwd_fd is not None else (),env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
     except OSError as e:raise HTTPException(503,'工具不可用：'+str(e))

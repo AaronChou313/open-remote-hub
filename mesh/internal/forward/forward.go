@@ -56,13 +56,15 @@ type tunnel struct {
 	closed     bool
 }
 type Manager struct {
-	mu      sync.Mutex
-	dialer  Dialer
-	tunnels map[string]*tunnel
-	events  []Event
-	eventMu sync.Mutex
-	ctx     context.Context
-	cancel  context.CancelFunc
+	Frontend        string
+	FrontendGateway string
+	mu              sync.Mutex
+	dialer          Dialer
+	tunnels         map[string]*tunnel
+	events          []Event
+	eventMu         sync.Mutex
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 const eventLimit = 200

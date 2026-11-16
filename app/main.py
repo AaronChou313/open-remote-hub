@@ -22,9 +22,10 @@ from app.platforms import command, host, service_detail
 from app import access, passwords
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / '.runtime'
+DATA = Path(os.environ.get('ORH_DATA_DIR', ROOT / '.runtime'))
 DATA.mkdir(mode=0o700, exist_ok=True)
-for line in (ROOT / '.env').read_text().splitlines() if (ROOT / '.env').exists() else []:
+ENV_FILE = Path(os.environ.get('ORH_CONFIG_FILE', ROOT / '.env'))
+for line in ENV_FILE.read_text().splitlines() if ENV_FILE.exists() else []:
     if line and not line.startswith('#') and '=' in line:
         k,v = line.split('=',1)
         os.environ.setdefault(k.strip(), v.strip())
@@ -65,7 +66,7 @@ def save_tasks(tasks):
 def task_process(task):
     try:
         p=psutil.Process(task['pid'])
-        if abs(p.create_time()-task['created'])<0.01 and os.getpgid(p.pid)==p.pid and p.status()!=psutil.STATUS_ZOMBIE:
+        if abs(p.create_time()-task['created'])<0.01 and (WINDOWS_EDITION or os.getpgid(p.pid)==p.pid) and p.status()!=psutil.STATUS_ZOMBIE:
             return p
     except (KeyError, ProcessLookupError, psutil.Error):
         pass
@@ -121,6 +122,10 @@ def sample():
 stop_sampling=threading.Event()
 @asynccontextmanager
 async def lifespan(app):
+    from app import modules
+    modules.load()
+    if modules.enabled('dsh'):
+        os.environ['ORH_DSH_ENABLED'] = '1'
     with db() as c:
         c.execute('CREATE TABLE IF NOT EXISTS samples(time REAL PRIMARY KEY, data TEXT)')
     stop_sampling.clear()
@@ -154,7 +159,7 @@ async def security(request:Request, call_next):
         return JSONResponse({'detail':'Terminal origin required'},403)
     if not native and request.method not in ('GET','HEAD','OPTIONS') and request.headers.get('x-orh-request')!='1':
         return JSONResponse({'detail':'Missing CSRF header'},403)
-    if request.url.path.startswith('/api/') and request.url.path not in ('/api/login','/api/auth/status','/api/auth/setup','/api/auth/cloud/login'):
+    if request.url.path.startswith('/api/') and request.url.path not in ('/api/login','/api/auth/status','/api/auth/setup','/api/auth/cloud/login','/api/auth/client/login'):
         s=access.get(request.cookies.get('orh',''))
         if not s or s['expires']<time.time():
             if request.url.path in ('/api/me','/api/overview'):
@@ -163,9 +168,16 @@ async def security(request:Request, call_next):
         request.state.role=s['role']
         if request.method!='GET' and request.url.path!='/api/logout' and s['role']!='admin':
             return JSONResponse({'detail':'只读账户无操作权限'},403)
+    from app import modules
+    module = modules.for_path(request.url.path)
+    if module:
+        try:
+            modules.require(module)
+        except HTTPException as error:
+            return JSONResponse({'detail':error.detail}, error.status_code)
     response=await call_next(request)
     response.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'none'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
-    if request.url.path=='/' and os.environ.get('ORH_DSH_ENABLED')=='1':
+    if request.url.path=='/':
         from app.dsh import settings
         hostname=request.url.hostname
         gateway=f"{request.url.scheme}://{f'[{hostname}]' if ':' in hostname else hostname}:{settings()['gateway_port']}"
@@ -196,7 +208,7 @@ def login_response(request,expires=None):
 
 @app.get('/api/auth/status')
 def auth_status():
-    return {'needs_setup':not cloud_agent.binding() and passwords.record() is None,'cloud':{key:cloud_agent.status()[key] for key in ('bound','cloud_url')}}
+    return {'version':(ROOT/'VERSION').read_text().strip(),'needs_setup':not cloud_agent.binding() and passwords.record() is None,'cloud':{key:cloud_agent.status()[key] for key in ('bound','cloud_url')}}
 
 @app.post('/api/auth/setup')
 def setup(body:Login,request:Request):
@@ -236,6 +248,26 @@ def cloud_login(body: CloudLogin, request: Request):
     return login_response(request)
 
 
+@app.post('/api/auth/client/login')
+def client_login(body: CloudLogin, request: Request):
+    """Sign in within the Client, retaining the bound device's credential."""
+    current = cloud_agent.binding()
+    if not current:
+        return cloud_login(body, request)
+    throttle(request)
+    if body.cloud_url.rstrip('/') != current['cloud_url']:
+        raise HTTPException(409, '请使用此设备已绑定的 Cloud 服务登录')
+    result = cloud_agent.call(current['cloud_url'], '/api/login',
+                              {'username': body.username, 'password': body.password})
+    if (result.get('user') or {}).get('id') != current['owner_id']:
+        raise HTTPException(403, '请使用此设备所属的 ORH 账号登录')
+    with cloud_agent.lock:
+        if cloud_agent.binding() != current:
+            raise HTTPException(409, '设备绑定已变化，请重新登录')
+        cloud_agent.save(dict(current, account_token=result['token'], token_expires=result['expires']))
+    return login_response(request)
+
+
 @app.post('/api/auth/password')
 def change_password(body:Login,request:Request):
     if cloud_agent.binding():raise HTTPException(409,'Cloud 绑定模式请在 Cloud 管理账号')
@@ -249,7 +281,7 @@ def logout(request:Request):
     r=JSONResponse({'ok':True});r.delete_cookie('orh');return r
 
 @app.get('/api/me')
-def me(request:Request): return {'role':request.state.role,'host':host.info(),'zellij_port':ZPORT,'cloud':cloud_agent.status()}
+def me(request:Request): return {'role':request.state.role,'device_id':discovery.identity()['instance_id'],'host':host.info(),'zellij_port':ZPORT,'cloud':cloud_agent.status()}
 
 @app.get('/api/system')
 def system():
@@ -259,16 +291,11 @@ def system():
 
 @app.get('/api/capabilities')
 def capabilities():
-    import shutil as _shutil
+    from app import modules
     from app import mesh_runtime
-    from app.dsh import settings as dsh_settings
-    from app.remote_connect.rustdesk.settings import SOCKET
-    rustdesk = False
-    if not WINDOWS_EDITION:
-        rustdesk = SOCKET.exists() or bool(_shutil.which('rustdesk'))
-    return dict(docker=bool(_shutil.which('docker')), zellij=bool(_shutil.which('zellij')),
-                ssh=bool(_shutil.which('ssh')), rustdesk=rustdesk,
-                mesh=mesh_runtime.binary() is not None, dsh=bool(dsh_settings().get('enabled')))
+    values = {value['id']:value['state'] == 'ready' for value in modules.listing()['modules']}
+    return dict(values, zellij=values['terminal'], rustdesk=values['desktop'], mesh=mesh_runtime.binary() is not None)
+
 
 @app.get('/api/history')
 def history(hours:int=1):
@@ -363,6 +390,9 @@ def zname(name):
 
 @app.get('/api/zellij')
 def zellij_list():
+    if WINDOWS_EDITION:
+        from app.conpty import listing
+        return listing()
     from app.zellij_sessions import discover,host_sessions
     entries,warning=discover()
     live={s['name']:s for s in host_sessions() if s['status']=='running'}
@@ -373,7 +403,10 @@ def zellij_list():
 @app.post('/api/zellij/{name}')
 def zellij_action(name:str,body:Action):
     zname(name);confirmed(body,name)
-    from app.zellij_manage import mutate
+    if WINDOWS_EDITION:
+        from app.conpty import mutate
+    else:
+        from app.zellij_manage import mutate
     result=mutate(name,body.action,body.name)
     audit('zellij',name,body.action)
     return result
@@ -441,7 +474,11 @@ def task_action(key:str,body:Action):
             if body.action in ('stop','restart') and members:
                 t['members']=[dict(pid=x.pid,created=x.create_time()) for x in members]
                 save_tasks(tasks) # retain verified identities even if the leader exits first
-                if p:
+                if WINDOWS_EDITION:
+                    for member in reversed(members):
+                        try:member.terminate()
+                        except psutil.NoSuchProcess:pass
+                elif p:
                     try:os.killpg(p.pid,signal.SIGTERM)
                     except ProcessLookupError:pass
                 else:
@@ -474,25 +511,33 @@ def task_logs(key:str):
     with p.open('rb') as f:
         f.seek(max(0,p.stat().st_size-65536));return {'output':f.read().decode(errors='replace')}
 
-# Unix-only features stay hidden on the Windows edition instead of failing on click.
 WINDOWS_EDITION = os.name == 'nt'
-HIDDEN_ON_WINDOWS = ('zellij', 'ssh', 'files', 'dsh', 'projects', 'environments')
 
 
 @app.get('/')
 def index():
-    page = (ROOT / 'static' / 'index.html').read_text(encoding='utf-8')
-    if WINDOWS_EDITION:
-        rules = ''.join(f'[data-view="{view}"]{{display:none}}' for view in HIDDEN_ON_WINDOWS)
-        page = page.replace('</head>', f'<style>{rules}</style></head>')
-    return HTMLResponse(page)
+    return HTMLResponse((ROOT / 'static' / 'index.html').read_text(encoding='utf-8'))
+
+
+@app.get('/client')
+def client_index():
+    return HTMLResponse((ROOT / 'static' / 'client.html').read_text(encoding='utf-8'))
+
+
+from app.client import router as client_router
+app.include_router(client_router)
+from app.modules import router as modules_router
+app.include_router(modules_router)
 from app.dsh import router as dsh_router
 app.include_router(dsh_router)
 from app.environments import router as environments_router
 app.include_router(environments_router)
 from app.projects import router as projects_router
 app.include_router(projects_router)
-from app.files import router as files_router
+if WINDOWS_EDITION:
+    from app.windows_files import router as files_router
+else:
+    from app.files import router as files_router
 app.include_router(files_router)
 from app.knowledge import router as knowledge_router
 app.include_router(knowledge_router)
@@ -503,6 +548,8 @@ app.include_router(applications_router)
 from app.local_services import router as local_services_router
 app.include_router(local_services_router)
 from app.native_terminal import router as native_router
+from app.conpty import router as conpty_router
+app.include_router(conpty_router)
 app.include_router(native_router)
 from app.terminal_browser import router as terminal_browser_router
 app.include_router(terminal_browser_router)

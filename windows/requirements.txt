@@ -1,9 +1,0 @@
-fastapi
-uvicorn
-psutil
-websockets
-httpx
-PyYAML
-pystray
-Pillow
-six

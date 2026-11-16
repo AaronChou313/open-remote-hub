@@ -1,7 +1,8 @@
 'use strict';
 (async () => {
   const values = new URLSearchParams(location.hash.slice(1));
-  history.replaceState(null, '', location.pathname);
+  const context = new URLSearchParams(location.search);
+  history.replaceState(null, '', location.pathname + location.search);
   try {
     if (!values.get('ticket')) throw Error('缺少登录凭据，请重新登录。');
     const response = await fetch('/auth/cloud/exchange', {
@@ -10,7 +11,7 @@
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.detail || '登录失败，请重试。');
-    location.replace('/');
+    location.replace('/' + (context.has('client') || context.has('android_client') ? '?' + context.toString() + '#overview' : ''));
   } catch (error) {
     document.querySelector('#cloudMessage').textContent = error.message;
     document.querySelector('#cloudRetry').hidden = false;

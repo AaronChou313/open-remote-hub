@@ -1,5 +1,7 @@
 #define MyAppName "OpenRemoteHub"
-#define MyAppVersion "0.5.21"
+#define VersionHandle FileOpen(AddBackslash(SourcePath) + "..\VERSION")
+#define MyAppVersion Trim(FileRead(VersionHandle))
+#expr FileClose(VersionHandle)
 
 [Setup]
 AppName={#MyAppName}

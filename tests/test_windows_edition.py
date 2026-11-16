@@ -24,11 +24,11 @@ def test_windows_host_services_tolerate_missing_psutil_api(monkeypatch):
     assert platforms.WindowsHost().services() == []
 
 
-def test_windows_index_hides_unix_views(monkeypatch):
+def test_windows_index_exposes_module_management(monkeypatch):
     monkeypatch.setattr(main, 'WINDOWS_EDITION', True)
     page = main.index().body.decode()
-    for view in main.HIDDEN_ON_WINDOWS:
-        assert f'[data-view="{view}"]{{display:none}}' in page
+    assert 'data-view="modules"' in page
+    assert '[data-view="zellij"]{display:none}' not in page
     assert 'id="content"' in page
 
 

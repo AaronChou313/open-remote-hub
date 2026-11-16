@@ -16,6 +16,7 @@ for system in ["darwin", "windows", "linux"]:
             CGO_ENABLED="0",
         ),
         text=True,
+        encoding="utf-8",
     )
     while text.strip():
         item, end = decoder.raw_decode(text.lstrip())
@@ -25,7 +26,7 @@ for system in ["darwin", "windows", "linux"]:
             modules[module["Path"]] = Path(module["Dir"])
 mobile = json.loads(
     subprocess.check_output(
-        [go, "list", "-m", "-json", "golang.org/x/mobile"], text=True
+        [go, "mod", "download", "-json", "golang.org/x/mobile"], text=True, encoding="utf-8"
     )
 )
 modules[mobile["Path"]] = Path(mobile["Dir"])
@@ -51,5 +52,6 @@ for name, folder in sorted(modules.items()):
         parts.append(
             name + " — " + path.name + "\n" + path.read_text(errors="replace") + "\n\n"
         )
-(root / "dist/THIRD_PARTY_NOTICES.txt").write_text("".join(parts))
+(root / "dist").mkdir(exist_ok=True)
+(root / "dist/THIRD_PARTY_NOTICES.txt").write_text("".join(parts), encoding="utf-8")
 print("Collected upstream notices for", len(modules), "modules and Go")

@@ -62,6 +62,8 @@ def initialize():
             db.execute("ALTER TABLE mesh_nodes ADD COLUMN paths TEXT NOT NULL DEFAULT '[]'")
         if 'kind' not in {row[1] for row in db.execute('PRAGMA table_info(devices)')}:
             db.execute("ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT 'orh'")
+        if 'note' not in {row[1] for row in db.execute('PRAGMA table_info(devices)')}:
+            db.execute("ALTER TABLE devices ADD COLUMN note TEXT NOT NULL DEFAULT ''")
 
 
 def password_hash(password, salt):
