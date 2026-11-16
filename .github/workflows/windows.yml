@@ -60,6 +60,7 @@ jobs:
           & $iscc windows\orh.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
+        continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
         with:
           name: windows-installer
           path: dist/ORH-Setup-*.exe
