@@ -296,3 +296,14 @@ def test_enrollment_retires_offline_duplicate(cloud):
     enroll(first);enroll(second)
     devices=cloud.get('/api/devices',headers=account).json()
     assert [d['instance_id'] for d in devices]==[second]
+
+
+def test_legacy_binding_login_uses_its_cloud_instead_of_static_host_portal(monkeypatch):
+    monkeypatch.setattr(cloud_agent, 'binding', lambda: {'instance_id': 'legacy-device', 'cloud_url': 'https://cloud.example', 'portal_url': 'https://aaronchou313.github.io/open-remote-hub'})
+    client = TestClient(main.app, base_url=f'http://127.0.0.1:{main.PORT}', follow_redirects=False)
+    response = client.get('/auth/cloud/start')
+    assert response.status_code == 307
+    target = urlsplit(response.headers['location'])
+    assert target.netloc == 'cloud.example' and target.path == '/'
+    assert 'authorize' in parse_qs(target.fragment)
+    assert response.cookies.get('orh_cloud_state')

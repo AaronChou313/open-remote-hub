@@ -316,7 +316,7 @@ def login_start(request: Request):
     payload = dict(device=value['instance_id'],address=str(request.base_url).rstrip('/'),state=nonce)
     import urllib.parse
     # The Cloud's same UI is also served at its own origin.
-    response = RedirectResponse(value.get('portal_url',discovery.PORTAL).rstrip('/')+'/#authorize='+urllib.parse.quote(json.dumps(payload),safe=''))
+    response = RedirectResponse(value['cloud_url'].rstrip('/')+'/#authorize='+urllib.parse.quote(json.dumps(payload),safe=''))
     response.set_cookie('orh_cloud_state',nonce,httponly=True,samesite='lax',secure=request.url.scheme=='https',max_age=600)
     return response
 
