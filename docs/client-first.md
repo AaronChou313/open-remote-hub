@@ -15,15 +15,15 @@
 
 ## 已执行的验证
 
-- Python 全量测试通过 271 项，后续新增 Windows 文件回归测试通过，RustDesk 适配专项 34 项通过。
+- Python 全量测试通过 273 项，包含 Windows 原生文件回归与 RustDesk 专项测试。
 - 前端交互脚本通过设备选择、错误状态、链路显示、终端路由和未保存编辑保护。增加 Ticket 兑换保留 Android 工作区上下文的回归检查。
 - Go 转发、API 测试通过，新增检查本机前端资源与目标 API 的分流，既有测试覆盖 Cookie 和真实 WebSocket 转发。
 - Windows CI 已运行打包后的 Agent，验证默认模块关闭、文件上传、文本读取、Range 下载、ConPTY 真实命令输出、尺寸变化及关闭 WebSocket 后重连历史。
 - Linux、Intel Mac、Apple Silicon Mac CI 已完成安装包构建，并执行打包 Agent 的模块与文件传输验证。
 - 本机已安装 macOS 应用，迁移原有账号与设备身份到用户 LaunchAgent。原生窗口显示同账号 Mac 与 Windows，实际读取本机系统指标及模块依赖状态。
 - 真实 Mac 到旧 Windows Agent 已通过目标 Ticket 和 `/api/me`、`/api/system`，链路观察到 P2P。早期原生窗口验证了 Zellij 真实输入、关闭子窗口与重新接入，全部窗口关闭后 Agent 与 Mesh 继续运行。
-- Android ARM64 正式签名构建和 lint 通过，APK 已安装到 Android 35 ARM64 模拟器。
+- Android ARM64 正式签名构建和 lint 通过。Android 35 ARM64 模拟器实际经 Mesh 连接安装版 Mac Agent，完成 Ticket、系统 API、终端命令、关闭连接后的会话重连、文件上传、Range 下载及恢复。分别在正常 P2P 直连和限制为 DERP 的环境重复通过，测试后恢复正常路径选择。
 - Cloud 已部署元数据更新，HTTPS 健康接口正常，Headscale 运行中。
 - 用户修复当前 RustDesk 实例后，本机 replayd 日志出现 `TCC Allow`。新增回归测试验证自启、远程桌面和文件传输的 macOS 命令均经过 LaunchServices。
 
-跨平台 CI 的 Agent 验证覆盖对应系统上的真实程序执行。物理 Android 保活、跨运营商 DERP 以及重启至登录前的桌面访问需结合实际设备权限与网络验证。
+跨平台 CI 的 Agent 验证覆盖对应系统上的真实程序执行。物理 Android 保活、不同运营商网络表现以及重启至登录前的桌面访问需结合实际设备权限与网络验证。
