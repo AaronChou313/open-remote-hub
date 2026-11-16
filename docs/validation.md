@@ -12,6 +12,10 @@ Android 35 ARM64 模拟器复现了 Java 获取 Cloud Ticket 时的 `SSLHandshak
 
 网络页同时修复 RustDesk、节点小宝及局域网子页对旧摘要元素的引用。现有 macOS Mihomo 后台与两份机场配置已恢复识别，代理进程与流量保持连续运行。Mihomo 新装流程在隔离 Linux 环境启动实际 broker 与内核，使用临时服务管理适配器。x64 下载使用官方 v1 CPU 基线构建。macOS 菜单栏进程 activation policy 为 accessory，原生窗口为 regular，只有一个进程显示 Dock 图标。
 
+Windows 实机已升级至 0.6.10，设备身份、保存的账号和核心 API 验证通过，安装器与测试任务已清理。Mac 安装版通过后台重启 API 完成实际重启，认证会话保留，随后在共享界面打开 Windows 控制台并显示 P2P 直连。
+
+macOS ARM 的 GitHub 构建节点持续排队后被取消。最终发行包改用 CPython 3.14.8 / OpenSSL 3.5.9 便携运行时，在本机构建并安装验证，最低系统设为 macOS 15。Python 动态库最低系统为 macOS 11。Windows、Linux、macOS Intel 及 Android 的发布任务通过。
+
 ## 0.6.8 历史验证
 
 ### 自动检查
