@@ -9,6 +9,10 @@ let connecting = false;
 let refreshing = false;
 sessionStorage.removeItem('orh-current-device');
 if (localStorage.getItem('orh-theme') === 'dark' || (!localStorage.getItem('orh-theme') && matchMedia('(prefers-color-scheme: dark)').matches)) document.body.classList.add('dark');
+select('#clientTheme').onclick = () => {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('orh-theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+};
 
 async function request(path, body) {
   const response = await fetch('/api' + path, {

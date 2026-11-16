@@ -33,7 +33,7 @@
       <nav aria-label="客户端导航">
         <button type="button" data-page="devices" aria-current="page"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg><span>我的设备</span></button>
         <button type="button" data-page="diagnostics"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#network"></use></svg><span>连接诊断</span></button>
-        <button type="button" data-page="settings"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg><span>设置与账号</span></button>
+        <button type="button" data-page="settings"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#settings-2"></use></svg><span>设置与账号</span></button>
       </nav>
     </header>
     <main class="client-main">
@@ -47,8 +47,8 @@
       </section>
       <section id="clientSettings" hidden>
         <dl id="clientAccount" class="client-details"></dl>
-        <div class="toolbar"><a id="clientCloudAdmin" class="button" href="https://cloud.openremotehub.top/">账号与设备后台</a><button id="clientLogout" type="button">退出登录</button></div>
-        <p class="muted">关闭窗口后，后台 Agent、组网与现有任务继续运行。停止后台请使用系统服务管理或 Windows 托盘菜单。</p>
+        <div class="toolbar"><button id="clientTheme" type="button">切换主题</button><a id="clientCloudAdmin" class="button" href="https://cloud.openremotehub.top/">账号与设备后台</a><button id="clientLogout" type="button">退出登录</button></div>
+        <p class="muted">关闭窗口后，后台 Agent、组网与现有任务继续运行。停止后台请使用托盘或菜单栏中的「停止后台并退出」。</p>
       </section>
     </main>
   </div>

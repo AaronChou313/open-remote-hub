@@ -48,6 +48,8 @@ body.dark .metric,body.dark .panel,body.dark .container-card,body.dark .session-
   box-shadow:none;
 }
 .metric { padding:24px; }
+.metrics { gap:20px; border:0; border-radius:0; background:transparent; overflow:visible; }
+.metric,.metric:last-child { border:0; border-radius:26px; }
 .metric-value { letter-spacing:-.025em; }
 .host-strip { padding:22px 24px; }
 .container-card,.session-card,.project-card { padding:24px; }

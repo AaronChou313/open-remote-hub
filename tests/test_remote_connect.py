@@ -117,6 +117,7 @@ def test_connection_argv_and_injection_rejection(management,monkeypatch):
     http,_,_ = management
     calls=[]
     monkeypatch.setattr(client.subprocess,'Popen',lambda argv,**kwargs:calls.append(argv))
+    monkeypatch.setattr(client.sys, 'platform', 'linux')
     assert http.post('/api/remote-connect/rustdesk/connect',json={'target':'123 456 789','mode':'desktop'}).status_code == 200
     assert calls[-1] == [str(client.BINARY),'--connect','123456789']
     assert http.post('/api/remote-connect/rustdesk/connect',json={'target':'192.168.1.20:21118','mode':'files'}).status_code == 200
@@ -196,10 +197,31 @@ def test_background_start_uses_native_server_argv(management,monkeypatch):
     monkeypatch.setattr(client,'native',OfflineNative())
     binary=client.data_dir()/'RustDesk';binary.write_text('fixture')
     monkeypatch.setattr(client,'BINARY',binary)
+    monkeypatch.setattr(client.sys, 'platform', 'linux')
     calls=[]
     monkeypatch.setattr(client.subprocess,'Popen',lambda argv,**kwargs:calls.append(argv))
     assert client.start() == {'reused':False}
     assert calls == [[str(client.BINARY),'--server']]
+
+
+def test_macos_launchservices_owns_server_and_connection(management, monkeypatch):
+    class OfflineNative:
+        def config(self, name):
+            raise ipc.NativeError('offline')
+    bundle = client.data_dir() / 'RustDesk.app'
+    binary = bundle / 'Contents/MacOS/RustDesk'
+    binary.parent.mkdir(parents=True)
+    binary.write_text('fixture')
+    monkeypatch.setattr(client, 'BINARY', binary)
+    monkeypatch.setattr(client, 'native', OfflineNative())
+    monkeypatch.setattr(client.sys, 'platform', 'darwin')
+    calls = []
+    monkeypatch.setattr(client.subprocess, 'Popen', lambda argv, **kwargs: calls.append(argv))
+    assert client.start() == {'reused': False}
+    client.connect('100.64.0.20:21118', 'desktop')
+    client.connect('100.64.0.20:21118', 'files')
+    prefix = ['/usr/bin/open', '-n', '-a', str(bundle), '--args']
+    assert calls == [prefix + ['--server'], prefix + ['--connect', '100.64.0.20:21118'], prefix + ['--file-transfer', '100.64.0.20:21118']]
 
 
 def test_tailscale_control_ack_and_diag_routes(management,monkeypatch):

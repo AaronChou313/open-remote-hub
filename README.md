@@ -1,579 +1,91 @@
 # OpenRemoteHub
 
-跨平台远程连接与设备管理客户端。在同一个 ORH 窗口选择本机或同账号电脑，使用目标设备的系统状态、Docker、终端、文件、项目与服务。Cloud 管账号与设备元数据，Mesh 优先直连、必要时使用 DERP，Agent 常驻电脑后台。
+在同一个客户端中选择自己的电脑，使用系统概览、终端、文件、Docker 和远程桌面。电脑安装包包含 Client、后台 Agent 和 Mesh。Android 提供控制端。
 
-## 入口与账号
+## 安装与使用
 
-主要入口为 **ORH Client**。首次登录 ORH 账号完成设备注册与入网，随后进入“我的设备”。远端工作区复用目标专用短期 Ticket 和 Mesh 网关，在同一客户端窗口中打开。关闭窗口后后台 Agent、Mesh 与用户任务继续运行。现有浏览器控制台保留为调试和应急入口。
+从 [Releases](https://github.com/AaronChou313/open-remote-hub/releases/latest) 下载对应安装包。
 
-macOS/Linux 源码安装可运行 `.venv/bin/pip install -r client/requirements.txt`，随后执行 `.venv/bin/python scripts/client.py`。Windows 安装包由托盘“打开 OpenRemoteHub”启动窗口。Client 的 Cookie 与窗口偏好保存在本机私有目录。
-
-Linux 桌面还需要可用的 GTK/WebKit 或 Qt WebEngine 环境。使用 Qt 时可安装 `.venv/bin/pip install 'pywebview[qt]>=6,<7'`。无头电脑继续通过现有服务启动 Agent/Mesh。
-
-本轮采用规划中的过渡期页面复用，模块仍由目标 Agent 提供。实现范围和后续批次见 [客户端优先迁移](docs/client-first.md)。
-
-`cloud.openremotehub.top` 是账号后台，只用于注册/登录、设备目录、下载与吊销，平时不需要访问；它不再提供设备控制台或远程桌面入口。
-
-## 启动
-
-需要 Python 3.11+。Docker 和 Zellij 使用当前用户已安装的 CLI；不修改 OrbStack 或用户的全局配置。
-
-```sh
-./scripts/install.sh
-./scripts/start.sh
-```
-
-访问 [控制台](http://127.0.0.1:8765/)，首次在本机设置密码。后续通过同一个登录进入官方 Zellij Web Client，无需另输 Token。
-
-```sh
-./scripts/stop.sh                 # 仅停止控制台，保留终端和任务
-.venv/bin/python scripts/password.py # 本机隐藏输入重设密码
-```
-
-## 服务组成
-
-核心控制台是一个宿主机 Python 进程，运行 FastAPI / Uvicorn、原生 HTML/CSS/JS、认证、系统采样和管理 API，数据保存在本地 SQLite / JSON。前端无需 Node.js 构建，数据库随 Python 提供。基础安装需要 Python 3.11+，克隆和更新代码需要 Git。
-
-| 组件 | 用途与部署关系 | 本机入口 |
+| 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| RemoteHub | 必需，macOS 由 `local.openremotehub` 用户 LaunchAgent 启动，Linux 提供用户 systemd 模板 | `8765` |
-| Zellij | Web 终端需要，官方 Web 服务与终端会话独立运行，进入终端时自动检查并启动 Web 服务 | 回环 `8082` |
-| 系统 OpenSSH | SSH 管理需要 `ssh`、`ssh-keygen`、`ssh-keyscan`，交互连接运行在 Zellij 中；VS Code Remote SSH 编辑本机项目另需启用宿主机 SSH 服务 | 出站目标端口，按需入站 `22` |
-| Docker | 容器管理需要 CLI 和可访问的 Docker Engine，本机使用 OrbStack；Linux 可使用 Docker Engine | 当前用户的 Docker context / Socket |
-| DeepSeek Harness | DSH 工作台按需启用，原生 DSH 按需启动；认证网关与 RemoteHub 使用同一 Python 进程 | 网关 `8767`，原生回环 `9741` |
-| Mihomo + Python broker | 网络代理按需安装的独立特权服务，本机为 `local.openremotehub.proxy`；Linux 安装器使用 systemd | 用户 Unix Socket，内核端口仅回环 |
-| 组网（内置） | 组网数据面。安装脚本把 `bin/orh-mesh` 与控制台一起部署，由 ORH 启停和监护；也可接管既有独立服务 | 回环 `4789` |
-| Tailscale、节点小宝、RustDesk | 分别独立安装、登录和运行，RemoteHub 接入各自 CLI / 本地接口；按需选择 | 由原生客户端管理 |
-| “我的应用”中的其他 Web 服务 | 各项目自行部署，控制台保存入口并发现监听状态 | 各服务自己的端口 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.0.exe` | 运行安装向导，从开始菜单打开 |
+| macOS Apple Silicon | `OpenRemoteHub-0.6.0-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS Intel | `OpenRemoteHub-0.6.0-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu/Debian x64 | `OpenRemoteHub-0.6.0-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.0-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.0-android-arm64.apk` | 下载 APK 后安装 |
 
-当前 Mac 使用 RemoteHub + Zellij 0.45.1 + OrbStack/Docker + Mihomo，并接入 Tailscale、节点小宝和 RustDesk。DSH 已启用网关，其原生进程按需运行。文件、知识库、项目、开发环境、SSH 管理和本地服务页面均属于核心控制台，Codex 可在普通终端中自行运行。
+桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
-## Cloud 账号与 Agent
+1. 打开 ORH，登录同一个 ORH Cloud 账号。默认服务为 `https://cloud.openremotehub.top`。
+2. 在“我的设备”选择电脑，进入应用内工作区。首次使用到目标电脑的“功能管理”启用需要的模块。
+3. 关闭窗口后，后台 Agent、Mesh 和会话继续运行。通过托盘或 macOS 菜单栏重新打开窗口，也可检查更新、显式停止后台。
 
-Cloud 管理账号、设备目录、绑定关系和心跳，Agent 在个人主机运行管理功能。Client 选择设备后建立 Mesh 网关并取得一次性 Ticket，目标 Agent 兑换后建立原有管理员 Cookie。Zellij、Docker、文件等业务请求经 Mesh 直接访问 Agent。Cloud 在线状态依据最近 100 秒内的心跳，端到端 API 可达性与组网路径单独展示。
+macOS 使用用户 LaunchAgent，Linux 使用用户 systemd 服务，Windows 使用用户启动项。这些机制随用户登录启动。无头 Linux 可运行 `openremotehub --headless`。需要用户服务在退出登录后持续运行时，可由管理员为对应用户启用 systemd lingering。
 
-账号后台为 [OpenRemoteHub Cloud](https://cloud.openremotehub.top/)，默认 Cloud API 为 `https://cloud.openremotehub.top`。注册账号后，在电脑安装 ORH 并打开 Client，用 Cloud 账号登录即可完成本机注册与组网入网。
+Android 需要按应用内提示允许通知和后台运行。第一阶段只控制电脑，设备目录标记为 `controller-only`。远程桌面会调用已安装的 RustDesk。使用 ORH 私有组网访问 Agent，无需手填 IP 或路由器端口映射。
 
-```sh
-# 先按本文安装 Agent，并在 .env 中设置 ORH_HOST=0.0.0.0
-./scripts/start.sh
-.venv/bin/python scripts/cloud_agent.py status
-```
+## 可选功能
 
-登录一次后，Agent 保存私有 `.runtime/cloud-binding.json`（设备令牌，不含账号密码），每 30 秒上报名称、系统、端口、局域网 / 组网地址，重启后自动恢复。设备 UUID 沿用 `.runtime/instance-id`，在新主机部署时应生成自己的 UUID。设备凭据、账号令牌和 Ticket 都不提交到 Git。首次登录会用 Cloud 账号注册设备；同一账号再次登录会轮换设备令牌。
+新安装默认关闭全部可选模块。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
 
-Cloud 设备卡片支持改名、编辑手动访问地址、设置首选入口和解绑，手动地址及名称不会被心跳覆盖。组网 IP 由控制平面分配。Agent 在心跳响应中同步访问主机名，沿用原监听端口的 Host / Origin 校验。Client 为所选设备签发 90 秒、目标专用、单次兑换的 Ticket。浏览器独立调试入口继续保留 Cloud 授权登录。
-
-已登录 Cloud 的设备使用 Cloud 登录，本机密码入口隐藏。未绑定模式保留原有本机密码。Cloud 退出会撤销 Cloud 会话与尚未使用的 Ticket；已建立的 Agent Cookie 通过 Agent 退出、到期或解绑撤销。Cloud 解绑后，Agent 在下次成功联系 Cloud 时撤销绑定和本机会话。主机睡眠或断网期间无法即时接收解绑状态。
-
-已通过真实 ECS HTTPS 注册、绑定、心跳、跨账号隔离、并发 Ticket 单次消费与解绑测试。Mac 正式 Agent 已验证 GitHub Pages → Tailscale 地址登录、直接本机入口授权、原生 Zellij 终端、Docker / 文件读取，以及重启后心跳和登录会话恢复。Windows / iPad 实机浏览器仍需客户端验收。
-
-### Cloud 部署
-
-Cloud 目录为 `cloud/`，使用独立 SQLite 数据卷。将域名 A 记录指向 ECS，安全组开放 TCP 80、443。在部署目录执行以下命令，Caddy 自动申请和续期 HTTPS 证书。
-
-```sh
-cp cloud/.env.example cloud/.env
-# 修改 ORH_CLOUD_DOMAIN，默认 cloud.openremotehub.top
-docker compose --env-file cloud/.env -f cloud/compose.yml up -d --build
-# 重建 cloud 容器后重启 https，让 Caddy 重新解析容器地址
-docker restart cloud-https-1
-docker compose --env-file cloud/.env -f cloud/compose.yml ps
-docker compose --env-file cloud/.env -f cloud/compose.yml logs --tail=100 cloud https
-```
-
-本次 ECS 的 Docker Hub 直连不可用，已从镜像源拉取官方 Python / Caddy 镜像并保留本地标签。构建时可在 `cloud/.env` 设置 `PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/`。
-
-Cloud 和 HTTPS 网关配置了自动重启。更新代码后执行相同 `up -d --build` 命令。备份应在停止 Cloud 容器后复制 `cloud-data` 数据卷，保留 `caddy-data` 可延续证书状态。Cloud 只存元数据和令牌摘要，设备凭据与 Ticket 不以明文入库。账号不支持邮件验证、密码找回、MFA 或公共账号配额，当前为 MVP。
-
-本次 ECS 部署目录为 `/opt/openremotehub-cloud`，Cloud 健康检查为 `https://cloud.openremotehub.top/api/health`，公网仅发布 Caddy 的 80 / 443 端口。Mac Agent 继续由原有 `local.openremotehub` launchd 作业启动。
-
-本次部署实例为杭州 ECS，`cloud.openremotehub.top` 指向 `121.43.119.168`。Agent 只需能出站访问 Cloud HTTPS，浏览器仍需具备到 Agent 的局域网 / 虚拟组网路由。
-
-### 前端发布与独立模式
-
-前端源文件位于 `portal/`，无 npm 构建依赖。`python3 scripts/build_portal.py` 生成 `.runtime/portal-site/`，推送到 main 后由 GitHub Actions 发布。`portal/cloud-config.json` 设置默认 Cloud 地址，登录页也可切换服务地址。Cloud 容器同时提供相同 Web 页面，可直接访问 Cloud 域名登录和授权。
-
-[独立主机列表](https://cloud.openremotehub.top/?local=1) 保留原有浏览器本地列表、导入导出与发现功能。旧 `#add` 链接自动进入此模式。`/.well-known/openremotehub` 仍仅公开最小身份元数据，管理接口沿用统一 Cookie 和同源校验。
-
-## 控制台界面
-
-- **仪表盘**：首屏，纯展示的信息卡片：CPU、内存、磁盘、网络、GPU、组网状态和进程数量。
-- **网络连接**：默认直接显示本地局域网，另有节点小宝与网络代理。
-- **组网与远程**：组网状态与设备卡片（直连/中继、控制台、远程桌面、检测），以及 RustDesk 设置；Windows 上不显示 RustDesk（本机接口仅 Unix）。
-- **进程与服务**：本地服务列表与活跃进程。
-- 不可用的模块（未安装 Docker/Zellij/SSH、未启用 DSH、RustDesk 不可达、组网组件缺失）会在导航中置灰、在仪表盘隐藏，避免点进去才报错。
-
-## 功能
-
-- **系统概览**：真实 CPU、内存、磁盘、网络和进程；SQLite 保留 7 天轻量历史。
-- **Docker**：每容器一张卡片，状态、资源、配置端口、详情和日志；启动、停止、重启。沿用当前 Docker context，不自动清理镜像、卷或网络。
-- **终端会话**：每会话一个入口，创建并进入、恢复并进入、重命名、结束、删除历史、结束并删除。控制台不查询或管理 Tab/Pane，用户在原生终端中自行操作。
-- **会话删除**：删除前保存本机私有备份，删除后校验；不使用全局 kill/prune。退出历史与运行会话明确区分。
-- **文件管理**：授权目录浏览、文件名搜索、流式上传/下载与 Range、复制/移动/重命名、回收与恢复、UTF-8 编辑和图片预览。版本冲突阻止覆盖，软链接/硬链接及敏感文件受保护。
-- **项目管理**：持久化本地项目记录，识别 Git/技术栈/环境标记，查看状态、分支、提交、工作区及暂存区 Diff；关联文件、终端、环境与预设任务。移除记录不删除项目。
-- **开发环境**：Python/Conda/Node/venv 与工具版本、Homebrew 已安装软件查询、环境依赖元数据和项目绑定。确认计划后创建全新项目 venv；不覆盖、不批量安装或自动更新。
-- **网络连接**：统一展示 Tailscale 组网与 RustDesk 桌面服务状态，提供组网设备、直连/中继、Ping、网络诊断、连接与断开、DNS/子网路由/入站拦截/出口节点设置，以及 RustDesk ID、密码、客户端配置和原生连接入口。
-- **我的应用**：卡片式 Web 入口，支持添加、编辑、移除、分组和搜索。可保存当前主机的协议、端口、路径，访问地址随控制台当前主机名变化；也可保存完整自定义 URL。点击直接打开服务。
-- **本地服务**：合并用户与系统 launchd / systemd 服务、TCP 监听进程、Docker 已发布端口和已有项目进程。展示 PID、命令、运行时间、绑定地址及可读取日志，支持搜索和类型筛选。识别 Web / HTTP 后提供访问及添加应用入口，普通服务保持只读。
-- **DSH 工作台**：通过独立认证入口嵌入本机 DeepSeek Harness 官方 Web，也可独立窗口使用；保留其原生工作区、会话、插件、模型、权限和审批流程。
-- 黑白、靛蓝、暗色模式及响应式布局。普通启动直接执行；停止、删除等有一次明确的影响确认；异步操作显示忙碌并防重复提交。
-
-新建会话从当前用户主目录 `~` 启动；恢复会话保留其已保存目录。原生终端在新标签页内完成准备和自动跳转，恢复后不用回控制台确认或刷新。历史程序不使用 `--force-run-commands` 自动重放。已有会话需要允许 Zellij Web sharing；项目新建会话使用独立 `config/zellij.kdl`。
-
-Codex、编辑器和开发服务器都只是用户在普通终端内启动的程序。控制台不自建 AI 聊天引擎、Codex 专用权限、Agent 守护恢复或模型 API；DSH 模块接入官方原生 Web。用户自行运行 `codex` 并管理其配置。
-
-“本地服务”每 5 秒刷新运行状态，本机 HTTP / HTTPS 识别缓存 90 秒，点击刷新可重新识别。发现范围包括服务管理器登记项及 TCP 监听进程，按当前宿主账户权限读取。Web 判断使用本机 HTTP HEAD，401、404、405 等 HTTP 响应也表示存在 HTTP 服务。完整业务页面路径可在应用设置中调整。
-
-“我的应用”按用户选择保存直连地址。远程访问时，目标服务需自行开放局域网监听及对应端口；仅绑定 127.0.0.1 / ::1 的服务显示“仅本机”。项目预设仍在项目页面运行，运行输出可在“本地服务”查看；独立快捷任务表单已移除，已有任务记录继续保留。
-
-## 认证与安全
-
-密码仅保存为带随机盐的 PBKDF2-HMAC-SHA256 哈希，600,000 次迭代。登录 Cookie 为 HttpOnly / SameSite=Strict，有效期 12 小时；修改密码撤销旧登录。接口检查 Host、来源与 CSRF header，终端 WebSocket 还检查管理员登录并持续验证撤销。
-
-Zellij 网关只访问固定的本机端口（默认 8082）。内部 Zellij Token/Cookie 不会发送给浏览器，不提供任意 URL 或 RPC 转发。WebSocket 只转发官方原生客户端，不提供额外 Shell 或自建 PTY。
-
-管理员的交互终端及任务具备当前本机账户权限。支持显式开启局域网/私有组网访问；支持通过 `ORH_TLS_CERT_FILE` / `ORH_TLS_KEY_FILE` 配置原生 TLS，MFA 和多用户隔离尚未实现。保持默认本机监听时，也可使用已配置的 SSH 转发：
-
-```sh
-ssh -N -L 8765:127.0.0.1:8765 USER@HOST
-```
-
-## 局域网与异地组网
-
-默认只监听本机。编辑项目根目录 `.env`，不需要修改源码：
-
-```dotenv
-ORH_HOST=0.0.0.0
-ORH_PORT=8765
-ORH_ALLOWED_HOSTS=192.168.1.20,10.77.1.2,10.77.1.4,100.66.11.2,server.local
-ORH_ZELLIJ_PORT=8082
-```
-
-将示例地址替换为实际主机的局域网 IP、组网映射 IP 或可解析主机名。`ORH_HOST` 是本机监听地址：`127.0.0.1` 仅本机，`0.0.0.0` 为所有 IPv4 接口，也可指定本机单个 IP；虚拟映射 IP 若不在本机网卡上，不能用作监听地址。IPv6 可用 `::`（是否兼听 IPv4 取决于平台）。
-
-`ORH_ALLOWED_HOSTS` 是浏览器地址栏允许使用的目标地址，逗号分隔，不含协议、端口、CIDR 或通配符；不是客户端 IP 列表。`localhost`、`127.0.0.1`、`::1` 始终允许，指定的单个监听 IP 也自动允许。所有入口使用 `ORH_PORT`，端口映射需保持相同外部端口。新增地址或迁移主机时修改这个列表即可，不自动信任所有本地网卡、组网设备或任意 Host。
-
-```sh
-./scripts/stop.sh
-./scripts/start.sh
-```
-
-浏览器打开 `http://目标地址:8765/`，使用原密码登录，终端仍通过同一地址转发，不需要开放 Zellij 的 8082 端口。不同 IP/主机名是不同的浏览器登录站点，首次切换地址需各登录一次；同一地址内进入终端无需再次登录。首次设置密码仍只能从本机 localhost 页面或 `scripts/password.py` 完成。
-
-HTTP 与 WebSocket 共享目标地址白名单，并要求有 Origin 的请求与当前入口严格同源；配置多个地址不代表它们可以相互跨源调用。服务不信任客户端提供的 `X-Forwarded-*`。当前示例为 HTTP，请使用可信局域网或已加密的私有组网；不要为此在路由器开启公网端口转发。HTTPS 反向代理需要另行明确可信代理和证书配置。
-
-## DeepSeek Harness / DSH
-
-支持本机已安装的 DSH 0.2.x，实际验证 `0.2.2-rc.1`。DMG 自带不可变 CLI 与运行时，`npx` 使用 npm 缓存，它们不会互相更新；检测会优先选择较新版本，同版本优先 DMG 附带 CLI，不静默使用 0.1 旧缓存。也可在本机 `.env` 明确指定 `ORH_DSH_BIN`（可执行文件或 `lib/bin.js`），不会自动安装/升级 DSH。
-
-```dotenv
-ORH_DSH_ENABLED=1
-ORH_DSH_GATEWAY_PORT=8767
-ORH_DSH_PORT=9741
-# ORH_DSH_BIN=/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh
-# ORH_DSH_HOME=/Users/you/.dsh
-```
-
-重启控制台后进入侧栏“DSH 工作台”。首次未运行时点击“启动并进入”；同一个本机受管进程会直接复用，不重复启动。原始 DSH 固定监听 `127.0.0.1:9741`，认证网关跟随 RemoteHub 的监听地址，在 `8767` 提供官方根路径页面与接口。访问局域网/组网时需能访问这两个控制台端口（默认 8765、8767）；不需要把 9741 暴露给远端。入口主机白名单和 Origin 规则继续生效。
-
-浏览器登录 RemoteHub 后，其 HttpOnly Cookie 可用于同一主机的 DSH 网关，用户无需另输 DSH Token。网关只允许管理员；HTTP 与 `/api/remote.mux` WebSocket 均检查登录和来源，连接期间持续检查撤销，发送/接收每帧也重新检查权限。原生认证通过官方启动 URL 交换 Cookie 完成，Token/Cookie 仅存本机 `.runtime/dsh-auth.json`（0600），可通过原生流程续期，不把上游凭据或 Set-Cookie 发给浏览器；日志中的启动 Token 被遮盖。原始 JS/插件 bundle 字节不改写，网关只在 HTML 启动前补齐 HTTP 环境缺失的标准 `crypto.randomUUID`（浏览器安全随机数实现）。
-
-DSH 官方前端使用根路径和自身插件加载器，因此采用独立端口、独立浏览器 Origin，嵌入控制台并提供“独立窗口”。其目录选择使用官方 browse 插件，通过本项目的 `config/dsh-web.patch.yml` 追加启动 overlay，不修改用户 profile 或已安装包；避免远程操作时在 Mac 上弹出本地 OS 对话框。DSH 的主题与插件仍由其原生生态控制。
-
-**实例边界**：此模块使用本机 DSH 的官方 **Web profile**，默认共用 `~/.dsh` 用户根目录。桌面版运行在 Desktop profile 和自己的 Host 中；共享数据根目录不代表共享执行中的进程、内存或任务。控制台不会接管、重启桌面版，也不伪装成能无缝接续桌面版正在运行的任务。已有其他 Web 实例占用指定内部端口时不冒认或强行结束。
-
-DSH 与独立认证日志 supervisor 在浏览器或控制台退出后继续运行；控制台重启会按 PID/创建时间/启动脚本校验复用它，但该簿记只决定“是否复用”，不参与 Cookie 认证——否则一次时钟跳变或 PID 漂移就会让面板永久 503。面板打不开时先运行 `.venv/bin/python scripts/dsh_doctor.py`，完整排查顺序见 [`docs/dsh-recovery.md`](docs/dsh-recovery.md)。整机重启后旧计算进程已不存在，需重新启动 Web Host，再由 DSH 自己恢复持久化记录。关闭浏览器不等于停止 Host；具体模型任务的断线行为仍以 DSH 自身实现为准。`.runtime/dsh.log`、认证状态、启动计划均为私有文件，没有远程原始日志/令牌下载入口。
-
-未执行真实模型计费请求；复杂任务、第三方插件、桌面专用能力、账号 OAuth 与实体手机输入法仍需按实际使用验收。Native UI 不同版本可能有兼容变化；新增版本不能仅凭页面加载即视为全部验证通过。
-
-## 文件、项目与开发环境
-
-本机 `.env` 设置授权范围，重启控制台后生效。例如：
-
-```dotenv
-# 显式授权主机根目录；也可以改为项目目录的 JSON 数组
-ORH_FILE_ROOTS=["/"]
-ORH_FILE_POLICY=unrestricted
-ORH_MAX_UPLOAD_MB=2048
-```
-
-新安装的目录范围默认为 `[]`。`ORH_FILE_POLICY=unrestricted` 配合 `["/"]` 开放当前系统账户可访问的目录，取消控制台对系统目录写入、凭据目录、隐藏文件及硬链接的额外限制。目录和文件软链接可直接打开，链接目标也须位于配置的目录范围内。复制链接会保留链接本身，移动、重命名和回收操作作用于链接本身；通过文件链接编辑时更新实际文件并保留链接。
-
-`ORH_FILE_POLICY=protected` 是新安装的默认策略，系统目录只读，`.env*`、私钥、`.ssh`、`.config`、`.codex`、`.runtime`、`.git`、浏览器/系统凭据目录及链接受保护。两种策略均使用现有登录认证、操作确认、文件版本检查和流式传输。设备节点、Socket 等特殊对象不支持文件编辑和传输。
-
-### macOS 目录隐私授权
-
-下载、桌面、文稿、网络卷和移动卷可能触发 macOS 本机隐私授权。要避免远程访问时逐个目录等待确认，请由用户在 **系统设置 → 隐私与安全性 → 完全磁盘访问权限** 添加并启用运行 RemoteHub 服务的 Python.app。该授权需要用户在 Mac 上操作，应用代码无法自行授予。[Apple 文件访问说明](https://support.apple.com/en-ie/guide/security/secddd1d86a6/web)
-
-当前 launchd 使用项目虚拟环境的 Python。可在项目目录执行以下命令，查找实际 Python.app 路径。点击系统设置中的“+”，在文件选择器按 `⌘⇧G` 粘贴输出路径并添加。
-
-```sh
-.venv/bin/python -c 'from pathlib import Path; import psutil; print(Path(psutil.Process().exe()).parents[2])'
-```
-
-授权后重启控制台并重新访问目录。后续更换 Python 安装路径时需检查对应授权。文件所有者、ACL、只读卷及 macOS 系统完整性保护仍由操作系统执行，Linux 使用服务账户的常规文件权限。
-
-```sh
-./scripts/stop.sh
-./scripts/start.sh
-```
-
-文件页首次进入当前账户主目录，并提供“主目录”快捷入口。可切换隐藏文件显示（点开头的名称）、名称/修改时间/大小/类型排序及升降序，目录优先；筛选和排序在分页前执行。文件夹“操作”打开居中菜单，避免滚动到列表底部。文件页选择目录后可添加为项目或打开终端。**新会话**使用选定目录；选择已有/恢复会话时保留原工作目录及任务，不注入 `cd` 或重排 Pane。项目页保存终端关联并可进入原生客户端。
-
-文件删除移入同级 `.remotehub-trash`，可用当前目录的“回收记录”恢复；恢复不覆盖现有目标。没有自动清空、永久删除或自动清理策略。`protected` 模式下，含受保护文件的整目录复制、移动、删除会被拒绝。复制上限 1 GiB / 10000 条目，跨文件系统移动不自动降级为复制后删除；请先复制、核验，再明确删除。默认上传上限 2 GiB，可调至最高 8 GiB；上传只创建新文件，不覆盖同名文件。下载保持打开的文件描述符分块传输，支持单个 HTTP Range，不生成内存中的整文件副本。
-
-文本编辑限 UTF-8、1 MiB，点击保存直接核验文件版本并写入；冲突时保留编辑内容，不静默覆盖。文本/Markdown/代码以纯文本呈现，PNG/JPEG/GIF/WebP 可预览；HTML/SVG 不执行，PDF/视频/Office 文件先下载。目录列表最多扫描 10000 条、每页 200 条；文件名搜索最多扫描 10000 条或 3 秒，返回最多 100 条，并标注截断。
-
-项目页自动发现 `~/Projects` 的直接子目录，并将关联信息保存在私有 `workspace.sqlite3`。可用 `ORH_PROJECTS_DIR` 指定项目父目录，该目录仍须位于授权范围。隐藏自动发现的项目后，后续扫描不会重复添加；手动添加可重新纳入。Git 仅只读查询，不切分支、提交、拉取或推送；禁用 fsmonitor/外部 Diff/textconv，并过滤受保护文件的 Diff。Git 工作树元数据必须位于授权范围，符号链接元数据不支持。
-
-项目可运行受支持的 npm dev/start/build/test（含前后置脚本展示）、pytest 或 Django 开发任务；执行前展示实际参数、目录与脚本，确认后复用“任务与服务”的日志和进程管理。任务会执行项目代码，并不代表代码经过安全审计。环境绑定影响后续生成的预设，不改变已运行任务；Node 绑定使用对应 Node/npm，Python 绑定使用对应解释器，Conda 的 npm 任务使用 `conda run`。其他命令仍在原任务页显式配置。
-
-环境页检测主机 PATH 上的工具、Conda 注册环境和已添加项目的 `.venv`/`venv`。Python 依赖读取 `.dist-info`/Conda JSON 元数据，避免为了检查而执行项目解释器、pip 或 `.pth`。可创建 `.venv`/`venv`：先展示计划，确认后排他创建目录，本机 Python 自带的 pip 随 venv 初始化，不联网安装包、不覆盖、不自动绑定；失败保留部分目录供检查，不会偷偷删除重建。未实现 Conda 环境创建、版本切换、包安装/更新或环境删除。Ubuntu 软件查询走只读 dpkg 适配，尚待实机验收。
-
-文件路径采用目录 FD 与 `O_NOFOLLOW` 逐级访问，`unrestricted` 模式先解析链接、核验目标范围再打开目录 FD；递归复制保留链接而不递归进入链接目标。上传/复制先私有暂存再原子无覆盖发布。macOS/Linux 使用原子无覆盖重命名；其他平台失败关闭。版本检查和进程锁保护控制台内并发操作；这不是 OS 沙箱，不能阻止拥有相同系统账户权限的本机进程移动已打开目录，也不提供对外部编辑器写入的文件系统级事务快照。
-
-## 网络代理
-
-支持两种连接方式。未安装独立服务时可连接已有 Clash / Mihomo 控制器。安装独立服务后，RemoteHub 通过仅当前 OS 用户可访问的 Unix Socket 管理自己的 Mihomo，不向局域网公开内核管理接口。
-
-### 安装与迁移
-
-```bash
-# 首次下载，核对官方 GitHub release asset SHA-256，不修改现有代理
-python3 scripts/proxy_setup.py download
-# macOS 预备测试。仅回环端口，TUN 关闭，不修改系统代理或 DNS
-python3 scripts/proxy_setup.py stage
-# 验证后安装一次专用系统服务。sudo 密码由用户在主机终端输入
-sudo /usr/bin/python3 scripts/proxy_setup.py install
-```
-
-安装服务不关闭 Clash，首次安装是空配置且代理停止。Mac 使用独立 launchd LaunchDaemon，登录前也可运行；安装的程序和内核数据由 root 持有。浏览器和 RemoteHub 自身重启不影响内核。Linux 提供同一 broker 的 systemd 安装路径，命令为 `sudo python3 scripts/proxy_setup.py install`，尚未完成真实 Linux / TUN 验收。不要把用户目录中的 Python 代码直接作为 root 的长期服务执行。
-
-切换步骤只需一次：在“网络连接 → 网络代理”导入机场提供的 **Clash / Mihomo YAML 订阅 URL** 或配置文件，点击“使用配置”；手动关闭 Clash 的 VPN 连接；点击“启动代理”。没有配置或 Clash VPN 仍连接时拒绝启用。不要同时运行多个 TUN 客户端。原 Clash 的配置和开机设置不会被更改，切换后需自行关闭其自动连接。
-
-回退时先在 RemoteHub 点击“停止代理”，再启动原 Clash。若网页不可达，可在主机执行 `python3 scripts/proxyctl.py stop`。这只关闭 RemoteHub 的 TUN，保留配置与后台内核。`status` 检查状态，`start` 启用，`open` 打开本机网页。所有 CLI 控制均凭当前 OS 用户的 Socket 权限，不需要在命令行保存控制台密码。
-
-### 日常操作
-
-- 机场配置卡片按名称排序，可搜索、导入 URL / YAML 文件 / 粘贴 YAML、使用配置、更新订阅、重命名、更换订阅地址、移除及导出。
-- 内置 YAML 编辑器可修改节点、策略组、规则、DNS 等内容，保存前调用实际内核检查。当前配置的更新和编辑会同步应用，失败回退到上一份运行配置；并发修改需刷新。订阅 URL、YAML 和恢复副本保存在 `.runtime/proxy/` 的私有文件中，不提交 Git。导出的 YAML 含节点凭据，只有管理员可读。
-- 策略与节点页按分组展开全部节点，支持分组折叠、搜索、默认 / 名称 / 延迟排序。点击节点或模式直接切换，无下拉选择、额外提交或确认。Selector 可直接选择；URLTest / Fallback 可手动固定节点并一键恢复自动。单节点、整组和全部节点均可测速，批量去重、最多 4 个并发、实时进度并可取消，超时与未测速明确区分，不把失败显示为 0ms。规则模式显示默认路由链，GLOBAL 组收起后置并注明仅在全局模式下生效。节点选择由 Mihomo cache 持久化。规则可筛选；内核日志以有界文本显示并隐藏 URL / UUID。
-- 停止代理只关闭 TUN，HTTP / SOCKS 回环入口仍就绪。重启内核会中断它自己的连接。启用状态、选中配置和模式跨服务重启保留；重启时发现 Clash VPN 活跃，会保持新 TUN 关闭。内核异常退出后 broker 会尝试恢复。
-- Mac 本机与远程设备使用同一个网页。无需菜单栏常驻进程，界面和配置管理可沿用于 Linux。
-
-订阅下载逐跳校验目的地址并固定解析后的公网 IP，保留 TLS 主机校验，禁止访问回环 / 内网服务。遇到 Clash / Mihomo Fake-IP DNS 时用固定 DoH 解析器 `1.1.1.1` 查询真实公网 IP，只提交订阅主机名，不提交 URL 路径或令牌。限制 3 MiB、重定向次数与超时；不接受纯节点 URI / Base64，需要机场的 Clash 格式订阅。定时订阅更新暂未实现，使用“更新订阅”。
-
-### 网络与权限边界
-
-独立内核固定 mixed port `127.0.0.1:7891`、DNS listener `127.0.0.1:1054`、带私有密钥的 controller `127.0.0.1:19090`，控制台使用用户私有 Socket；导入配置不能覆盖这些入口或创建额外 listeners。服务以 TUN 接管主机流量，不写入 macOS HTTP/HTTPS/SOCKS 系统代理设置。TUN 使用 `dns-mode: native` 接管系统 DNS，停止 TUN 时由内核恢复原 DNS，避免局域网 DNS 请求绕过 TUN 劫持。TUN 与“全局”出站模式是不同概念。
-
-默认从 TUN 路由排除 `127/8`、`10/8`、`172.16/12`、`192.168/16`、`100.64/10`，保护局域网、容器私网和异地组网的直接可达性；具体网络仍需切换后现场验收。Provider 支持 HTTP / inline，缓存路径由服务管理，不支持读取任意本地 Provider 文件。其他高级设置可通过 YAML 编辑；不等同于复刻所有 Clash 客户端的特有功能。
-
-已有控制器兼容配置仍可使用（显式设置优先于独立服务）：
-
-```dotenv
-# Unix Socket 或带端口的本机回环 HTTP(S) URL，二选一
-# ORH_CLASH_SOCKET=/absolute/path/to/clash.sock
-# ORH_CLASH_URL=http://127.0.0.1:9090
-# ORH_CLASH_SECRET=your-controller-secret
-```
-
-模式 / 节点变更只作用于已有客户端的运行实例，持久化由原客户端管理。只读账号不能写入、导出敏感配置或执行测速；所有写操作沿用认证、同源校验、角色检查与审计。[Mihomo API 文档](https://wiki.metacubex.one/api/)
-
-## Web 终端复制、粘贴与手机输入
-
-终端右上角“剪贴板”提供快捷键说明、图片上传和最近选中文字。Web Client 原先直接调用 `navigator.clipboard` 写入选区，局域网 / 组网 HTTP 地址通常缺少该接口；控制台现在提供浏览器旧式复制回退，并区分“已复制”与“已发送复制请求”。旧式接口无法可靠核验系统剪贴板是否更新，浏览器限制下可点“复制”，再按 `Ctrl+C` / `⌘C`，或在手机上长按选中文字复制。受信任 HTTPS / 本机安全上下文可使用标准剪贴板接口。[浏览器剪贴板要求](https://developer.mozilla.org/en-US/docs/Web/API/Clipboard/writeText)
-
-| 操作 | Windows / Linux 浏览器 | Mac 浏览器 |
-| --- | --- | --- |
-| 复制终端选区 | 鼠标拖选自动尝试复制，或 `Ctrl+Shift+C` | 鼠标拖选自动尝试复制，或 `⌘C` |
-| 粘贴文字 | `Ctrl+V` / `Ctrl+Shift+V` | `⌘V` |
-| 粘贴剪贴板图片 | `Ctrl+V` | `⌘V` |
-| 中断程序 | `Ctrl+C` | `Ctrl+C` |
-| Zellij 锁定 / 解锁（默认配置） | `Ctrl+G` | `Ctrl+G` |
-
-`Ctrl+C` 在终端内仍用于中断，需在复制回退窗口的文字选区中使用它复制。按住 Shift 拖选可以使用 xterm 本地选区。Zellij 的 `copy_command "pbcopy"` 会写到服务端 Mac 的剪贴板，远程复制应通过浏览器剪贴板通道。
-
-浏览器真实粘贴事件带有图片时，控制台将 PNG / JPEG / WebP 图片上传到 Mac 的 `.runtime/terminal-attachments/`（单张 20 MiB），并通过原生终端的 paste 接口插入带引号的绝对路径；不会附带回车。可在 Codex 输入区继续输入问题，检查图片附件后再提交。也可通过“剪贴板 → 上传图片”选择图片。图片文件保留供任务继续读取，可在文件管理器中手动清理。容器中的程序需要容器可访问的路径。
-
-Codex 的原生图片快捷键读取运行 Codex 的主机剪贴板。远程设备的系统剪贴板需要浏览器上传通道，普通终端按键不会自动传输图片；也可显式使用 `codex -i /path/to/image.png`。[Codex 图片输入说明](https://learn.chatgpt.com/docs/image-inputs?surface=cli)
-
-Zellij 0.45.1 官方移动端输入使用 password 控件，并在每次触摸后重新聚焦，影响 iPhone 中文输入和滑动查看。网关针对已识别的实现替换为支持 composition 的隐藏 textarea，默认关闭软键盘，通过右上角“键盘”按钮或原生键盘按钮显式切换。拼音候选阶段不发送内容，确认后一次发送最终中文，避免重复提交或丢掉重复字符。滑动继续使用原生 Zellij 手势。升级后若无法识别代码结构则保留新版实现，并在说明窗口标记尚未匹配。
-
-网关只修改移动输入适配段并更新对应 app.js 的 SRI，其余终端库保持原字节。剪贴板兼容层通过独立 JS/CSS 加载。手机宽度布局、中文 composition 事件和真实桌面浏览器图片粘贴已测试；实体 iPhone 键盘语言切换、Safari 触摸手势及系统剪贴板仍需实体设备验收。
-
-## 远程开发与 ROS 2 工作区
-
-文件页和项目详情页提供“用 VS Code 打开”，点击后由浏览器调用访问设备上安装的 VS Code，通过 Remote - SSH 打开 Mac / Linux 主机的目录。默认使用当前浏览器访问的主机地址与服务账户用户名，支持在局域网和私有组网地址之间切换。访问设备需安装 VS Code、OpenSSH 客户端及 Microsoft Remote - SSH 扩展，第一次连接由 VS Code 完成 SSH 主机确认和账户 / 密钥认证。主机需要已启用 SSH 服务。[VS Code 官方说明](https://code.visualstudio.com/docs/remote/ssh)
-
-可以在主机 `.env` 指定连接用户名或客户端的 SSH 别名，修改后重启控制台。
-
-```dotenv
-# 默认使用服务账户用户名
-# ORH_SSH_USER=aaron
-# 可选，覆盖默认连接地址。此别名需在访问设备的 SSH config 中存在。
-# ORH_VSCODE_SSH_AUTHORITY=mac-mini
-```
-
-自定义 SSH 端口、跳板机和通过 localhost 转发访问控制台时，使用访问设备上配置好的 SSH 别名。例如在访问设备 `~/.ssh/config` 中配置以下内容，再将控制台的 `ORH_VSCODE_SSH_AUTHORITY` 设为 `mac-mini`。
-
-```sshconfig
-Host mac-mini
-    HostName 10.77.1.2
-    User aaron
-    Port 22
-```
-
-“上传文件”支持多选，“上传文件夹”保留所选目录名及普通文件的子目录结构，自动创建缺失目录。上传进度、取消和失败项重试在居中窗口中完成。同名文件保留原内容并列入失败项；重试只处理失败和未上传的文件，每个失败文件从头传输。浏览器页面关闭后上传会停止，已完成的文件保留。浏览器文件选择器不提供空目录和软链接元数据，这两项不随文件夹上传传输；可在主机终端使用 Git 获取完整仓库。
-
-当前 ROS 2 环境已将 `/Users/aaron/Projects/ros2_ws` 绑定到容器 `/workspaces/ros2_ws`。在文件页进入 `/Users/aaron/Projects/ros2_ws/src` 后上传算法文件夹，容器会看到同一份源码。也可从项目终端执行以下命令，替换示例仓库地址和包名。
-
-```sh
-cd ~/Projects/ros2_ws
-git clone <仓库地址> src/<仓库目录>
-./ros deps
-./ros build --packages-up-to <ROS包名>
-./ros exec ros2 run <ROS包名> <节点名>
-```
-
-`./ros deps` 会按项目依赖执行安装，由用户在终端手动运行。VS Code 通过 Remote SSH 打开 `ros2_ws` 后，安装 Dev Containers 扩展，执行 **Dev Containers: Attach to Running Container...**，选择 `ros2-humble-lab-dev-1`，打开 `/workspaces/ros2_ws`，即可在现有 ROS 环境中编辑、编译和调试。连接使用现有运行容器。[官方远程容器开发说明](https://code.visualstudio.com/remote/advancedcontainers/develop-remote-host)
-
-## 部署与维护
-
-### 新设备适用范围
-
-| 目标设备 | 当前部署方式与验证范围 |
+| 功能 | 支持与依赖 |
 | --- | --- |
-| macOS arm64 / amd64 | 原生 Python + launchd；已在 Apple Silicon Mac 实机使用，Intel Mac 待实机验收 |
-| Linux amd64 / arm64 | 原生 Python + systemd，优先 Ubuntu 24.04+；已有 Linux 适配和 Ubuntu amd64 CI，完整部署及 arm64 待实机验收 |
-| Windows amd64 / arm64 | 原生**预览版**：Python 控制台 + 登录计划任务，内置组网组件；终端 / SSH / 文件 / DSH / 项目 / 开发环境在 Windows 上隐藏，RustDesk 设置页不可用（远程桌面仍由组网组件调用已安装的 RustDesk）。需要完整功能可改用 WSL2 Ubuntu |
+| 系统概览、账号、设备选择、Mesh、诊断 | 核心自带 |
+| 终端 | macOS/Linux 使用 Zellij，Windows 自带 ConPTY 后端和 PowerShell/cmd 接入 |
+| 文件 | 三个桌面平台原生支持，包含授权目录、上传下载、编辑、复制移动和回收恢复 |
+| Docker | 三个桌面平台，需要 Docker CLI 和可访问的 Engine |
+| 远程桌面 | 三个桌面平台及 Android 控制端，需要 RustDesk 和对应系统权限 |
+| 进程与服务 | macOS launchd、Linux systemd、Windows Services |
+| SSH、项目、开发环境、知识库、DSH、网络代理 | macOS/Linux。按功能检测宿主机依赖，Windows 界面明确显示支持状态 |
 
-新主机的基础安装只有虚拟环境、配置和启动几步。完整启用所有模块还需安装相应原生软件、完成账户登录及系统授权，现有 `install.sh` 只安装 Python 依赖。各架构需使用对应的 Python、Zellij、DSH、Docker 和代理二进制，并现场核对其可用版本。
+Windows ConPTY 由 Agent 持有进程，关闭终端窗口后可重新接入。macOS/Linux 复用 Zellij 会话与原生 Web Client。停用模块保留用户已安装的第三方软件和已有任务。macOS 的 RustDesk 启动、连接和文件传输统一经过 LaunchServices，屏幕录制权限归属 RustDesk 应用。
 
-### Windows 预览版（原生，从零安装）
+## 连接方式
 
-Windows 版保留控制台核心、组网与远程桌面；终端、SSH、文件、DSH、项目、开发环境在 Windows 上隐藏（Zellij / Unix PTY / Unix Socket 不可用），RustDesk 设置页也不可用，但远程桌面仍由组网组件调用已安装的 RustDesk。
+Client 按长期 `device_id` 选择设备，经 Mesh 校验目标身份，再兑换目标专用短期 Ticket。工作区读取目标 `/api/me` 成功后才显示 Agent 已连接。Cloud 心跳、Agent 可达性、P2P 直连和 DERP 中继各自展示。
 
-**最快方式：安装包（推荐）**
+桌面共享导航和页面资源由本机 Client 提供，Android 使用 APK 内的共享页面资源。HTTP API、WebSocket、文件和终端流量通过目标设备独立的 `.localhost` 网关传输。优先 P2P，底层使用 DERP 时，中继会承载相应流量。
 
-从本仓库 Release 下载 `ORH-Setup-x.y.z.exe`，双击安装即可，不需要 Git 或 Python。安装到 `%LOCALAPPDATA%\Programs\OpenRemoteHub`，数据保存在 `%LOCALAPPDATA%\OpenRemoteHub`；开始菜单有「OpenRemoteHub」与「OpenRemoteHub 停止」，并会随登录自启。首次打开用 ORH 账号登录，设备自动注册入网。
+[Cloud 后台](https://cloud.openremotehub.top/) 管理账号、设备名称、备注、手动访问地址和解绑。组网 IP 由组网控制平面分配。手动地址与设备自动上报地址独立保存。
 
-安装后常驻系统托盘：菜单可「打开控制台 / 检查更新 / 安装更新 / 停止并退出」，重复启动只会打开控制台；更新会从 GitHub Release 下载新的安装包并静默升级。托盘与后台服务随登录自启。安装包未做代码签名，SmartScreen 提示时选择「更多信息 → 仍要运行」。卸载会停止服务并保留数据目录。
+## 配置与数据
 
-以下是从源码安装的方式，适合开发或自定义部署。
+| 平台 | Agent 数据目录 | Mesh 身份目录 |
+| --- | --- | --- |
+| macOS | `~/Library/Application Support/OpenRemoteHub` | `~/Library/Application Support/orh-mesh` |
+| Windows | `%LOCALAPPDATA%\OpenRemoteHub` | `%APPDATA%\orh-mesh` |
+| Linux | `~/.local/share/openremotehub` | `~/.config/orh-mesh` |
 
+Agent 的 `.env` 保存本机监听与文件目录配置，`.runtime` 保存绑定、模块状态、会话认证和业务元数据。默认仅监听回环地址，由 Mesh 发布访问。文件授权目录通过 `ORH_FILE_ROOTS` 的 JSON 数组配置。已有 macOS 源码 LaunchAgent 会迁移设备身份与账号绑定，并由安装版接管后台。
 
-### Cloud 连不上时
+## 开发与构建
 
-若登录页提示「暂时无法连接 Cloud」，先确认这台机器能否用浏览器打开 `https://cloud.openremotehub.top`。部分国内链路会丢弃指向 `*.openremotehub.top` 的**经典 TLS 握手**（表现为 `WinError 10054`、`curl (35) Recv failure`）。可任选其一：
-
-- 设置 `ORH_CLOUD_PROXY=http://127.0.0.1:7890`（写入 `%LOCALAPPDATA%\OpenRemoteHub\.env` 后重启服务），并把该域名的规则改为走代理（而不是 `GEOIP,CN,DIRECT`）；代理支持自 0.5.13 起提供。
-- 使用 0.5.13 及以后的 Windows 安装包：它基于 Python 3.14 / OpenSSL 3.5，默认提供 ML-KEM 混合握手，可直接穿透该链路。
-
-**1. 安装 Python 3.11+**
-
-从 python.org 安装，勾选 *Add python.exe to PATH*。验证：
-
-```powershell
-python --version
-```
-
-**2. 获取代码**
-
-```powershell
-git clone https://github.com/AaronChou313/open-remote-hub.git
-cd open-remote-hub
-```
-
-没有 Git 时，可在 GitHub 页面下载 ZIP 后解压并进入目录。
-
-**3. 放入组网二进制**
-
-仓库不含构建产物。任选一种方式得到 `orh-mesh-windows-amd64.exe`（约 22 MB）：
-
-- 从本仓库的 GitHub Release 下载（发布时会把三平台二进制和 APK 作为附件）；
-- 从已构建的机器（macOS / Linux）拷贝 `dist/orh-mesh-windows-amd64.exe`；
-- 在装有 Go 1.27.4 的机器上构建：`cd mesh && go build -trimpath -ldflags="-s -w" -o ..\dist\orh-mesh-windows-amd64.exe .\cmd\orh-mesh`。
-
-把文件放到 `open-remote-hub\dist\orh-mesh-windows-amd64.exe`。若放在别处，安装前设置：
-
-```powershell
-$env:ORH_MESH_SOURCE = "C:\path\orh-mesh-windows-amd64.exe"
-```
-
-**4. 运行安装脚本**
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
-```
-
-脚本会：创建 `.venv` 并安装依赖；生成 `.env`（`ORH_HOST=0.0.0.0`、`ORH_PORT=8765`、自动填入本机 IPv4 到 `ORH_ALLOWED_HOSTS`、`ORH_DSH_ENABLED=0`）；把组网二进制复制为 `bin\orh-mesh.exe` 并生成 `%APPDATA%\orh-mesh\config.json`；注册登录时启动的计划任务 `OpenRemoteHub`；创建开始菜单「OpenRemoteHub」与「OpenRemoteHub 停止」；启动服务并打开 `http://127.0.0.1:8765/`。
-
-**5. 首次使用**
-
-1. 浏览器打开 `http://127.0.0.1:8765/`，用 Cloud 账号登录（也可点「改用本机密码」设置离线密码）。
-2. 登录页输入 Cloud 账号与密码（未注册先点「注册账号」）；本机自动注册，组网组件由 ORH 自动带上设备身份，几十秒内变为「已连接」。
-3. Windows 防火墙提示时允许**专用网络**；其他设备用 `http://<Windows IP>:8765/` 访问（需要额外主机名时补充 `.env` 的 `ORH_ALLOWED_HOSTS`）。
-4. 平板/其他电脑的设备列表会出现这台 Windows，可打开控制台或发起远程桌面。
-
-> 不要直接运行 `orh-mesh.exe`：单独启动只会停在 `NeedsLogin`。它必须由 ORH 启动，才能获得 Cloud 预授权。
-
-**6. 启停、更新与卸载**
-
-```powershell
-.\scripts\start.cmd   # 启动（或开始菜单「OpenRemoteHub」）
-.\scripts\stop.cmd    # 停止控制台与内置组网
-```
-
-更新：`git pull`，放入新的 `dist\orh-mesh-windows-amd64.exe`，执行 `.venv\Scripts\python.exe scripts\mesh_setup.py`，再停止并启动。日志在 `.runtime\server.log` 与 `.runtime\mesh.log`。
-
-卸载：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Uninstall`（保留 `.runtime` 数据）。
-
-完整功能（终端、文件、SSH、DSH）仍需 WSL2：先在管理员 PowerShell 执行 `wsl --install -d Ubuntu-24.04`，按提示重启并创建 Linux 用户，再按 Linux 流程在 WSL 的 `~/Projects` 内部署。WSL 中的进程、网卡、systemd 与 RustDesk IPC 按 Linux 环境读取；访问 Windows 文件需配置 `/mnt/c/...` 等授权目录。WSL 的局域网访问、Windows 防火墙、发行版随 Windows 启动均需单独配置和验证，Windows 11 支持的镜像网络可简化访问。[WSL 安装](https://learn.microsoft.com/en-us/windows/wsl/install) · [WSL 网络](https://learn.microsoft.com/en-us/windows/wsl/networking) · [WSL systemd](https://learn.microsoft.com/en-us/windows/wsl/systemd)
-
-### 基础安装与配置
-
-先由 AI 检查系统、架构、Python 3.11+、Git 和端口占用，再执行以下步骤。Ubuntu 的 venv、OpenSSH、iproute2 和 Ping 工具按需通过系统包管理器补齐。终端需安装含官方 Web Client 的 Zellij，当前适配基线为 `0.45.1`，升级版本要验证原生 Web 终端。[Zellij 安装](https://zellij.dev/documentation/installation)
+源码开发需要 Python 3.11+。Mesh 使用 Go，Android 使用 JDK 21、Android SDK 35 和 NDK 28.2.13676358。
 
 ```sh
-git clone https://github.com/AaronChou313/open-remote-hub.git
-cd open-remote-hub
-cp .env.example .env
-./scripts/install.sh
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt -r client/requirements.txt
+.venv/bin/python scripts/client.py
 ```
-
-按新主机实际情况编辑 `.env`，保留已有安装的本机配置。
-
-```dotenv
-ORH_HOST=0.0.0.0
-ORH_PORT=8765
-ORH_ALLOWED_HOSTS=192.168.1.20,server.local
-ORH_FILE_ROOTS=["/"]
-ORH_FILE_POLICY=unrestricted
-# ORH_PROJECTS_DIR=/home/your-user/Projects
-ORH_DSH_ENABLED=0
-```
-
-将地址替换为目标设备实际入口，文件范围按用户选择配置。DSH、Docker、组网、桌面和代理按需启用，细节见本文相应章节。执行 `./scripts/start.sh`，首次由用户通过本机页面或 `.venv/bin/python scripts/password.py` 设置管理员密码，再从其他设备访问 `http://目标地址:8765/`。只使用核心控制台时开放 `8765` 即可，启用 DSH 后还需 `8767`，Zellij / DSH 的原生回环端口由网关转发。
-
-### 自动启动
-
-macOS 在安装目录执行下列命令，安装用户登录后的自动启动。
 
 ```sh
-.venv/bin/python scripts/launchd.py install
-# 移除自动启动时使用
-# .venv/bin/python scripts/launchd.py uninstall
+# macOS/Linux 安装包
+.venv/bin/pip install -r desktop/requirements.txt
+.venv/bin/python scripts/build_desktop.py
+
+# Windows 安装包，在 PowerShell 中运行
+# windows/build.ps1
+
+# Android 正式包，先配置 Android SDK/NDK
+.venv/bin/python scripts/build_android.py
 ```
 
-Linux 由 AI 将 `deploy/openremotehub.service` 中的 `/ABSOLUTE/PATH/open-remote-hub` 替换为正确引用的项目绝对路径，保存到 `~/.config/systemd/user/openremotehub.service`。先停止用脚本启动的控制台，再切换到 systemd。
+`VERSION` 是版本号来源。Android 首次本地构建生成私有发布密钥，保存在 `.runtime`，后续发布应保留该密钥。CI 通过仓库 Secrets 使用同一发布密钥。生成的安装包在 `dist/`，构建目录及二进制产物由 Git 忽略。
 
 ```sh
-./scripts/stop.sh
-systemctl --user daemon-reload
-systemctl --user enable --now openremotehub.service
+.venv/bin/pytest -q
+node tests/client-ui.mjs
+cd mesh && go test ./internal/...
 ```
 
-Linux 后续用 `systemctl --user start/stop/restart/status openremotehub` 管理，日志用 `journalctl --user -u openremotehub -n 100`。如需开机后无需登录即启动，由 AI 为服务账户设置 `loginctl enable-linger 用户名`，可能需要管理员授权。WSL 还需确认发行版自身能随 Windows 启动。
-
-### 交给 AI 部署
-
-在新设备上运行具备本机终端权限的 AI，将下面这段指令交给它即可。AI 应读取当前仓库和实际环境，安装过程中的系统授权、原生客户端登录及管理员密码由用户完成。
-
-> 请在本机部署 https://github.com/AaronChou313/open-remote-hub ，先读 README.md、.env.example 和现有脚本，检查操作系统、amd64/arm64、Python、Git、Zellij Web 能力、端口和已有服务。Windows 使用 WSL2 Ubuntu，明确实际管理范围。先运行核心控制台及原生终端，再按我的需求接入 Docker、DSH、代理、组网和远程桌面。沿用已有软件、配置、项目和登录信息，按实际账户、路径、IP 设置 .env，配置 launchd 或 systemd 与必要的网络访问。用户自行输入密码和完成系统授权。通过真实登录、文件读写、终端新建/重连、重启恢复及另一台设备的访问验证已启用功能，报告缺少的软件和未验收场景，给出访问地址、启停与更新方式，并通过控制台右上角“主机入口”登记新主机。说明需要我完成的具体操作。
-
-### 更新与迁移
-
-在工作区干净且已确认远端更新后使用 `git pull --ff-only`，再运行 `.venv/bin/python -m pip install -r requirements.txt` 并通过当前服务管理器重启。跨主机重新创建 `.venv`，按新设备调整 `.env` 的账户路径、地址及软件路径。
-
-`.runtime/` 保存管理员密码哈希、SQLite 数据、项目 / 应用 / 知识库关联、日志、任务记录和代理配置等私有状态。迁移时先停控制台再备份，可按需恢复元数据，需校正绝对路径和重建认证会话 / 本机 Zellij 网关凭据。Zellij 会话与历史、SSH 密钥、DSH 工作区、Docker 数据及原生客户端配置各有自己的存储位置，由 AI 分别处理；进程和活跃连接需在新设备重新启动。代理 broker 按目标系统重新安装。日志暂未完整轮换，持续高输出任务需配置轮换。
-
-## 开发与验证
-
-```sh
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pytest -q                 # 默认仅单元/安全测试，不操作本机服务
-node tests/workflow-ui.mjs         # 原有前端交互测试
-node tests/workspace-ui.mjs        # 文件竞态、转义、未保存编辑保护
-node --check static/app.js
-node --check static/sessions.js
-```
-
-显式的本机验证会创建自己的测试会话并清理，需要 Zellij Web 服务在线。不会操作已有业务会话：
-
-```sh
-.venv/bin/pytest -m live tests/test_terminal_entry.py tests/test_zellij_management.py -q
-```
-
-[架构](docs/architecture.md) · [验证与限制](docs/validation.md)
-
-## Web SSH 管理
-
-侧栏 **SSH 管理** 支持生成 ED25519、RSA、ECDSA 密钥，提供连接、密钥、原生 Config、主机指纹、公钥部署、连接诊断及独立 Zellij SSH 终端。首次接入 Config 前可预览差异，密钥和配置操作沿用当前管理员登录状态，删除和配置覆盖提供一次操作确认。localhost、局域网和私有组网支持通过 HTTP 使用全部 SSH 操作。HTTPS 可选。完整使用与部署流程见 [SSH.md](SSH.md)。
-
-管理员密码可使用任意长度和字符组合，也可留空。首次设置、登录和修改密码采用相同规则。已登录管理员修改密码直接保存新密码，其他浏览器的旧登录会失效。
-
-
-## 知识库
-
-侧栏 **知识库** 可添加主机已有目录，或输入路径新建知识库，路径支持 `~/`。每个知识库直接使用目录中的 `.md` / `.markdown` 文件，并在 SQLite 保存目录关联和名称。
-
-打开知识库后，可按目录浏览、按文件名或路径搜索笔记，阅读渲染后的 Markdown，或切换到编辑模式。支持中文、新建、重命名、删除、下载和 `Ctrl+S` / `⌘S` 保存。新建笔记可填写 `研究/定位.md`，自动创建缺少的父目录。相对 Markdown 链接可打开同库笔记，本地图片通过文件接口显示。
-
-卡片上的“移除”删除目录关联。“删除目录”会确认目标并将整个目录移入父目录的 `.remotehub-trash`。笔记删除使用同一回收机制，可在文件管理器进入所在目录后通过“回收记录”恢复。保存复用文件版本检查，遇到外部修改时保留编辑内容并提示冲突。单篇笔记编辑上限为 1 MiB，目录扫描每次最多 10000 个条目 / 3 秒，达到上限会提示部分结果。
-
-Markdown 使用本地托管的 [Marked](https://marked.js.org/) 与 [DOMPurify](https://github.com/cure53/DOMPurify)。固定版本、来源与许可在 `static/vendor/`，页面运行时从本机加载这些文件。
-
-添加、新建或编辑知识库时，可点击路径旁的“浏览”，使用目录选择器逐层进入文件夹、返回上级、切换文件根目录，并可新建文件夹后选中。知识库目录树用箭头展开多级目录，切换笔记保留展开状态，只显示文件夹及 Markdown 笔记。笔记中的同库目录链接会定位并展开对应目录。Markdown 表格使用完整阅读宽度，单元格自动换行。
-
-桌面侧栏可通过“工作空间”旁的按钮收缩为图标导航，选择会保存在当前浏览器。各模块页面顶部仅显示主标题。SSH 连接的分组和收藏条件统一放入“筛选”浮层，修改后立即生效。
-
-## 网络连接
-
-控制台沿用状态总览、本地局域网、组网、节点小宝、网络代理、RustDesk 页面。组网状态、检测和连接控制读取本机 `127.0.0.1:4789` LocalAPI，使用 `ORH_MESH_API_URL` 与 `ORH_MESH_API_TOKEN_FILE` 配置入口。Go 数据面与 Android 客户端源码在本仓库的 `mesh/` 与 `client/android/`。
-
-### 组网与 Cloud
-
-1. 主机只需要安装 ORH。`./scripts/install.sh` 会把 组网组件放到 `bin/orh-mesh` 并生成标准配置；`./scripts/start.sh` 由 ORH 启动并监护组网组件。ORH 用 Cloud 账号登录后自动把设备 UUID、凭据和发布端口交给本机组网，共用一个 Cloud 设备条目：ORH 负责地址和心跳，组网负责入网与节点对账。日志为 `.runtime/mesh.log`。
-2. 已有独立 组网 安装（`orh-mesh open` 的 LaunchAgent / systemd / 计划任务）时，ORH 先观察、不重复启动。在“网络连接 → 组网”点“由 ORH 托管组网”会停止并禁用独立单元，改由 ORH 子进程运行；设备身份、账号绑定和本地端口不变，组网约 5 秒后恢复。
-3. 任一 ORH 都能作为控制端：网络连接 → 组网 的设备列表直接提供“控制台”“远程桌面”和“端口转发”。设备列表读取 Cloud 目录中的发布服务：只提供远程桌面的设备（例如只装了 组网 的 Windows）标记为“仅远程桌面”，控制台按钮禁用，不会点击后才报错。控制台为每台目标设备建立独立 `.localhost` 浏览器来源，Cloud 登录票据仍绑定设备并单次兑换；远程桌面创建 loopback 转发并调用本机 RustDesk。因此电脑 A 可以操作电脑 B 的控制台和桌面，B 也可以反向操作 A。
-4. RustDesk 直连端口本次实测为 21118。网络优先直连，DERP 中继流量会经过 ECS 并消耗其带宽。目标设备的 ORH 需要接受组网地址作为 Host；绑定 Cloud 的设备会在心跳中自动同步自己的组网 IP。
-5. “网络连接 → 组网 → 组网管理”可以修改本机设备名称、控制服务和发布到组网的端口，保存后自动重启组网组件；也可以单独重启组网组件，或解绑本机设备（删除 Cloud 设备条目与组网身份，需重新绑定）。组网 IP 由控制服务按顺序分配，不支持手动修改；其他设备的改名 / 解绑在 Cloud 设备目录完成。
-6. 同一台电脑如果曾把**系统 Tailscale** 登入同一个 组网 控制服务，设备列表里会出现两个节点。旧节点没有 ORH 控制台，点击控制台会提示身份不匹配。退出该系统 Tailscale 登录（或从 Cloud / headscale 删除该节点）即可；每台电脑只应保留一个 组网节点。
-
-Cloud 组网扩展使用系统 headscale 0.29.7。部署前配置其 `unix_socket: /run/headscale/headscale.sock`、权限 0770 和 `policy.mode: database`，将目录只读挂入 Cloud，容器附加 headscale 组。headscale 的 systemd 服务增加 `RuntimeDirectoryPreserve=yes`，保持服务重启后的 socket 目录挂载有效。把同版本 Linux headscale CLI 放入 `cloud/bin/headscale` 后构建，此目录不纳入 Git。已有 Caddy 的 headscale 域名块需保留。
-
-```sh
-# 在 ECS 的 ORH 目录执行，group id 按目标主机实际配置。
-# 既有账号迁移另设 ORH_HEADSCALE_LEGACY_ACCOUNT 与 ORH_HEADSCALE_LEGACY_USER_ID。
-docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.yml up -d --build cloud
-docker compose --env-file cloud/.env -f cloud/compose.yml -f cloud/compose.orn.yml exec cloud python -m cloud.invite --days 7
-```
-
-注册为邀请码制。headscale 策略使用 `{"acls":[{"action":"accept","src":["*"],"dst":["autogroup:self:*"]}]}`，通过 `headscale policy set --file <policy.hujson>` 应用。一个 Cloud 账号对应一个 headscale user，设备解绑同步删除节点。迁移前需在线备份 Cloud 与 headscale SQLite 数据库，并保存配置。
-
-VS Code Remote SSH 和“我的应用”中的外部服务仍使用各自连接地址。仅运行 userspace 组网 的控制端可通过端口转发访问这些额外服务。不同平台的 RustDesk 权限、Android 后台限制以及真实蜂窝网络切换需在目标设备完成验收。当前用户服务在用户登录后启动。Linux 无登录常驻可由管理员启用 linger。
-
-### 节点小宝
-
-“网络连接 → 节点小宝”使用本机 NodeBabyLinkService 4.5.3 的回环 HTTP 接口，读取版本、进程、信令连接、虚拟网卡及原生映射，按网段筛选并支持搜索、复制地址。默认优先显示当前访问地址或本机 `10.x` 映射所属网段。可打开主机上的 macOS 客户端，或通过官方后台入口管理组网。
-
-每个设备支持一键检测，或点击“全部检测”。默认每 15 秒自动检测当前筛选出的设备，页面每 5 秒刷新原生链路状态。检测触发原生链路发现，再从 `glp/peerinfo` 核对直连 / 中继状态与原生延迟。虚拟网卡接受 TCP 握手本身不足以确认设备在线。未建立链路显示“未连通”，接口不可用显示“待检测”；检测时间随结果展示。设备的云端在线状态仍可从官方后台查看。已有映射可能包含客户端保留的旧地址，可切换“所有映射”查看。组网启停、重连、编辑及删除使用原生客户端或官方后台。
-
-默认状态接口为 `127.0.0.1:2080`，传输接口为 `127.0.0.1:16880`。可通过 `ORH_NODEBABY_API_PORT` 和 `ORH_NODEBABY_LINK_PORT` 指定其他本地端口。集成使用已有管理员认证，仅代理固定的只读状态路径及受控操作。Linux 的本地接口兼容性尚需对应安装版本实机验证。
-
-
-### 本地局域网
-
-默认展示当前活跃物理接口的 IPv4、网段、掩码、网关、链路速率和收发速率，系统 DNS 可展开查看。设备来自本机邻居表，支持搜索、仅在线筛选、复制地址及持久化备注。本机多个接口合并展示，虚拟网桥记录过滤。状态每 5 秒更新，设备发现由“发现设备”触发。
-
-发现使用系统 Ping 和 ARP / 邻居表，/24 及更小的网络会探测整个网段，较大网络检测已知设备与网关。确认收到响应才显示在线，未响应可能是休眠或设备禁止响应。设备及备注保存在现有 SQLite 元数据中，已确认状态短期有效，历史设备保留最近发现时间。macOS 使用系统路由、DNS 与 ARP 工具，Linux 使用 iproute2 与系统解析配置。
-
-## ORH 客户端（Android）
-
-下载 Release 中的 `orh-client-android-debug.apk`。包名为 `top.openremotehub.client`，最低 Android 8；与旧的 ORN 版本应用是两个不同应用，安装前请先卸载旧应用。
-
-打开后：登录 ORH 账号 → 本机自动注册并入网 → 设备列表 → 控制台（应用内 WebView，账号票据直开）或远程桌面。登录一次后无需再操作，重启自动恢复。设备卡片显示在线状态、直连/中继与“仅远程桌面”标记。
-
-“更多 → 检查更新”读取本仓库 GitHub Release 的最新版本：有新版时顶部出现“新版本 x.y.z · 更新”，点击打开下载页；发布时把 APK 作为 Release 附件并打 `v<版本>` 标签即可。更新检查在启动时静默进行，也可手动触发。
+Cloud 部署沿用 `cloud/compose.yml` 和 `cloud/compose.orn.yml`。架构与模块位置见 [架构说明](docs/architecture.md)，本次改造与验证见 [客户端版本说明](docs/client-first.md)。

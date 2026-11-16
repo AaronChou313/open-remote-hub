@@ -1,59 +1,50 @@
 # 架构
 
-ORH 采用客户端优先架构。Cloud 管账号、设备目录与入网授权，Mesh 管设备间加密连接，Agent 提供主机管理 API，Client 提供设备选择与应用内工作区。主操作入口为桌面/移动客户端，Cloud Web 管理账号与设备元数据。设备身份沿用 `instance_id`，不以 IP 作为主键。
+ORH 的四种职责由同一电脑安装包协同运行。Client 选择设备并持有工作区页面，Agent 提供本机能力，Mesh 建立加密设备连接，Cloud 维护账号与设备元数据。
 
-桌面迁移复用现有静态模块页面、目标专用 Ticket 和 Go 网关。Client 窗口与后台进程分离，关闭窗口保留 Agent/Mesh。第一批采用同窗口页面切换，模块导航仍由目标 Agent 提供。文件级安排见 [客户端迁移](client-first.md)。
+## 连接和身份
 
-FastAPI 原生部署在宿主机，不将访问宿主信息的后端强行装入容器。静态 HTML/CSS/JavaScript 无前端构建依赖；Node 只用于开发时执行交互测试。
+`instance_id` 同时作为 Client 的 `device_id`，长期身份保存在 Agent 私有目录。Cloud 设备目录提供当前 Mesh 地址和发布端口。Client 通过 Mesh 校验目标身份后取得目标专用短期 Ticket，目标 Agent 兑换为现有 Cookie 会话。
 
-| 模块 | 职责 |
+Go 网关为每台设备分配独立 `.localhost` Origin，保持 Cookie、WebSocket、流式响应、上传下载与 DSH 网关的语义。桌面网关把 `/`、`/auth/cloud` 和 `/static/` 的 GET 请求交给控制端本机的前端服务，其余请求经 Mesh 到目标 Agent。Android WebView 从 APK assets 提供同一套前端文件，API 保持目标来源。
+
+Cloud API 承载账号、目录、授权与协调。终端和文件等管理流量走 Mesh。采用 DERP 时，中继承担对应流量。Cloud 心跳与 Agent API 可达性分别呈现。
+
+## 主要模块
+
+| 路径 | 职责 |
 | --- | --- |
-| app/file_access.py / files.py | 授权根目录、FD 路径边界、受保护路径、流式传输、并发版本、回收恢复 |
-| app/remote_connect/api.py / tailscale.py | 统一远程连接 API、组网 LocalAPI 适配、状态及受控网络操作 |
-| app/mesh_runtime.py | 内置 组网 数据面的进程生命周期、独立服务接管、健康探测与日志 |
-| scripts/mesh_setup.py | 安装时定位并固化 组网组件、生成缺省配置、识别独立服务 |
-| app/remote_connect/rustdesk | RustDesk 本机 IPC、后台复用恢复及客户端设置 |
-| app/remote_connect/nodebaby.py | 节点小宝回环状态接口、原生入口和映射服务检测 |
-| static/nodebaby.js | 节点小宝状态、映射筛选与服务检测界面 |
-| static/remote-connect.js / remote-connect.css | 组网与桌面状态、设备列表、对端控制台/远程桌面入口及原生客户端管理 |
-| app/projects.py | 项目记录、只读 Git、预设任务与文件/终端/环境关联 |
-| app/applications.py / static/applications.js | SQLite Web 入口记录、分组搜索、主机相对端口与自定义 URL 直连 |
-| app/local_services.py / static/local-services.js | 服务管理器、TCP 监听、Docker 发布端口和项目进程聚合，本机 HTTP 识别与详情日志 |
-| app/proxy.py / static/proxy.js / static/proxy-nodes.js | 固定本机 Clash / Mihomo 控制接口、状态筛选、单击模式 / 节点选择与连接详情、配置版本隔离 |
-| app/proxy_manager.py / static/proxy-manager.js | 私有机场配置库、受控订阅下载、配置检查和切换、TUN 生命周期、聚焦配置编辑器 |
-| scripts/proxy_engine.py / proxy_setup.py / proxyctl.py | root-owned Mihomo broker、用户私有 UDS、launchd/systemd 部署及本机 CLI，独立于控制台生命周期 |
-| app/environments.py | 主机工具、环境元数据、绑定与明确确认的 venv 创建 |
-| app/workspace_store.py | 与系统指标分离的私有 SQLite 元数据和版本比较更新 |
-| app/workspace_commands.py | 有界 argv 工具查询，固定环境与 FD 工作目录 |
-| static/workspace.js | 文件/项目/环境操作界面，沿用现有原生前端 |
-| app/main.py | 系统指标、SQLite 历史、Docker、任务、入口及安全中间件 |
-| app/platforms.py | 通用命令边界与 macOS / Linux 服务适配 |
-| app/access.py / passwords.py | 持久 Cookie 与密码哈希 |
-| app/zellij_sessions.py | 有界会话发现，异常时使用真实进程/保存布局并明确警告 |
-| app/zellij_manage.py | 精确目标的会话生命周期管理及删除备份 |
-| app/terminal_entry.py | 同名会话复用、创建/恢复、按需准备 Web 服务 |
-| app/native_terminal.py | 原生 Zellij 页面与 WebSocket 的同源认证网关 |
-| static/sessions.js | 会话卡片与原生终端入口，异步请求守卫 |
+| `app/launcher.py`、`desktop/` | 安装后运行目录、后台服务、托盘、窗口和更新 |
+| `app/desktop_client.py` | 原生 WebView 主窗口、受控终端子窗口 |
+| `app/client.py`、`static/client.*` | 设备目录、按设备连接、诊断与账号 |
+| `static/client-workspace.js` | 目标工作区上下文、身份验证、链路状态和返回保护 |
+| `app/modules.py`、`static/modules.js` | 可选模块状态、平台与依赖检测、启停引导 |
+| `app/main.py`、`app/platforms.py` | 系统状态、鉴权、Docker、进程与平台服务 |
+| `app/cloud_agent.py`、`app/discovery.py` | 长期身份、绑定、心跳和 Ticket 兑换 |
+| `app/mesh_runtime.py` | 内置 Mesh 子进程、配置和生命周期 |
+| `app/terminal_entry.py`、`app/native_terminal.py` | Unix Zellij 会话和认证网关 |
+| `app/conpty.py`、`static/conpty.*` | Windows Agent 持有的 PowerShell/cmd 会话和 WebSocket |
+| `app/files.py`、`app/windows_files.py`、`app/file_access.py` | 授权目录与平台原生文件操作 |
+| `app/remote_connect/` | Mesh LocalAPI 与 RustDesk 平台适配 |
+| `app/ssh/`、`app/projects.py`、`app/environments.py` | SSH、项目、开发环境 |
+| `app/dsh.py`、`app/dsh_gateway.py`、`scripts/dsh_host.py` | DSH 原生工作台及同源网关 |
+| `app/proxy*.py`、`scripts/proxy*.py` | 可选 Mihomo broker 与配置 |
+| `mesh/internal/forward/` | 设备网关、HTTP/WebSocket 转发及隔离来源 |
+| `mesh/internal/api/`、`mesh/mobile/` | 本机组网 API、Cloud 同步、Android 核心 |
+| `mesh/web/` | 只读组网诊断页面 |
+| `client/android/` | Android 设备目录、后台 Mesh、内嵌共享工作区和 RustDesk 调用 |
+| `cloud/`、`portal/` | 账号、设备元数据、Headscale 协调和管理后台 |
 
-终端的持久化、渲染和 Tab/Pane 交给 Zellij 原生客户端。控制台只列出 Session 并提供生命周期操作和入口。`app/terminal_browser.py` 与独立 `static/terminal-browser.js` 处理浏览器剪贴板、图片附件及已识别的移动端输入缺陷，输入通过原生客户端发送。Codex 等程序使用普通终端。
+## 模块与生命周期
 
-删除与停止不同：结束会话会保留布局；删除历史只对已退出会话执行；结束并删除明确中断整会话。删除前备份，再校验实际结果；另一浏览器已删除的目标按幂等成功处理。
+新 Agent 在首次登录前建立模块状态，全部可选功能默认关闭。已有绑定或本机凭据的旧安装保留已有入口。模块依赖状态支持未启用、缺少依赖、可用和不可用。依赖安装由用户在明确选择后完成。停用功能保留外部软件和现有任务。
 
-Zellij 有可能在 socket 已消失、所有子任务均结束后留下继续写归档的服务进程。仅在这些条件和 PID/create_time/会话名均核验后清理该退出残留，再删除历史。不以“看起来空闲”为由结束任何仍有子任务的进程。
+原生窗口、托盘和 Agent 分进程。macOS 使用用户 LaunchAgent，Linux 优先使用用户 systemd，Windows 使用启动项与独立后台进程。Agent 持有 Mesh 生命周期和 ConPTY 会话。Zellij 的会话进程独立运行。
 
-平台扩展通过宿主适配层和现有 Zellij/Docker CLI 接口实现。多设备访问复用 Mesh 网关，业务数据经设备通道传输，底层采用 DERP 时中继承担相应流量。
+macOS 上 RustDesk 的启动与连接通过 `/usr/bin/open -n -a RustDesk.app --args ...` 交给 LaunchServices，屏幕采集的 TCC 归属 RustDesk。系统授权仍由用户授予 RustDesk。
 
-## 组网 数据面
+## 数据与构建
 
-主机只安装一个 ORH。`scripts/install.sh` 调用 `scripts/mesh_setup.py` 把 组网组件放入 `bin/`，缺省配置写入 组网 标准目录并复用已有设备身份。`scripts/server.py` 在前台入口启动 `mesh_runtime` 监督线程：先探测本机 组网 LocalAPI，已有独立服务时只观察、不重复启动；没有时以子进程方式启动并在退出后按退避重启。ORH 停止时回收自己启动的子进程，独立服务保持不动。
+用户文件、Docker、终端、项目与密钥位于目标电脑。Cloud 保存账号与设备元数据。手动地址和备注独立于 Agent 上报地址保存。Cloud 解绑撤销设备凭据和入网授权，离线 Agent 在恢复联系后同步撤销。
 
-已有独立 组网 安装（macOS LaunchAgent、Linux systemd 用户服务、Windows 计划任务）可在“网络连接 → 组网”中显式接管：停止并禁用独立单元，改由 ORH 子进程运行，设备身份、账号绑定与本地端口保持不变。接管会短暂重启组网。
-
-设备列表来自本机 组网 的 peer 视图，操作通过 LocalAPI 完成：`/console` 建立每设备 `.localhost` 来源的控制台转发，`/connect` 建立 21118 转发并拉起本机 RustDesk，`/forwards` 提供任意端口转发。目标设备仍需其自身 ORH 接受组网地址作为 Host；已绑定 Cloud 的设备会在心跳中同步自己的组网 IP。
-
-
-网关保持浏览器到 Zellij 的原生消息转发。剪贴板层为 Windows Ctrl+V 放行浏览器真实粘贴事件，文本通过 xterm.paste 发送。图片经管理员鉴权、同源检查和大小 / 格式检查后写入私有附件目录，再把路径粘贴到终端。移动端补丁仅替换已识别的 password 输入捕获及默认键盘状态，同时更新 app.js 的 SRI；其他终端库保持上游字节。网关到 Zellij 不发送库默认的定时 Ping，避免 0.45.1 对不支持帧的报错；这项兼容处理不被视为旧会话所有黑屏情况的根因修复。
-
-网络入口由 `app/network.py` 统一校验，`ORH_HOST` 配置监听、`ORH_ALLOWED_HOSTS` 配置目标 IP/主机名，HTTP 与原生终端 WebSocket 共用规则。默认 loopback，不接受通配目标地址；严格同源，不信任转发头。Zellij 上游保持 loopback，启动探针跟随绑定地址，便于迁移 macOS/Ubuntu。
-
-DSH 由 `app/dsh.py` 管理已安装官方 CLI，`scripts/dsh_host.py` 作为独立 supervisor 捕获启动认证、遮盖日志并保留后台 Host。`app/dsh_auth.py` 只调用官方 Token 交换，不解析/伪造其签名秘密。`app/dsh_gateway.py` 转发原生 HTTP/流和 typed Remote mux；`scripts/server.py` 在启用时通过两个监听 socket 的实际本地端口分发到控制台/DSH 网关，同一生命周期、不同 Origin。Host/Origin 不参与应用选择。DSH 只接受管理员 Cookie，网关认证与上游凭据分离。桌面 Host 与受管 Web Host 不混同。
+桌面包使用 PyInstaller，包含 Python、WebView 适配、Agent 与 Go Mesh。Linux 包包含 Qt WebEngine。Android 通过 gomobile 引入同一 Go 核心并打包共享静态页面。`VERSION` 为版本号来源，CI 产出 Windows EXE、两种 Mac 架构的 DMG、Linux DEB 和 Android 签名 APK。
