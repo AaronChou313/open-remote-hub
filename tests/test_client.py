@@ -87,6 +87,26 @@ def test_installer_gives_legacy_windows_config_its_default_file_root(tmp_path, m
     assert env.read_text() == 'ORH_FILE_ROOTS=[]\n'
 
 
+def test_stop_covers_user_copy_and_packaged_mesh(tmp_path, monkeypatch):
+    import psutil
+    app, bundle = tmp_path / 'user-app', tmp_path / 'bundle'
+    expected = [app / 'bin/orh-mesh.exe', bundle / 'bin/orh-mesh.exe']
+    stopped = []
+    class Process:
+        def __init__(self, path):
+            self.path = path
+            self.info = {'exe': str(path)}
+        def terminate(self):
+            stopped.append(self.path)
+    monkeypatch.setattr(launcher, 'APP', app)
+    monkeypatch.setattr(launcher, 'BUNDLE', bundle)
+    monkeypatch.setattr(launcher.sys, 'platform', 'win32')
+    monkeypatch.setattr(launcher, 'kill', lambda name: None)
+    monkeypatch.setattr(psutil, 'process_iter', lambda attrs: [Process(path) for path in expected + [tmp_path / 'other/orh-mesh.exe']])
+    launcher.stop_children()
+    assert stopped == expected
+
+
 @pytest.fixture
 def directory(monkeypatch, workspace):
     rows = [dict(instance_id=LOCAL, name='Mac', os='Darwin', online=True),

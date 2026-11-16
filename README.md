@@ -8,11 +8,11 @@
 
 | 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `ORH-Setup-0.6.2.exe` | 运行安装向导，从开始菜单打开 |
-| macOS Apple Silicon | `OpenRemoteHub-0.6.2-macos-arm64.dmg` | 把应用拖入 Applications |
-| macOS Intel | `OpenRemoteHub-0.6.2-macos-amd64.dmg` | 把应用拖入 Applications |
-| Ubuntu/Debian x64 | `OpenRemoteHub-0.6.2-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.2-linux-amd64.deb` |
-| Android 8+ ARM64 | `OpenRemoteHub-0.6.2-android-arm64.apk` | 下载 APK 后安装 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.3.exe` | 运行安装向导，从开始菜单打开 |
+| macOS Apple Silicon | `OpenRemoteHub-0.6.3-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS Intel | `OpenRemoteHub-0.6.3-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu/Debian x64 | `OpenRemoteHub-0.6.3-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.3-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.3-android-arm64.apk` | 下载 APK 后安装 |
 
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
