@@ -8,6 +8,8 @@
 
 独立服务访问验证覆盖本机 Host/Origin 转换、本机绝对重定向和应用 WebSocket。使用现有“果壳签到”17861 服务实际读取页面与 33224 字节脚本，均返回 HTTP 200。真实 Windows 控制端通过自身 Mesh 网关访问 Mac，同样读取页面及脚本成功，同时通过 DSH 认证网关，RustDesk 入口返回 Windows 本机 TCP 转发地址。应用通道回归检查覆盖浏览器关闭时的 WebSocket 断开。同页局域网链接、旧导航地址及首次安装 Mihomo 的模块跳转均通过前端回归检查。
 
+macOS ARM64 安装包使用本地可移植 CPython 3.14.8 / OpenSSL 3.5.9 构建，声明最低 macOS 15。本机 Mac 与 AaronDell Windows 已安装 0.6.15，并在最终安装版本再次完成 Windows 到 Mac 的应用、DSH 与 RustDesk 通道检查。其余平台发行构建通过。Android 交互验证范围为 Android 35 ARM64 模拟器。
+
 ## 0.6.10 增量
 
 Python 全量检查通过 296 项，另有 12 项真实服务检查按现有设置排除。共享前端交互脚本覆盖设备主入口、模块导航、Mesh TCP 转发、草稿保护和备用访问设置。Go 内部模块通过 race 测试，新增 Ticket 检查确认使用已绑定 Cloud、保持账号错误状态并排除无效设备路径。
