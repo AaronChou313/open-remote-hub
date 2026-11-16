@@ -17,7 +17,7 @@
 
 ## 已执行的验证
 
-- Python 全量测试通过 273 项，包含 Windows 原生文件回归与 RustDesk 专项测试。
+- Python 全量测试通过 277 项，包含 Windows 原生文件回归与 RustDesk 专项测试。
 - 前端交互脚本通过设备选择、错误状态、链路显示、终端路由和未保存编辑保护。增加 Ticket 兑换保留 Android 工作区上下文的回归检查。
 - Go 转发、API 测试通过，新增检查本机前端资源与目标 API 的分流，既有测试覆盖 Cookie 和真实 WebSocket 转发。
 - Windows CI 已运行打包后的 Agent，验证默认模块关闭、文件上传、文本读取、Range 下载、ConPTY 真实命令输出、尺寸变化及关闭 WebSocket 后重连历史。
