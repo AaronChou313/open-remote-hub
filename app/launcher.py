@@ -183,8 +183,11 @@ def stop_children():
     kill('server.pid')
     try:
         import psutil
+        name = 'orh-mesh.exe' if sys.platform == 'win32' else 'orh-mesh'
+        owned = {(APP / 'bin' / name).resolve(), (BUNDLE / 'bin' / name).resolve()}
         for process in psutil.process_iter(['exe']):
-            if process.info.get('exe') == str(APP / 'bin' / ('orh-mesh.exe' if sys.platform == 'win32' else 'orh-mesh')):
+            executable = process.info.get('exe')
+            if executable and Path(executable).resolve() in owned:
                 process.terminate()
     except Exception:
         pass
