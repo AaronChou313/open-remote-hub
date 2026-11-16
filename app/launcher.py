@@ -16,6 +16,11 @@ from pathlib import Path
 
 APP = (Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'OpenRemoteHub' if sys.platform == 'win32' else Path.home() / 'Library/Application Support/OpenRemoteHub' if sys.platform == 'darwin' else Path(os.environ.get('XDG_DATA_HOME', str(Path.home() / '.local/share'))) / 'openremotehub')
 APP = Path(os.environ.get('ORH_APP_DIR', str(APP)))
+CONFIG = Path(os.environ.get('ORH_CONFIG_FILE', str(APP / '.env')))
+for line in CONFIG.read_text(encoding='utf-8').splitlines() if CONFIG.exists() else []:
+    if line and not line.startswith('#') and '=' in line:
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip())
 BUNDLE = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
 CREATE_NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 URL = 'http://127.0.0.1:' + os.environ.get('ORH_PORT', '8765') + '/'

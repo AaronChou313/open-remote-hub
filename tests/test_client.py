@@ -18,6 +18,21 @@ LOCAL = 'c0d3a66a-9529-4a00-b43b-1a9158ce9eb0'
 REMOTE = 'a5402db9-881c-478e-b15a-4e00586a32f0'
 
 
+def test_native_launcher_loads_user_configuration(tmp_path, monkeypatch):
+    import importlib.util
+    (tmp_path / '.env').write_text('ORH_PORT=9876\nORH_CLOUD_PROXY=http://127.0.0.1:7891\n')
+    monkeypatch.setenv('ORH_APP_DIR', str(tmp_path))
+    monkeypatch.delenv('ORH_CONFIG_FILE', raising=False)
+    monkeypatch.setenv('ORH_PORT', '')
+    monkeypatch.delenv('ORH_PORT')
+    monkeypatch.setenv('ORH_CLOUD_PROXY', 'http://explicit-proxy:7890')
+    spec = importlib.util.spec_from_file_location('configured_launcher', Path(launcher.__file__))
+    configured = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(configured)
+    assert configured.URL == 'http://127.0.0.1:9876/'
+    assert configured.os.environ['ORH_CLOUD_PROXY'] == 'http://explicit-proxy:7890'
+
+
 def test_native_start_uses_saved_account_ticket(tmp_path, monkeypatch):
     binding = dict(status='bound', instance_id=LOCAL, cloud_url='https://cloud.example', account_token='saved-account')
     (tmp_path / 'cloud-binding.json').write_text(json.dumps(binding))
