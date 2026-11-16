@@ -5,8 +5,8 @@ window.RemoteHubProxyManager=(()=>{
  const guarded=fn=>async event=>{event?.preventDefault();try{await fn(event)}catch(error){showError(error)}};
  function markup(data,admin){
   const engine=data.engine,active=data.profiles.find(row=>row.active);
-  const status=!engine.ready?'后台离线':engine.enabled?'代理运行中':engine.privileged?'代理已停止':'预备完成 · 等待主机授权';
-  return `<section class="proxy-service"><div><div class="proxy-service-title"><h2>Mihomo</h2><span class="badge ${engine.enabled?'running':''}">${esc(status)}</span></div>${data.network_update_required?'<p class="proxy-error">请更新主机服务以修复 macOS DNS 接管。</p>':''}<p class="muted">${active?esc(active.name):'尚未选择机场配置'}${engine.ready?' · 本机端口 '+engine.mixed_port:''}</p>${engine.error?`<p class="proxy-error">${esc(engine.error)}</p>`:''}${!data.consistent?'<p class="proxy-error">后台配置与列表不一致，请重新使用所需配置。</p>':''}</div><div class="toolbar">${admin?`${!engine.privileged||data.network_update_required?'<button id="proxyInstall">'+(data.network_update_required?'更新网络接管':'完成主机授权')+'</button>':''}${engine.enabled?'<button id="proxyStop" class="danger">停止代理</button>':`<button id="proxyStart" class="primary" ${!engine.ready||!engine.privileged||!active||!data.consistent||data.network_update_required?'disabled':''}>启动代理</button>`}<button id="proxyRestart" ${!engine.revision?'disabled':''}>重启内核</button>`:''}</div></section><div class="proxy-tabs" role="tablist" aria-label="代理管理"><button data-proxy-tab="profiles" role="tab">机场配置</button><button data-proxy-tab="nodes" role="tab">策略与节点</button><button data-proxy-tab="rules" role="tab">路由规则</button><button data-proxy-tab="logs" role="tab">内核日志</button></div><div id="proxyManagedContent"></div>`;
+  const status=data.installation?.running?'安装中 · 请在目标主机授权':!engine.ready?'后台离线':engine.enabled?'代理运行中':engine.privileged?'代理已停止':'预备完成 · 等待主机授权';
+  return `<section class="proxy-service"><div><div class="proxy-service-title"><h2>Mihomo</h2><span class="badge ${engine.enabled?'running':''}">${esc(status)}</span></div>${data.network_update_required?'<p class="proxy-error">请更新主机服务以修复 macOS DNS 接管。</p>':''}<p class="muted">${active?esc(active.name):'尚未选择机场配置'}${engine.ready?' · 本机端口 '+engine.mixed_port:''}</p>${engine.error?`<p class="proxy-error">${esc(engine.error)}</p>`:''}${data.installation?.output&&!data.installation.running&&!engine.ready?`<pre class="proxy-error">${esc(data.installation.output)}</pre>`:''}${!data.consistent?'<p class="proxy-error">后台配置与列表不一致，请重新使用所需配置。</p>':''}</div><div class="toolbar">${admin?`${data.install_supported&&(!engine.privileged||data.network_update_required)?'<button id="proxyInstall" '+(data.installation?.running?'disabled':'')+'>'+(data.installation?.running?'安装中…':data.network_update_required?'更新网络接管':'安装 Mihomo')+'</button>':''}${engine.enabled?'<button id="proxyStop" class="danger">停止代理</button>':`<button id="proxyStart" class="primary" ${!engine.ready||!engine.privileged||!active||!data.consistent||data.network_update_required?'disabled':''}>启动代理</button>`}<button id="proxyRestart" ${!engine.revision?'disabled':''}>重启内核</button>`:''}</div></section><div class="proxy-tabs" role="tablist" aria-label="代理管理"><button data-proxy-tab="profiles" role="tab">机场配置</button><button data-proxy-tab="nodes" role="tab">策略与节点</button><button data-proxy-tab="rules" role="tab">路由规则</button><button data-proxy-tab="logs" role="tab">内核日志</button></div><div id="proxyManagedContent"></div>`;
  }
  function modal(title,html){
   if(modalBusy)throw Error('当前配置操作仍在执行，请等待完成。');
@@ -37,7 +37,20 @@ window.RemoteHubProxyManager=(()=>{
    if($('#proxyStart'))$('#proxyStart').onclick=guarded(()=>service($('#proxyStart'),'enable'));
    if($('#proxyStop'))$('#proxyStop').onclick=guarded(()=>service($('#proxyStop'),'disable'));
    $('#proxyRestart').onclick=guarded(()=>service($('#proxyRestart'),'restart'));
-   if($('#proxyInstall'))$('#proxyInstall').onclick=()=>modal('一次性主机授权',`<p>在目标主机终端运行下列命令。只安装 RemoteHub 的专用后台服务，首次安装保持代理关闭，不会关闭 Clash。</p><pre>${esc(data.install_command||'请参考 README 中的代理安装步骤。')}</pre><p>完成后刷新本页。日常操作和后续机场配置都在这里完成。</p>`);
+   if($('#proxyInstall'))$('#proxyInstall').onclick=guarded(async()=>{
+    await runBusy($('#proxyInstall'),'proxy:install','准备安装…',()=>api('/proxy/manager/install',{}));
+    notify('请在目标主机完成管理员授权，安装后可导入订阅并启动代理');
+    if(check())await reload();
+   });
+  }
+  if(data.installation?.running){
+   $('#proxyManagedContent').innerHTML='<p>正在下载或安装 Mihomo，请在目标主机完成管理员授权。</p>';
+   setTimeout(()=>{if(check())reload().catch(showError)},2000);
+   return;
+  }
+  if(!engine.ready){
+   $('#proxyManagedContent').innerHTML='<p>安装完成后，在这里导入机场订阅或 Clash / Mihomo 配置。</p>'+(data.install_command?'<details><summary>终端安装命令</summary><pre>'+esc(data.install_command)+'</pre></details>':'');
+   return;
   }
   async function profiles(){
    $('#proxyManagedContent').innerHTML=`<div class="work-toolbar"><label class="sr-only" for="proxyProfileSearch">搜索机场配置</label><input id="proxyProfileSearch" placeholder="搜索机场配置">${admin?'<button id="proxyImport" class="primary">导入配置</button>':''}</div><div id="proxyProfiles"></div>`;

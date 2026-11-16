@@ -18,6 +18,7 @@ SOURCE={'proxies':[{'name':'fixture','type':'direct'}],'proxy-groups':[{'name':'
 @pytest.fixture
 def profiles(workspace,monkeypatch):
     client,_,_=workspace
+    monkeypatch.setattr(manager,'default_socket',lambda:None)
     state={'ready':True,'enabled':False,'privileged':True,'network_revision':2,'revision':'initial','config_revision':engine.digest({})}
     mutations=[]
     async def call(method,path,body=None):
@@ -200,3 +201,57 @@ def test_failed_reload_attempts_previous_config_rollback(monkeypatch,tmp_path):
     with pytest.raises(ValueError,match='rejected candidate'):obj.change({'action':'apply','source':{**SOURCE,'rules':['MATCH,DIRECT']},'revision':engine.digest(obj.state)})
     assert obj.state==before and len(calls)==2
     assert json.loads(calls[1]['payload'])['rules'][-1]=='MATCH,PROXY'
+
+
+def test_existing_broker_is_discovered_and_explicit_settings_take_precedence(workspace,monkeypatch,tmp_path):
+    socket=tmp_path/'broker.sock';socket.touch()
+    monkeypatch.setattr(manager,'default_socket',lambda:socket)
+    assert manager.settings()=={'socket':str(socket)}
+    manager.atomic(manager.root()/'connection.json',{'socket':'/custom/broker.sock'})
+    assert manager.settings()=={'socket':'/custom/broker.sock'}
+
+
+def test_install_keeps_existing_current_broker(profiles,monkeypatch):
+    from app import main
+    c,_,_=profiles
+    monkeypatch.setattr(manager.sys,'platform','darwin')
+    monkeypatch.setattr(main,'task_create',lambda body:pytest.fail('Existing broker must keep running'))
+    assert c.post('/api/proxy/manager/install',json={}).json()=={'installed':True}
+
+
+def test_install_starts_packaged_setup_through_task_runner(profiles,monkeypatch):
+    from app import main,launcher
+    c,state,_=profiles;state.update(ready=False,privileged=False)
+    monkeypatch.setattr(manager.sys,'platform','darwin')
+    monkeypatch.setattr(launcher,'command',lambda *args:['/Applications/OpenRemoteHub.app/Contents/MacOS/OpenRemoteHub',*args])
+    created=[];started=[]
+    monkeypatch.setattr(main,'task_create',lambda body:created.append(body) or {'id':'installer'})
+    monkeypatch.setattr(main,'task_action',lambda key,body:started.append((key,body.action)))
+    response=c.post('/api/proxy/manager/install',json={})
+    assert response.status_code==200,response.text
+    assert started==[('installer','start')]
+    assert created[0].argv[1:5]==['--run-script','proxy_setup.py','setup','--authorize']
+    assert created[0].argv[-2:]==['--data-dir',str(manager.root())]
+    assert json.loads((manager.root()/'installation.json').read_text())=={'task_id':'installer'}
+
+
+def test_packaged_proxy_installer_uses_native_authorization_and_root_owned_runtime(monkeypatch,tmp_path):
+    spec=importlib.util.spec_from_file_location('proxy_setup',Path(__file__).resolve().parents[1]/'scripts/proxy_setup.py')
+    setup=importlib.util.module_from_spec(spec);spec.loader.exec_module(setup)
+    executable=tmp_path/'OpenRemoteHub.app/Contents/MacOS/OpenRemoteHub'
+    executable.parent.mkdir(parents=True);executable.write_text('binary')
+    monkeypatch.setattr(setup.sys,'frozen',True,raising=False)
+    monkeypatch.setattr(setup.sys,'platform','darwin')
+    monkeypatch.setattr(setup.sys,'executable',str(executable))
+    monkeypatch.setattr(setup,'DATA',tmp_path/'user data')
+    calls=[];monkeypatch.setattr(setup,'run',calls.append)
+    setup.authorize('fixture-user')
+    assert calls[0][:2]==['/usr/bin/osascript','-e']
+    assert 'with administrator privileges' in calls[0][2]
+    assert '--run-script proxy_setup.py install --owner fixture-user' in calls[0][2]
+    home=tmp_path/'system service';home.mkdir()
+    command=setup.install_runtime(home)
+    assert command==[str(home/'runtime/OpenRemoteHub.app/Contents/MacOS/OpenRemoteHub'),'--run-script','proxy_engine.py']
+    assert Path(command[0]).read_text()=='binary'
+    assert setup.owned_service(command,home)
+    assert setup.owned_service(['/usr/bin/python3',str(home/'proxy_engine.py')],home)

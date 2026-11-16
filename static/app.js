@@ -29,8 +29,8 @@ const VIEW_CAP={docker:'docker',zellij:'terminal',files:'files',ssh:'ssh',dsh:'d
 async function switchView(target){
  if(VIEW_CAP[target]&&caps[VIEW_CAP[target]]===false){notify('请在功能管理中启用或检查依赖');target='modules'}
  if(target==='proxy'){target='remote';RemoteHubRemoteConnect.openTab('proxy')}
- if(target==='meshremote')RemoteHubRemoteConnect.openTab('network');
- if(target==='remote')RemoteHubRemoteConnect.openTab('lan');
+ else if(target==='meshremote')RemoteHubRemoteConnect.openTab('network');
+ else if(target==='remote')RemoteHubRemoteConnect.openTab('lan');
  document.body.dataset.module=target;
  document.body.dataset.platform=me?.host?.system==='Windows'?'windows':'unix';
  if(target==='tasks')target='services';

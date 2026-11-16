@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-const nodes=new Map(),calls=[],errors=[],notices=[];
+const nodes=new Map(),calls=[],errors=[],notices=[],timers=[];
 let approved=false,reloads=0,pendingResolve;
 function node(id){
  if(!nodes.has(id))nodes.set(id,{innerHTML:'',textContent:'',value:'',hidden:false,disabled:false,isConnected:true,open:false,
@@ -13,12 +13,13 @@ const profile={id:'abc',name:'机场 <安全>',revision:'r',active:false,subscri
 const data={managed:true,consistent:true,engine:{ready:true,privileged:true,revision:'engine',mixed_port:7891,enabled:false},profiles:[profile]};
 const more={dataset:{profile:'abc',profileAction:'more'}};
 const ctx=vm.createContext({window:{},document:{querySelectorAll:s=>s==='[data-profile]'?[more]:[]},Date,Array,JSON,
- me:{role:'admin'},$:node,esc:s=>String(s??'').replaceAll('<','&lt;'),bytes:String,table:()=>'',empty:String,
+ setTimeout:fn=>timers.push(fn),me:{role:'admin'},$:node,esc:s=>String(s??'').replaceAll('<','&lt;'),bytes:String,table:()=>'',empty:String,
  showError:e=>errors.push(e.message),notify:s=>notices.push(s),confirmAction:async()=>approved,requestName:async()=>'',
  withBusy:async(button,key,label,work)=>work(),api:async(path,body)=>{
   calls.push({path,body});
   if(path==='/proxy/manager/import')return new Promise(resolve=>{pendingResolve=resolve});
   if(path==='/proxy/manager/profile')return {ok:true};
+  if(path==='/proxy/manager/install')return {id:'installer'};
   throw Error('Unexpected '+path);
  }});
 vm.runInContext(fs.readFileSync('static/proxy-manager.js','utf8'),ctx);
@@ -49,3 +50,17 @@ assert.equal(node('#workspaceDetailDialog').open,false);
 assert.equal(node('#workspaceDetailClose').disabled,false);
 assert.ok(!notices.some(s=>s.includes('已移除')),'A suppressed removal cannot claim success');
 console.log('Proxy manager UI: escaped names, canceled removal, pending mutation lock and honest completion passed.');
+
+const fresh={...data,profiles:[],install_supported:true,engine:{ready:false,privileged:false},installation:{}};
+assert.match(view.markup(fresh,true),/id="proxyInstall"/);
+await view.bind(fresh,()=>true,async()=>{reloads++},()=> 'profiles',()=>{});
+await node('#proxyInstall').onclick();
+assert.equal(calls.at(-1).path,'/proxy/manager/install');
+assert.equal(reloads,2);
+const running={...fresh,installation:{running:true}};
+assert.match(view.markup(running,true),/id="proxyInstall" disabled/);
+await view.bind(running,()=>true,async()=>{reloads++},()=> 'profiles',()=>{});
+assert.equal(timers.length,1);
+await timers[0]();
+assert.equal(reloads,3);
+console.log('Mihomo installation starts through the API and polls progress.');

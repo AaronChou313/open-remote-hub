@@ -34,7 +34,7 @@ GUIDES = {
     'ssh': ('安装 OpenSSH 客户端。', 'https://www.openssh.com/portable.html', ''),
     'git': ('安装 Git 后重新检测。', 'https://git-scm.com/downloads', ''),
     'dsh': ('安装 DeepSeek Harness 后配置 ORH_DSH_BIN，然后重新检测。', 'https://www.npmjs.com/package/@deepseek-ai/dsh', ''),
-    'proxy': ('在本机安装 ORH 的 Mihomo broker 后重新检测。', '', 'sudo python3 scripts/proxy_setup.py install'),
+    'proxy': ('启用后在「网络连接 → 网络代理」点击「安装 Mihomo」，并在目标主机完成一次管理员授权。', '', ''),
 }
 
 
@@ -80,7 +80,7 @@ def dependency(identifier):
         return dict(available=bool(value), detail='DeepSeek Harness' if value else '尚未安装 DeepSeek Harness')
     if identifier == 'proxy':
         from app.proxy_manager import settings
-        present = bool(settings())
+        present = bool(settings() or os.environ.get('ORH_CLASH_SOCKET') or os.environ.get('ORH_CLASH_URL'))
         return dict(available=present, detail='Mihomo broker' if present else '尚未安装代理 broker')
     binary = shutil.which(identifier)
     if identifier == 'rustdesk' and not binary:
