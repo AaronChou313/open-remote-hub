@@ -136,5 +136,5 @@ async def tunnel(ws: WebSocket, key: str):
         await writer.wait_closed()
         try:
             await ws.close()
-        except RuntimeError:
+        except (RuntimeError, WebSocketDisconnect):
             pass

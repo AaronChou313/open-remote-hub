@@ -47,6 +47,14 @@ def test_saved_service_tunnel_is_authenticated_and_carries_raw_http(workspace,mo
     from app import main, modules
     client,_,_ = workspace
     monkeypatch.setattr(modules,'enabled',lambda key:True)
+    from fastapi import WebSocket
+    from starlette.websockets import WebSocketState
+    original_close=WebSocket.close
+    async def disconnected_close(socket,*args,**kwargs):
+        if socket.application_state==WebSocketState.CONNECTED:
+            raise WebSocketDisconnect(code=1006)
+        return await original_close(socket,*args,**kwargs)
+    monkeypatch.setattr(WebSocket,'close',disconnected_close)
     payload=b'x'*70000
     class Service(socketserver.BaseRequestHandler):
         def handle(self):
