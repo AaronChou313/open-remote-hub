@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app import access, client, cloud_agent, desktop_client, discovery
+from app import launcher
 from test_files import workspace
 
 LOCAL = 'c0d3a66a-9529-4a00-b43b-1a9158ce9eb0'
@@ -48,6 +49,25 @@ def test_client_logout_forgets_account_and_retains_device(workspace, monkeypatch
     assert http.post('/api/auth/client/logout', json={}).status_code == 200
     assert saved[0]['credential'] == original['credential'] and saved[0]['account_token'] == ''
     assert http.get('/api/me').status_code == 401
+
+
+def test_new_native_service_is_not_immediately_restarted(monkeypatch):
+    health = iter([False, True])
+    monkeypatch.setattr(launcher, 'healthy', lambda: next(health))
+    monkeypatch.setattr(launcher, 'setup_service', lambda: 'started')
+    monkeypatch.setattr(launcher.subprocess, 'run', lambda *args, **kwargs: pytest.fail('New service must start once'))
+    assert launcher.ensure_server() is None
+
+
+def test_linux_upgrade_restarts_existing_user_service(monkeypatch):
+    health = iter([False, True])
+    calls = []
+    monkeypatch.setattr(launcher, 'healthy', lambda: next(health))
+    monkeypatch.setattr(launcher, 'setup_service', lambda: 'running')
+    monkeypatch.setattr(launcher.sys, 'platform', 'linux')
+    monkeypatch.setattr(launcher.subprocess, 'run', lambda argv, **kwargs: calls.append(argv))
+    assert launcher.ensure_server() is None
+    assert calls == [['systemctl', '--user', 'restart', 'openremotehub.service']]
 
 
 @pytest.fixture
