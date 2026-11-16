@@ -14,7 +14,8 @@ python3 mesh/packaging/notices.py
 cp dist/THIRD_PARTY_NOTICES.txt client/android/app/src/main/assets/THIRD_PARTY_NOTICES.txt
 rm -rf client/android/app/src/main/assets/workspace
 cp -R static client/android/app/src/main/assets/workspace
-(cd mesh && gomobile bind -target=android/arm64 -androidapi=26 -trimpath -ldflags='-s -w' -javapkg=top.openremotehub.client.core -o ../client/android/app/libs/orh-client.aar ./mobile)
+version=$(cat VERSION)
+(cd mesh && gomobile bind -target=android/arm64 -androidapi=26 -trimpath -ldflags="-s -w -X github.com/AaronChou313/open-remote-hub/mesh/mobile.version=$version" -javapkg=top.openremotehub.client.core -o ../client/android/app/libs/orh-client.aar ./mobile)
 if [ "${ORH_ANDROID_RELEASE:-0}" = 1 ]; then
   (cd client/android && ./gradlew --no-daemon clean assembleRelease lintRelease)
 else

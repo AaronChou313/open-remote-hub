@@ -1,5 +1,6 @@
 """Client directory, device-scoped channels and independent native windows."""
 from pathlib import Path
+import json
 import sys
 import time
 from types import SimpleNamespace
@@ -14,6 +15,39 @@ from test_files import workspace
 
 LOCAL = 'c0d3a66a-9529-4a00-b43b-1a9158ce9eb0'
 REMOTE = 'a5402db9-881c-478e-b15a-4e00586a32f0'
+
+
+def test_native_start_uses_saved_account_ticket(tmp_path, monkeypatch):
+    binding = dict(status='bound', instance_id=LOCAL, cloud_url='https://cloud.example', account_token='saved-account')
+    (tmp_path / 'cloud-binding.json').write_text(json.dumps(binding))
+    requests = []
+    class Cloud:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, **options):
+            requests.append((url, options))
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {'url':'http://127.0.0.1:8765/auth/cloud#ticket=one-use'})
+    monkeypatch.setattr(cloud_agent, 'http_client', lambda timeout: Cloud())
+    url = desktop_client.initial_url('http://127.0.0.1:8765/client', tmp_path / 'client-webview')
+    assert url == 'http://127.0.0.1:8765/auth/cloud?client_entry=1#ticket=one-use'
+    assert requests[0][0].endswith('/api/devices/' + LOCAL + '/ticket')
+    assert requests[0][1]['headers']['Authorization'] == 'Bearer saved-account'
+    binding['account_token'] = ''
+    (tmp_path / 'cloud-binding.json').write_text(json.dumps(binding))
+    assert desktop_client.initial_url('http://127.0.0.1:8765/client', tmp_path / 'client-webview').endswith('/client')
+    assert len(requests) == 1
+
+
+def test_client_logout_forgets_account_and_retains_device(workspace, monkeypatch):
+    http = workspace[0]
+    original = dict(status='bound', credential='device-credential', account_token='account-session', instance_id=LOCAL)
+    saved = []
+    monkeypatch.setattr(cloud_agent, 'binding', lambda: original)
+    monkeypatch.setattr(cloud_agent, 'fingerprint', lambda: None)
+    monkeypatch.setattr(cloud_agent, 'save', saved.append)
+    assert http.post('/api/auth/client/logout', json={}).status_code == 200
+    assert saved[0]['credential'] == original['credential'] and saved[0]['account_token'] == ''
+    assert http.get('/api/me').status_code == 401
 
 
 @pytest.fixture

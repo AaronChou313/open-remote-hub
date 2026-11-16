@@ -1,4 +1,6 @@
 plugins { id 'com.android.application' }
+def releaseVersion = rootProject.file('../../VERSION').text.trim()
+def versionNumbers = releaseVersion.tokenize('.').collect { it.toInteger() }
 android {
     namespace 'top.openremotehub.client'
     compileSdk 35
@@ -7,8 +9,8 @@ android {
         testInstrumentationRunner 'top.openremotehub.client.CompatibilityChecks'
         minSdk 26
         targetSdk 35
-        versionCode 600
-        versionName rootProject.file('../../VERSION').text.trim()
+        versionCode versionNumbers[0] * 10000 + versionNumbers[1] * 100 + versionNumbers[2]
+        versionName releaseVersion
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

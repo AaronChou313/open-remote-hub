@@ -1,7 +1,28 @@
 """Native Client window. The Agent is owned by its existing service process."""
 from pathlib import Path
 import json
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx
+
+
+def initial_url(url, storage_path):
+    from app.cloud_agent import http_client
+    try:
+        binding = json.loads((Path(storage_path).parent / 'cloud-binding.json').read_text())
+        token = binding.get('account_token')
+        if binding.get('status') != 'bound' or not token:
+            return url
+        origin = urlsplit(url)
+        with http_client(8) as client:
+            response = client.post(binding['cloud_url'] + '/api/devices/' + binding['instance_id'] + '/ticket',
+                                   headers={'Authorization': 'Bearer ' + token},
+                                   json={'address': origin.scheme + '://' + origin.netloc, 'state': ''})
+            response.raise_for_status()
+            callback = urlsplit(response.json()['url'])
+        return urlunsplit((callback.scheme, callback.netloc, callback.path, 'client_entry=1', callback.fragment))
+    except (OSError, ValueError, KeyError, httpx.HTTPError):
+        return url
 
 
 def run(url, storage_path):
@@ -26,7 +47,7 @@ def run(url, storage_path):
                               min_size=(600, 400))
 
     Path(storage_path).mkdir(parents=True, exist_ok=True, mode=0o700)
-    window = webview.create_window('OpenRemoteHub', url, width=1280, height=840,
+    window = webview.create_window('OpenRemoteHub', initial_url(url, storage_path), width=1280, height=840,
                                    min_size=(680, 480))
 
     def terminal_request(event, key, value):
