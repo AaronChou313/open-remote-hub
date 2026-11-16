@@ -14,7 +14,7 @@ import (
 	"github.com/AaronChou313/open-remote-hub/mesh/internal/state"
 )
 
-var version = "0.4.0"
+var version = "development"
 
 func main() {
 	path := flag.String("config", state.DefaultPath(), "配置文件")

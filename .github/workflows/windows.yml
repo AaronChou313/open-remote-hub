@@ -21,7 +21,9 @@ jobs:
       - run: python -m pip install -r desktop/requirements.txt
       - name: Build mesh
         working-directory: mesh
-        run: go build -trimpath -ldflags "-s -w" -o ..\bin\orh-mesh.exe .\cmd\orh-mesh
+        run: |
+          $version = (Get-Content ..\VERSION -Raw).Trim()
+          go build -trimpath -ldflags "-s -w -X main.version=$version" -o ..\bin\orh-mesh.exe .\cmd\orh-mesh
       - name: Build application
         shell: pwsh
         run: |

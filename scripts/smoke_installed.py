@@ -30,7 +30,7 @@ async def terminal_socket(name):
     async with websockets.connect(address, origin=BASE, additional_headers={'Cookie':cookie}, proxy=None) as socket:
         await socket.recv()
         await socket.send(json.dumps(dict(type='resize', rows=28, cols=100)))
-        await socket.send(json.dumps(dict(type='input', data="Write-Output 'ORH_PACKAGE_OK'\r")))
+        await socket.send(json.dumps(dict(type='input', data="Write-Output ('ORH_' + 'PACKAGE_OK')\r")))
         output = ''
         while 'ORH_PACKAGE_OK' not in output:
             output += await asyncio.wait_for(socket.recv(), 15)
@@ -46,12 +46,16 @@ def main():
     modules = request('/api/modules')['modules']
     assert all(not module['enabled'] for module in modules)
     request('/api/modules/files/enable', {})
-    root = request('/api/files/roots')['roots'][0]['id']
+    directory = request('/api/files/roots')['roots'][0]
+    root = directory['id']
     name = 'orh-package-' + secrets.token_hex(6) + '.txt'
     entry = request('/api/files/upload?root=' + root + '&path=' + name, data=b'package-file-ok')
     assert request('/api/files/text?root=' + root + '&path=' + name)['text'] == 'package-file-ok'
     assert request('/api/files/download?root=' + root + '&path=' + name, headers={'Range':'bytes=0-6'}) == b'package'
     request('/api/files/operation', dict(root=root, path=name, revision=entry['revision'], action='delete', confirm=name))
+    trashed = next(entry for entry in request('/api/files/trash?root=' + root)['entries'] if entry['original_name'] == name)
+    request('/api/files/restore', dict(root=root, name=trashed['name'], revision=trashed['revision'], confirm=name))
+    (Path(directory['path']) / name).unlink()
     if os.name == 'nt':
         module = request('/api/modules/terminal/enable', {})
         assert module['state'] == 'ready', module

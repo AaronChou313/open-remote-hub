@@ -294,6 +294,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onResume() {
         super.onResume(); active=true;
+        if (!MeshService.alive()) startForegroundService(new Intent(this,MeshService.class));
         Diagnostics.log("ui","页面恢复");
         backgroundButton.setVisibility(backgroundAllowed()?View.GONE:View.VISIBLE);
         onUI(poll);

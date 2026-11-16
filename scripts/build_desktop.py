@@ -25,7 +25,7 @@ def main():
     go = shutil.which('go')
     if not go:
         raise SystemExit('Go is required to build the bundled Mesh engine')
-    run(go, 'build', '-trimpath', '-ldflags=-s -w', '-o', ROOT/'bin/orh-mesh', './cmd/orh-mesh', cwd=ROOT/'mesh')
+    run(go, 'build', '-trimpath', f'-ldflags=-s -w -X main.version={VERSION}', '-o', ROOT/'bin/orh-mesh', './cmd/orh-mesh', cwd=ROOT/'mesh')
     run(sys.executable, 'mesh/packaging/notices.py')
     if sys.platform == 'darwin':
         from PIL import Image
