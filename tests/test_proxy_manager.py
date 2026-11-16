@@ -255,3 +255,24 @@ def test_packaged_proxy_installer_uses_native_authorization_and_root_owned_runti
     assert Path(command[0]).read_text()=='binary'
     assert setup.owned_service(command,home)
     assert setup.owned_service(['/usr/bin/python3',str(home/'proxy_engine.py')],home)
+
+
+def test_installer_downloads_baseline_x64_build(monkeypatch,tmp_path):
+    import gzip
+    import hashlib
+    import io
+    spec=importlib.util.spec_from_file_location('proxy_setup_download',Path(__file__).resolve().parents[1]/'scripts/proxy_setup.py')
+    setup=importlib.util.module_from_spec(spec);spec.loader.exec_module(setup)
+    monkeypatch.setattr(setup,'DATA',tmp_path)
+    monkeypatch.setattr(setup.platform,'machine',lambda:'x86_64')
+    monkeypatch.setattr(setup.platform,'system',lambda:'Linux')
+    archive=gzip.compress(b'baseline-core')
+    release={'tag_name':'vfixture','html_url':'https://github.com/MetaCubeX/mihomo/releases/tag/vfixture','assets':[
+        {'name':'mihomo-linux-amd64-v1-vfixture.gz','browser_download_url':'https://fixture/baseline','digest':'sha256:'+hashlib.sha256(archive).hexdigest()},
+        {'name':'mihomo-linux-amd64-vfixture.gz','browser_download_url':'https://fixture/v3'}]}
+    def response(url,**kwargs):
+        return io.BytesIO(json.dumps(release).encode() if not isinstance(url,str) else archive if url.endswith('/baseline') else pytest.fail('Must select baseline CPU support'))
+    monkeypatch.setattr(setup.urllib.request,'urlopen',response)
+    setup.download()
+    assert (tmp_path/'bin/mihomo').read_bytes()==b'baseline-core'
+    assert json.loads((tmp_path/'bin/release.json').read_text())['asset']=='mihomo-linux-amd64-v1-vfixture.gz'
