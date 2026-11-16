@@ -2,6 +2,7 @@
 import ipaddress
 import os
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -41,6 +42,33 @@ class Network:
         if hosts.intersection({'0.0.0.0', '::'}):
             raise ValueError('Wildcard bind addresses cannot be used as allowed destination hosts')
         return cls(bind, frozenset(hosts))
+
+    def listeners(self, ports):
+        addresses=[self.bind]
+        if self.bind not in ('127.0.0.1','localhost','0.0.0.0'):
+            addresses.insert(0,'127.0.0.1')
+        sockets=[];errors=[]
+        for index,address in enumerate(addresses):
+            group=[]
+            try:
+                for port in ports:
+                    family=socket.AF_INET6 if ':' in address else socket.AF_INET
+                    listener=socket.socket(family,socket.SOCK_STREAM)
+                    group.append(listener)
+                    listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+                    if family==socket.AF_INET6:
+                        listener.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+                    listener.bind((address,port))
+                    listener.set_inheritable(True)
+            except OSError as error:
+                for listener in group:listener.close()
+                if index==0:
+                    for listener in sockets:listener.close()
+                    raise
+                errors.append(f'备用监听 {address} 暂时不可用，请在网络就绪后重启后台。{error}')
+            else:
+                sockets.extend(group)
+        return sockets,errors
 
     def local_url(self, port):
         address = {'0.0.0.0': '127.0.0.1', '::': '::1'}.get(self.bind, self.bind)

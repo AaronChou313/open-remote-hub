@@ -59,7 +59,7 @@ Android 使用相同的一级导航，设备卡片以“打开控制台”为主
 
 ## 备用监听与恢复认证
 
-`app/agent_settings.py` 在目标私有目录保存 `agent-settings.json`，覆盖监听地址与允许的目标 Host，并保存本地恢复开关。地址校验复用 `app/network.py`。允许地址即时更新，监听变更通过安装版后台重启生效。Agent API 的启动与认证均独立于 Mesh 可达性。
+`app/agent_settings.py` 在目标私有目录保存 `agent-settings.json`，覆盖监听地址与允许的目标 Host，并保存本地恢复开关。地址校验复用 `app/network.py`。允许地址即时更新，监听变更通过安装版后台重启生效。指定备用 IP 时保留 IPv4 回环入口。备用网卡尚未就绪时继续启动本机 API，并在设置页报告备用监听错误，避免备用网络的启动顺序影响本机恢复。Agent API 的启动与认证均独立于 Mesh 可达性。
 
 恢复密码复用现有 PBKDF2 密码存储，以独立会话凭据指纹识别。Cloud 绑定后默认沿用账号登录，用户主动开启恢复后，可在 Cloud 离线时使用本地密码。密码轮换和关闭恢复使对应恢复会话失效，现有 Cloud 会话继续按账号指纹验证。本机交互式 `password.py --recovery` 用于故障恢复。
 

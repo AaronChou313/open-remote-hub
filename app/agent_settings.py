@@ -50,7 +50,8 @@ def status():
     scheme = 'https' if os.environ.get('ORH_TLS_CERT_FILE') else 'http'
     hosts = sorted(network.hosts - {'localhost', '127.0.0.1', '::1'})
     return dict(bind=network.bind, active_bind=main.NETWORK.bind, allowed_hosts=hosts,
-                restart_required=network.bind != main.NETWORK.bind,
+                restart_required=network.bind != main.NETWORK.bind or bool(getattr(main,'LISTEN_ERRORS',[])),
+                listener_errors=getattr(main,'LISTEN_ERRORS',[]),
                 restart_supported=bool(getattr(sys, 'frozen', False)),
                 recovery_enabled=recovery_enabled(), password_set=passwords.record() is not None,
                 urls=[f'{scheme}://{f"[{host}]" if ":" in host else host}:{main.PORT}' for host in hosts])
