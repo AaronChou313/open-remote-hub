@@ -15,10 +15,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        if: runner.os != 'macOS'
-        with:
-          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v10
+        if: runner.os == 'Linux'
+      - name: Select portable Linux TLS runtime
+        if: runner.os == 'Linux'
+        run: |
+          uv python install 3.14
+          uv --managed-python venv --python 3.14 --seed .build-venv
+          echo "$PWD/.build-venv/bin" >> "$GITHUB_PATH"
       - name: Select current macOS TLS runtime
         if: runner.os == 'macOS'
         run: |
@@ -58,6 +62,7 @@ jobs:
           build/desktop/OpenRemoteHub/OpenRemoteHub --stop
           test "$result" -eq 124
       - uses: actions/upload-artifact@v4
+        continue-on-error: ${{ startsWith(github.ref, 'refs/tags/') }}
         with:
           name: desktop-${{ matrix.runner }}
           path: |
