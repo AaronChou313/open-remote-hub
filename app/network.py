@@ -2,6 +2,7 @@
 import ipaddress
 import os
 import re
+import socket
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -26,17 +27,48 @@ class Network:
 
     @classmethod
     def load(cls):
-        bind = os.environ.get('ORH_HOST', '127.0.0.1').strip()
+        return cls.configured(os.environ.get('ORH_HOST', '127.0.0.1'), os.environ.get('ORH_ALLOWED_HOSTS', '').split(','))
+
+    @classmethod
+    def configured(cls, bind, allowed_hosts):
+        bind = bind.strip()
         if bind != 'localhost':
             try: bind = ipaddress.ip_address(bind).compressed
             except ValueError: raise ValueError('ORH_HOST must be a local IP, 0.0.0.0, :: or localhost') from None
         hosts = {'localhost', '127.0.0.1', '::1'}
-        hosts.update(hostname(v) for v in os.environ.get('ORH_ALLOWED_HOSTS', '').split(',') if v.strip())
+        hosts.update(hostname(v) for v in allowed_hosts if v.strip())
         if bind not in ('0.0.0.0', '::', 'localhost'):
             hosts.add(bind)
         if hosts.intersection({'0.0.0.0', '::'}):
             raise ValueError('Wildcard bind addresses cannot be used as allowed destination hosts')
         return cls(bind, frozenset(hosts))
+
+    def listeners(self, ports):
+        addresses=[self.bind]
+        if self.bind not in ('127.0.0.1','localhost','0.0.0.0'):
+            addresses.insert(0,'127.0.0.1')
+        sockets=[];errors=[]
+        for index,address in enumerate(addresses):
+            group=[]
+            try:
+                for port in ports:
+                    family=socket.AF_INET6 if ':' in address else socket.AF_INET
+                    listener=socket.socket(family,socket.SOCK_STREAM)
+                    group.append(listener)
+                    listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+                    if family==socket.AF_INET6:
+                        listener.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+                    listener.bind((address,port))
+                    listener.set_inheritable(True)
+            except OSError as error:
+                for listener in group:listener.close()
+                if index==0:
+                    for listener in sockets:listener.close()
+                    raise
+                errors.append(f'备用监听 {address} 暂时不可用，请在网络就绪后重启后台。{error}')
+            else:
+                sockets.extend(group)
+        return sockets,errors
 
     def local_url(self, port):
         address = {'0.0.0.0': '127.0.0.1', '::': '::1'}.get(self.bind, self.bind)

@@ -15,14 +15,20 @@ import top.openremotehub.client.core.mobile.Mobile;
 /** Runs against Android's actual Uri implementation, without an external test framework. */
 public final class CompatibilityChecks extends Instrumentation {
     private String peer="";
+    private boolean consoleTest;
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
-        if (arguments!=null) peer=arguments.getString("peer","");
+        if (arguments!=null) {peer=arguments.getString("peer","");consoleTest="1".equals(arguments.getString("console",""));}
         start();
     }
     @Override public void onStart() {
         Bundle result=new Bundle();
         try {
+            if(consoleTest) {
+                checkConsoleEntry();
+                result.putString("stream","Console entry opened the authenticated shared Agent workspace.\n");
+                finish(Activity.RESULT_OK,result);return;
+            }
             String address="127.0.0.1:54321";
             Uri link=MainActivity.rustDeskURI(address);
             if (!link.toString().equals("rustdesk://connection/new/"+address)
@@ -39,6 +45,61 @@ public final class CompatibilityChecks extends Instrumentation {
             result.putString("stream",error.toString());
             finish(Activity.RESULT_CANCELED,result);
         }
+    }
+
+    /** Optional end-to-end check, with credentials in an app-private fixture. */
+    private void checkConsoleEntry() throws Exception {
+        java.io.File fixture=new java.io.File(getTargetContext().getFilesDir(),"console-qa.json");
+        String text=new String(java.nio.file.Files.readAllBytes(fixture.toPath()),StandardCharsets.UTF_8);
+        fixture.delete();
+        org.json.JSONObject input=new org.json.JSONObject(text);
+        MainActivity home=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        org.json.JSONObject login=null;
+        long until=SystemClock.elapsedRealtime()+60000;
+        while(input.has("password")&&login==null) {
+            try {login=(org.json.JSONObject)LocalApi.call("/cloud/login",new org.json.JSONObject()
+                .put("cloud_url",input.getString("cloud_url")).put("username",input.getString("username")).put("password",input.getString("password")),"POST");}
+            catch(Exception unavailable){if(SystemClock.elapsedRealtime()>until)throw unavailable;Thread.sleep(1000);}
+        }
+        if(login!=null)getTargetContext().getSharedPreferences("cloud",0).edit().putString("token",login.getString("account_token"))
+            .putString("url",input.getString("cloud_url")).commit();
+        until=SystemClock.elapsedRealtime()+180000;
+        while(true) {
+            org.json.JSONObject status=(org.json.JSONObject)LocalApi.call("/status",null,"GET");
+            if("Running".equals(status.optString("backend_state")))break;
+            if(SystemClock.elapsedRealtime()>until)throw new AssertionError("Mesh did not connect");
+            Thread.sleep(1000);
+        }
+        ConsoleActivity console=(ConsoleActivity)startActivitySync(new Intent(getTargetContext(),ConsoleActivity.class)
+            .putExtra("device_id",input.getString("device_id")).putExtra("peer_ip",input.getString("peer_ip"))
+            .putExtra("name","ORH console QA").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        final android.webkit.WebView[] web={null};
+        runOnMainSync(() -> web[0]=findWeb(console.getWindow().getDecorView()));
+        if(web[0]==null)throw new AssertionError("Console screen did not open immediately");
+        until=SystemClock.elapsedRealtime()+60000;
+        while(true) {
+            java.util.concurrent.CountDownLatch done=new java.util.concurrent.CountDownLatch(1);
+            final String[] ready={""};
+            runOnMainSync(() -> web[0].evaluateJavascript("JSON.stringify({authenticated:Boolean(document.querySelector('#shell') && !document.querySelector('#shell').hidden),path:location.pathname,body:document.body?document.body.innerText.slice(0,2000):''})",value -> {ready[0]=value;done.countDown();}));
+            done.await(3,java.util.concurrent.TimeUnit.SECONDS);
+            if(ready[0].contains("authenticated\\\":true"))break;
+            if(SystemClock.elapsedRealtime()>until)throw new AssertionError("Agent workspace did not authenticate. "+ready[0]+" "+Diagnostics.tail(2000));
+            Thread.sleep(500);
+        }
+        runOnMainSync(console::finish);
+        runOnMainSync(home::finish);
+    }
+
+    private android.webkit.WebView findWeb(android.view.View view) {
+        if(view instanceof android.webkit.WebView)return (android.webkit.WebView)view;
+        if(view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for(int index=0;index<group.getChildCount();index++) {
+                android.webkit.WebView found=findWeb(group.getChildAt(index));
+                if(found!=null)return found;
+            }
+        }
+        return null;
     }
 
     /** Optional real-network test. The isolated peer must publish an echo server on 21118. */

@@ -21,6 +21,7 @@ jobs:
       - run: node tests/workspace-ui.mjs
       - run: node tests/uploads-ui.mjs
       - run: node tests/terminal-browser-ui.mjs
+      - run: node tests/mesh-settings-ui.mjs
       - run: node tests/network-ui.mjs
       - run: node tests/proxy-ui.mjs
       - run: node tests/proxy-manager-ui.mjs

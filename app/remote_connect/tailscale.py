@@ -28,7 +28,7 @@ def binary():
     return str(token_file()) if token_file().is_file() else None
 
 
-def request(path, body=None, timeout=10, base=None, token=None):
+def request(path, body=None, timeout=10, base=None, token=None, method=None):
     base = (base or os.environ.get('ORH_MESH_API_URL','http://127.0.0.1:4789')).rstrip('/')
     parsed = urlsplit(base)
     if parsed.scheme!='http' or parsed.hostname not in ('127.0.0.1','localhost','::1') or parsed.username or parsed.path:
@@ -36,7 +36,7 @@ def request(path, body=None, timeout=10, base=None, token=None):
     try:
         secret = token if token is not None else token_file().read_text().strip()
         with httpx.Client(timeout=timeout,trust_env=False) as client:
-            response=client.request('GET' if body is None else 'POST',base+'/api/v1'+path,
+            response=client.request(method or ('GET' if body is None else 'POST'),base+'/api/v1'+path,
                                     json=body,headers={'Authorization':'Bearer '+secret})
     except FileNotFoundError:
         raise TailscaleError('请先安装并启动组网组件') from None

@@ -32,7 +32,8 @@ for line in ENV_FILE.read_text().splitlines() if ENV_FILE.exists() else []:
 PORT = int(os.environ.get('ORH_PORT', '8765'))
 ZPORT = int(os.environ.get('ORH_ZELLIJ_PORT', '8082'))
 from app.network import Network
-NETWORK = Network.load()
+from app import agent_settings
+NETWORK = agent_settings.configured_network(Network.load())
 DB = DATA / 'metrics.sqlite3'
 sessions = {}
 attempts = {}
@@ -141,6 +142,7 @@ async def lifespan(app):
 
 app=FastAPI(title='OpenRemoteHub', lifespan=lifespan,docs_url=None,redoc_url=None,openapi_url=None)
 from app import discovery, cloud_agent
+app.include_router(agent_settings.router)
 app.include_router(discovery.router)
 app.include_router(cloud_agent.router)
 
@@ -199,16 +201,16 @@ def throttle(request):
         attempts[ip].append(now)
 
 
-def login_response(request,expires=None):
+def login_response(request,expires=None,local=False):
     expires = min(expires or time.time()+43200,time.time()+43200)
-    token=secrets.token_urlsafe(32);access.create(token,'admin',expires)
+    token=secrets.token_urlsafe(32);access.create(token,'admin',expires,local=local)
     result=JSONResponse({'role':'admin'})
     result.set_cookie('orh',token,httponly=True,samesite='strict',secure=request.url.scheme=='https',max_age=max(1,int(expires-time.time())))
     return result
 
 @app.get('/api/auth/status')
 def auth_status():
-    return {'version':(ROOT/'VERSION').read_text().strip(),'needs_setup':not cloud_agent.binding() and passwords.record() is None,'cloud':{key:cloud_agent.status()[key] for key in ('bound','cloud_url')}}
+    return {'version':(ROOT/'VERSION').read_text().strip(),'needs_setup':not cloud_agent.binding() and passwords.record() is None,'local_password_set':passwords.record() is not None,'recovery_enabled':agent_settings.recovery_enabled(),'cloud':{key:cloud_agent.status()[key] for key in ('bound','cloud_url')}}
 
 @app.post('/api/auth/setup')
 def setup(body:Login,request:Request):
@@ -222,10 +224,11 @@ def setup(body:Login,request:Request):
 
 @app.post('/api/login')
 def login(body:Login,request:Request):
-    if cloud_agent.binding():raise HTTPException(409,'请使用 Cloud 账号登录此设备')
+    bound = bool(cloud_agent.binding())
+    if bound and not agent_settings.recovery_enabled():raise HTTPException(409,'此设备尚未启用本地恢复，请使用 Cloud 账号登录')
     throttle(request)
-    if not passwords.verify(body.password):raise HTTPException(401,'密码错误')
-    return login_response(request)
+    if not passwords.verify(body.password,recovery=bound):raise HTTPException(401,'密码错误')
+    return login_response(request,local=bound)
 
 class CloudLogin(BaseModel):
     cloud_url: str = Field(default='', max_length=512)
@@ -302,8 +305,9 @@ def system():
 def capabilities():
     from app import modules
     from app import mesh_runtime
-    values = {value['id']:value['state'] == 'ready' for value in modules.listing()['modules']}
-    return dict(values, zellij=values['terminal'], rustdesk=values['desktop'], mesh=mesh_runtime.binary() is not None)
+    listing=modules.listing()['modules']
+    values = {value['id']:value['state'] == 'ready' for value in listing}
+    return dict(values, enabled_modules=[value['id'] for value in listing if value['enabled'] and value['supported']], zellij=values['terminal'], rustdesk=values['desktop'], mesh=mesh_runtime.binary() is not None)
 
 
 @app.get('/api/history')

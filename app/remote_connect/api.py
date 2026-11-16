@@ -100,7 +100,9 @@ def overview():
         else:
             peer['services'] = sorted(known)
             peer['console'] = 8765 in known
-    return dict(rustdesk=client.status(), tailscale=status, nodebaby=nodebaby.status(),
+    from app import modules
+    rustdesk=client.status() if modules.enabled('desktop') else dict(ready=False,installed=False,processes=[],autostart=False,device_id=None,connections=None,permanent_password_set=None)
+    return dict(rustdesk=rustdesk, tailscale=status, nodebaby=nodebaby.status(),
                 lan_urls=tailscale.access_urls(), mesh=mesh_runtime.status())
 
 

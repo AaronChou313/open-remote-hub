@@ -133,7 +133,8 @@ def metadata():
     from app import main
     from app.network import Network
     value = discovery.identity()
-    hosts = set(Network.load().hosts) - {'localhost','127.0.0.1','::1'}
+    from app import agent_settings
+    hosts = set(agent_settings.configured_network(Network.load()).hosts) - {'localhost','127.0.0.1','::1'}
     from app.remote_connect import tailscale
     # The mesh address is the Host a peer's console forward carries, even when
     # this console only listens on loopback and is reached through the mesh.

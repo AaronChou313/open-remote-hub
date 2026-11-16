@@ -25,7 +25,7 @@ LABEL='local.openremotehub.proxy'
 
 
 def download():
-    machine={'arm64':'arm64','aarch64':'arm64','x86_64':'amd64'}.get(platform.machine())
+    machine={'arm64':'arm64','aarch64':'arm64','x86_64':'amd64-v1'}.get(platform.machine())
     system={'Darwin':'darwin','Linux':'linux'}.get(platform.system())
     if not machine or not system:raise SystemExit('Unsupported architecture')
     req=urllib.request.Request('https://api.github.com/repos/MetaCubeX/mihomo/releases/latest',headers={'User-Agent':'OpenRemoteHub-setup'})

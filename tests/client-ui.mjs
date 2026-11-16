@@ -48,7 +48,7 @@ await run('refreshDevices()');
 assert.equal(node('#clientShell').hidden, false);
 assert.match(node('#clientDevices').innerHTML, /&lt;Lab&gt;/);
 assert.match(node('#clientDevices').innerHTML, /Cloud 心跳在线.*链路尚未建立/);
-assert.equal(node('#clientMeshSettings').href.includes('device_id=local'), true);
+assert.equal(node('#clientModules').href.includes('device_id=local'), true);
 directory.cloud.error = 'Cloud 不可达';
 await run('refreshDevices()');
 assert.equal(node('#clientNotice').textContent, 'Cloud 不可达');

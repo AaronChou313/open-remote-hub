@@ -24,7 +24,9 @@ import top.openremotehub.client.core.mobile.Mobile;
 public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
-    private LinearLayout page, binding;
+    private LinearLayout page, binding, devicePage, meshPage, settingsPage, forwardRows;
+    private TextView pageTitle;
+    private int selectedPage;
     private TextView status, message, selfDetail, selfChip, selfDot, updateBanner, powerNotice;
     private EditText cloudAddress, cloudUser, cloudPassword;
     private Button cloudLoginButton;
@@ -223,7 +225,17 @@ public final class MainActivity extends Activity {
         updateBanner.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); updateBanner.setVisibility(View.GONE);
         updateBanner.setOnClickListener(view -> { if (!latestUpdateUrl.isEmpty()) open(latestUpdateUrl); });
         brand.addView(updateBanner); page.addView(brand);
-        page.addView(text("设备网络",30,true));
+        pageTitle=text("我的设备",30,true); page.addView(pageTitle);
+        LinearLayout navigation=new LinearLayout(this);
+        String[] labels={"我的设备","组网状态","设置"};
+        for(int index=0;index<labels.length;index++) {
+            final int target=index;
+            Button tab=secondary(labels[index], () -> {});
+            tab.setOnClickListener(view -> selectPage(target));
+            navigation.addView(tab,new LinearLayout.LayoutParams(0,-2,1f));
+        }
+        page.addView(navigation);
+        devicePage=column(); meshPage=column(); settingsPage=column();
         powerNotice = text("",13,false); powerNotice.setTextColor(Color.WHITE);
         GradientDrawable warn = new GradientDrawable(); warn.setColor(color(R.color.warn)); warn.setCornerRadius(dp(10));
         powerNotice.setBackground(warn); powerNotice.setPadding(dp(14),dp(10),dp(14),dp(10));
@@ -251,14 +263,14 @@ public final class MainActivity extends Activity {
         self.addView(controls);
         backgroundButton = secondary("允许后台连接", () -> onUI(() -> requestBackground(null)));
         self.addView(backgroundButton);
-        page.addView(self);
+        meshPage.addView(self);
 
         message = text("",13,false); message.setTextColor(color(R.color.muted)); page.addView(message);
         binding = card(); page.addView(binding); buildLoginCard();
-        page.addView(section("设备"));
-        devices = new GridLayout(this); page.addView(devices);
+        devices = new GridLayout(this); devicePage.addView(devices);
+        buildForwards();
 
-        page.addView(section("更多"));
+        settingsPage.addView(section("账号与应用"));
         GridLayout options = new GridLayout(this); options.setColumnCount(3);
         Button leave = secondary("解绑设备", () -> {});
         leave.setOnClickListener(view -> new AlertDialog.Builder(this).setTitle("解绑这台设备？")
@@ -277,9 +289,19 @@ public final class MainActivity extends Activity {
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0; params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
-            options.addView(action, params);
+            if(action==netcheck || action==diagnoseButton) meshPage.addView(action);
+            else options.addView(action, params);
         }
-        page.addView(options);
+        Button signIn=secondary("重新登录账号", () -> {});
+        signIn.setOnClickListener(view -> {
+            needsAccountLogin=true;binding.setVisibility(View.VISIBLE);
+            binding.requestRectangleOnScreen(new android.graphics.Rect(0,0,binding.getWidth(),binding.getHeight()),false);
+        });
+        settingsPage.addView(signIn);
+        settingsPage.addView(options);
+        settingsPage.addView(muted("ORH 通过应用内 Mesh 连接设备，可与系统 VPN 同时使用。"));
+        page.addView(devicePage); page.addView(meshPage); page.addView(settingsPage);
+        selectPage(selectedPage);
         setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((view,insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -291,6 +313,29 @@ public final class MainActivity extends Activity {
             return insets;
         });
         checkForUpdate(false);
+    }
+    private void selectPage(int index) {
+        selectedPage=index;
+        devicePage.setVisibility(index==0?View.VISIBLE:View.GONE);
+        meshPage.setVisibility(index==1?View.VISIBLE:View.GONE);
+        settingsPage.setVisibility(index==2?View.VISIBLE:View.GONE);
+        pageTitle.setText(new String[]{"我的设备","组网状态","设置"}[index]);
+    }
+    private void buildForwards() {
+        meshPage.addView(section("通用 TCP 端口转发"));
+        EditText ip=new EditText(this); ip.setHint("目标组网 IP"); ip.setSingleLine(true);
+        ip.setInputType(android.text.InputType.TYPE_CLASS_TEXT); meshPage.addView(ip);
+        EditText remote=new EditText(this); remote.setHint("目标 TCP 端口，例如 22、80、21118");
+        remote.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); meshPage.addView(remote);
+        EditText local=new EditText(this); local.setHint("本地端口，0 自动分配"); local.setText("0");
+        local.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); meshPage.addView(local);
+        meshPage.addView(primary("创建转发", () -> {
+            int remotePort=Integer.parseInt(remote.getText().toString());
+            int localPort=Integer.parseInt(local.getText().toString());
+            api("/forwards",new JSONObject().put("peer_ip",ip.getText().toString().trim()).put("remote_port",remotePort).put("local_port",localPort),"POST");
+            onUI(() -> info("转发已创建，可在其他 App 使用本地入口"));
+        }));
+        forwardRows=column(); meshPage.addView(forwardRows);
     }
     @Override public void onResume() {
         super.onResume(); active=true;
@@ -389,7 +434,7 @@ public final class MainActivity extends Activity {
         if (uptime>=0) line+=" · 运行 "+duration(uptime);
         if (connections>0) line+=" · "+connections+" 个连接";
         selfDetail.setText(line);
-        powerNotice.setText("后台连接未授权，远程桌面可能被系统中断 · 点此授权");
+        powerNotice.setText("后台连接未授权，组网通道可能被系统中断 · 点此授权");
         powerNotice.setVisibility(backgroundAllowed()?View.GONE:View.VISIBLE);
         JSONObject cloud=self.optJSONObject("cloud");
         boolean bound=cloud!=null&&cloud.optBoolean("bound");
@@ -397,13 +442,23 @@ public final class MainActivity extends Activity {
         boundBefore=bound;
         binding.setVisibility(bound&&!needsAccountLogin?View.GONE:View.VISIBLE);
         if (cloud!=null&&!cloud.optString("error").isEmpty()) info(cloud.optString("error"));
+        forwardRows.removeAllViews();
+        for(int index=0;index<forwards.length();index++) {
+            JSONObject mapping=forwards.optJSONObject(index);
+            if(mapping==null) continue;
+            LinearLayout row=column();
+            row.addView(text("127.0.0.1:"+mapping.optInt("local_port")+" → "+mapping.optString("peer_ip")+":"+mapping.optInt("remote_port"),14,false));
+            row.addView(secondary("关闭转发", () -> api("/forwards/"+mapping.optString("id"),null,"DELETE")));
+            forwardRows.addView(row);
+        }
+        if(forwards.length()==0) forwardRows.addView(muted("暂无转发通道"));
         devices.removeAllViews();
         int columns=getResources().getConfiguration().screenWidthDp>=720?2:1;
         devices.setColumnCount(columns);
         JSONArray targets=directory==null?new JSONArray():directory;
         for (int index=0;index<targets.length();index++) {
             JSONObject targetDevice=targets.optJSONObject(index);
-            if (targetDevice==null||targetDevice.optBoolean("self")) continue;
+            if (targetDevice==null||targetDevice.optBoolean("self")||"controller-only".equals(targetDevice.optString("kind"))) continue;
             JSONObject targetMesh=targetDevice.optJSONObject("mesh");
             JSONArray targetIPs=targetMesh==null?null:targetMesh.optJSONArray("ips");
             String targetIP=targetIPs==null?"":targetIPs.optString(0);
@@ -425,27 +480,23 @@ public final class MainActivity extends Activity {
             detail.setTextColor(color(R.color.muted)); entry.addView(detail);
             String ip=targetIP;
             String deviceID=targetDevice.optString("instance_id");
-            boolean console=!ip.isEmpty()&&consoleAvailable(directory,ip)&&running;
-            if (!console) detail.setText(detail.getText()+" · 未发布 Agent 或 Mesh 未连接");
+            boolean console=!ip.isEmpty()&&consoleAvailable(directory,ip);
+            if (!console) detail.setText(detail.getText()+" · 目标尚未发布 Agent 控制台");
             LinearLayout actions=new LinearLayout(this);
             actions.addView(secondary("检测", () -> {
                 JSONObject result=(JSONObject)api("/ping",new JSONObject().put("peer_ip",ip),"POST");
                 onUI(() -> info(result.optString("Err").isEmpty()?peer.optString("hostname")+" · "+Math.round(result.optDouble("LatencySeconds")*1000)+" ms":result.optString("Err")));
             }));
-            Button consoleButton=secondary("进入工作区", () -> {
-                JSONObject result=(JSONObject)api("/console",new JSONObject().put("peer_ip",ip).put("device_id",deviceID),"POST");
-                String address=result.optString("url");
-                Uri gateway=Uri.parse(address);
-                String ticket=ticketFor(deviceID,gateway.getScheme()+"://"+gateway.getAuthority());
-                if (ticket!=null && ticket.contains("#")) address=address.replace("/auth/cloud/enter","/auth/cloud")+ticket.substring(ticket.indexOf('#'));
-                String controllerIP=device==null?"":ips(device);
-                final String target=Uri.parse(address).buildUpon().appendQueryParameter("android_client","1").appendQueryParameter("device_id",deviceID).appendQueryParameter("device_name",targetDevice.optString("name")).appendQueryParameter("peer_ip",controllerIP).build().toString();
-                onUI(() -> openConsole(target,ip,targetDevice.optString("name")));
+            Button consoleButton=primary("打开控制台", () -> {});
+            consoleButton.setOnClickListener(view -> {
+                Diagnostics.log("console","请求连接设备 "+deviceID);
+                startActivity(new Intent(this,ConsoleActivity.class).putExtra("device_id",deviceID)
+                    .putExtra("peer_ip",ip).putExtra("name",targetDevice.optString("name")));
             });
             consoleButton.setEnabled(console);
             actions.addView(consoleButton);
             entry.addView(actions);
-            Button desktop=primary("远程桌面", () -> {
+            Button desktop=secondary("远程桌面", () -> {
                 String address=desktopAddress(ip);
                 onUI(() -> desktop(address));
             });
@@ -455,48 +506,6 @@ public final class MainActivity extends Activity {
             TextView empty=text("还没有其他设备。\n把另一台电脑或平板绑定到同一账号后会显示在这里。",14,false);
             empty.setTextColor(color(R.color.muted)); devices.addView(empty);
         }
-    }
-    private String ticketFor(String deviceID,String callback) throws Exception {
-        SharedPreferences saved=getSharedPreferences("cloud",MODE_PRIVATE);
-        String token=saved.getString("token",""), base=saved.getString("url","");
-        try {
-            if (token.isEmpty()||base.isEmpty()) throw new Exception("Cloud 401");
-            JSONObject ticket=(JSONObject)cloudCall(base+"/api/devices/"+deviceID+"/ticket",token,"POST",new JSONObject().put("address",callback).put("state",""));
-            return ticket.getString("url");
-        } catch(Exception failure) {
-            if (failure.getMessage()!=null&&failure.getMessage().contains("401")) {
-                onUI(() -> {needsAccountLogin=true;binding.setVisibility(View.VISIBLE);});
-                throw new Exception("账号会话已过期，请在登录区域重新登录");
-            }
-            throw failure;
-        }
-    }
-    private Object cloudCall(String address,String token,String method,JSONObject body) throws Exception {
-        java.net.HttpURLConnection connection=(java.net.HttpURLConnection)new java.net.URL(address).openConnection();
-        connection.setRequestMethod(method);
-        connection.setRequestProperty("Authorization","Bearer "+token);
-        connection.setConnectTimeout(8000); connection.setReadTimeout(12000);
-        if (body!=null) {
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type","application/json");
-            try (java.io.OutputStream output=connection.getOutputStream()) {
-                output.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            }
-        }
-        int code=connection.getResponseCode();
-        java.io.InputStream input=code<400?connection.getInputStream():connection.getErrorStream();
-        StringBuilder text=new StringBuilder();
-        try (java.io.BufferedReader reader=new java.io.BufferedReader(new java.io.InputStreamReader(input,java.nio.charset.StandardCharsets.UTF_8))) {
-            String line; while ((line=reader.readLine())!=null) text.append(line);
-        }
-        if (code>=400) throw new Exception("Cloud "+code);
-        String value=text.toString().trim();
-        return value.startsWith("[")?new JSONArray(value):new JSONObject(value);
-    }
-    private void openConsole(String url,String ip,String name) {
-        Diagnostics.log("console","打开设备工作区 "+name);
-        startActivity(new Intent(this,ConsoleActivity.class)
-            .putExtra("url",url).putExtra("peer_ip",ip).putExtra("name",name));
     }
     private void open(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }

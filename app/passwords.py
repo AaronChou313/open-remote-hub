@@ -28,9 +28,9 @@ def fingerprint():
     return hashlib.sha256(json.dumps(r, sort_keys=True).encode()).hexdigest() if r else None
 
 
-def verify(password):
+def verify(password,recovery=False):
     from app import cloud_agent
-    if cloud_agent.binding():
+    if cloud_agent.binding() and not recovery:
         return False
     r = record()
     if not r:

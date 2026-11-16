@@ -1,6 +1,6 @@
 # 架构
 
-ORH 的四种职责由同一电脑安装包协同运行。Client 选择设备并持有工作区页面，Agent 提供本机能力，Mesh 建立加密设备连接，Cloud 维护账号与设备元数据。
+ORH 围绕私有组网与远程管理控制台组织四种职责由同一电脑安装包协同运行。Client 选择设备并持有工作区页面，Agent 提供本机能力，Mesh 建立加密设备连接，Cloud 维护账号与设备元数据。
 
 ## 连接和身份
 
@@ -37,7 +37,7 @@ Cloud API 承载账号、目录、授权与协调。终端和文件等管理流�
 
 ## 模块与生命周期
 
-新 Agent 在首次登录前建立模块状态，全部可选功能默认关闭。已有绑定或本机凭据的旧安装保留已有入口。模块依赖状态支持未启用、缺少依赖、可用和不可用。依赖安装由用户在明确选择后完成。停用功能保留外部软件和现有任务。
+新 Agent 在首次登录前建立模块状态，终端、文件和进程与服务默认开启，其他可选功能默认关闭。已有绑定或本机凭据的旧安装保留已有入口。模块依赖状态支持未启用、缺少依赖、可用和不可用。依赖安装由用户在明确选择后完成。已启用模块集中显示在设备工作区，扩展模块收纳在“更多功能”。停用功能保留外部软件和现有任务。
 
 原生窗口、托盘和 Agent 分进程。macOS 使用用户 LaunchAgent，Linux 优先使用用户 systemd，Windows 使用启动项与独立后台进程。Agent 持有 Mesh 生命周期和 ConPTY 会话。Zellij 的会话进程独立运行。
 
@@ -48,3 +48,23 @@ macOS 上 RustDesk 的启动与连接通过 `/usr/bin/open -n -a RustDesk.app --
 用户文件、Docker、终端、项目与密钥位于目标电脑。Cloud 保存账号与设备元数据。手动地址和备注独立于 Agent 上报地址保存。Cloud 解绑撤销设备凭据和入网授权，离线 Agent 在恢复联系后同步撤销。
 
 桌面包使用 PyInstaller，包含 Python、WebView 适配、Agent 与 Go Mesh。Linux 包包含 Qt WebEngine。Android 通过 gomobile 引入同一 Go 核心并打包共享静态页面。`VERSION` 为版本号来源，CI 产出 Windows EXE、两种 Mac 架构的 DMG、Linux DEB 和 Android 签名 APK。
+
+## 共享入口与组网管理
+
+桌面入口由 `static/client.*` 提供“我的设备 / 组网状态 / 设置”。目标 `/` 保留完整 Web 控制台，继续与 Client 网关、Android assets 复用 `static/index.html`、模块组件和同一 Agent API。
+
+`static/mesh.js` 在 Client 与 Web 中复用。`/api/client/mesh*` 使用现有 ORH Mesh LocalAPI 提供状态、P2P / DERP 诊断、TCP 转发与关闭。发布服务继续由 `mesh_runtime.save_config` 管理。备用 Tailscale、节点小宝由外部软件持有生命周期。
+
+Android 使用相同的一级导航，设备卡片以“打开控制台”为主操作。点击后立即打开控制台加载页，由该页面异步建立目标通道和交换账号 Ticket。加载失败保留错误与重试入口。Android 的账号登录与 Ticket 请求统一复用 Go Cloud 传输，账号 Token 仅在本次请求内使用。目标工作区仍使用打包的共享 Web 页面。
+
+## 备用监听与恢复认证
+
+`app/agent_settings.py` 在目标私有目录保存 `agent-settings.json`，覆盖监听地址与允许的目标 Host，并保存本地恢复开关。地址校验复用 `app/network.py`。允许地址即时更新，监听变更通过安装版后台重启生效。指定备用 IP 时保留 IPv4 回环入口。备用网卡尚未就绪时继续启动本机 API，并在设置页报告备用监听错误，避免备用网络的启动顺序影响本机恢复。Agent API 的启动与认证均独立于 Mesh 可达性。
+
+恢复密码复用现有 PBKDF2 密码存储，以独立会话凭据指纹识别。Cloud 绑定后默认沿用账号登录，用户主动开启恢复后，可在 Cloud 离线时使用本地密码。密码轮换和关闭恢复使对应恢复会话失效，现有 Cloud 会话继续按账号指纹验证。本机交互式 `password.py --recovery` 用于故障恢复。
+
+Client 以账号指纹绑定私有设备目录缓存。Cloud 返回连接失败时可展示缓存目录，通过 Mesh 网关核验目标长期 ID 后，允许目标现有会话或本地恢复登录。Cloud 明确拒绝账号授权时继续返回账号错误。恢复密码仅在目标 Agent 校验。
+
+## Android 与系统 VPN 并行
+
+`mesh/mobile` 使用应用内 tsnet。Android Manifest 仅声明 `connectedDevice` 前台 Mesh 服务，保持系统 VPN 槽位可用。`MeshService` 与 Activity 独立，使用既有网络重绑定、前台通知及活动转发保活。通用本地 TCP 转发为外部 App 提供接入。Activity 切换与销毁仅关闭界面资源。

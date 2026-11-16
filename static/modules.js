@@ -22,11 +22,13 @@ window.RemoteHubModules = (() => {
         await api('/modules/' + button.dataset.module + '/' + button.dataset.operation, {});
         caps = await api('/capabilities');
         window.ORH_CAPS = caps;
+        updateNavigation();
         await render(current);
       } catch (error) { showError(error); }
     }));
     document.querySelectorAll('[data-module-entry]').forEach(button => button.onclick = () => switchView(button.dataset.moduleEntry));
-    document.querySelectorAll('[data-module-check]').forEach(button => button.onclick = async () => { caps = await api('/capabilities'); window.ORH_CAPS = caps; await render(current); });
+    document.querySelectorAll('[data-module-check]').forEach(button => button.onclick = async () => { caps = await api('/capabilities'); window.ORH_CAPS = caps;
+        updateNavigation(); await render(current); });
   }
   return {render};
 })();

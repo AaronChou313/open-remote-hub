@@ -21,22 +21,16 @@ cfg=settings()
 # One ORH install owns the ORN data plane; this foreground entry starts and reaps it.
 mesh_runtime.start_supervisor()
 try:
-    if cfg['gateway_port'] != PORT:
-        import socket
-        from app.dsh_gateway import Dispatch
-        sockets=[]
-        try:
-            for port in (PORT,cfg['gateway_port']):
-                address=NETWORK.bind
-                family=socket.AF_INET6 if ':' in address else socket.AF_INET
-                sock=socket.socket(family,socket.SOCK_STREAM)
-                sockets.append(sock);sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-                sock.bind((address,port));sock.set_inheritable(True)
-            config=uvicorn.Config(Dispatch(app,cfg['gateway_port']),log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False,**tls)
-            uvicorn.Server(config).run(sockets=sockets)
-        finally:
-            for sock in sockets:sock.close()
-    else:
-        uvicorn.run(app,host=NETWORK.bind,port=PORT,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False,**tls)
+    from app import main
+    from app.dsh_gateway import Dispatch
+    ports=list(dict.fromkeys((PORT,cfg['gateway_port'])))
+    sockets,main.LISTEN_ERRORS=NETWORK.listeners(ports)
+    for error in main.LISTEN_ERRORS:print(error,flush=True)
+    try:
+        application=Dispatch(app,cfg['gateway_port']) if cfg['gateway_port']!=PORT else app
+        config=uvicorn.Config(application,log_level='info',access_log=False,timeout_graceful_shutdown=5,ws='websockets-sansio',proxy_headers=False,**tls)
+        uvicorn.Server(config).run(sockets=sockets)
+    finally:
+        for listener in sockets:listener.close()
 finally:
     mesh_runtime.shutdown()

@@ -27,9 +27,13 @@ public final class ConsoleActivity extends Activity {
     private Button retry;
     private String url;
     private String peer;
+    private String deviceID;
+    private String deviceName;
+    private boolean connecting;
+    private final java.util.concurrent.ExecutorService worker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private LinearLayout error;
     private TextView link;
-    private boolean agentReady;
+    private volatile boolean agentReady;
     private ValueCallback<Uri[]> fileCallback;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable poll = new Runnable() {
@@ -60,15 +64,17 @@ public final class ConsoleActivity extends Activity {
         url = getIntent().getStringExtra("url");
         peer = getIntent().getStringExtra("peer_ip");
         String name = getIntent().getStringExtra("name");
+        deviceName=name==null?"控制台":name;
+        deviceID=getIntent().getStringExtra("device_id");
         Diagnostics.attach(this);
         Diagnostics.log("console", "打开控制台 " + (name == null ? "" : name));
-        if (url == null || url.isEmpty()) {
+        if ((url == null || url.isEmpty()) && (deviceID==null || deviceID.isEmpty())) {
             finish();
             return;
         }
         build(name == null ? "控制台" : name);
-        web.loadUrl(url);
-        main.post(poll);
+        if(url==null || url.isEmpty()) prepare();
+        else {web.loadUrl(url);main.post(poll);}
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -92,7 +98,7 @@ public final class ConsoleActivity extends Activity {
         label.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         bar.addView(label);
         bar.addView(iconButton("我的设备", () -> finish()));
-        bar.addView(iconButton("工作区", () -> web.loadUrl(Uri.parse(url).buildUpon().path("/").fragment("overview").build().toString())));
+        bar.addView(iconButton("控制台", () -> {if(url!=null)web.loadUrl(Uri.parse(url).buildUpon().path("/").fragment("overview").build().toString());}));
         bar.addView(iconButton("刷新", () -> reload()));
         root.addView(bar);
         link=new TextView(this);
@@ -122,6 +128,10 @@ public final class ConsoleActivity extends Activity {
             }
         }, "ORHAndroid");
         web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                if(message.messageLevel()==ConsoleMessage.MessageLevel.ERROR) Diagnostics.log("console-web",message.message());
+                return false;
+            }
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams parameters) {
                 if(fileCallback!=null) fileCallback.onReceiveValue(null);
                 fileCallback=callback;
@@ -145,6 +155,7 @@ public final class ConsoleActivity extends Activity {
         web.setBackgroundColor(getColor(R.color.surface));
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if(url==null)return null;
                 Uri address=request.getUrl(), origin=Uri.parse(url);
                 if(!"GET".equals(request.getMethod())||!origin.getAuthority().equals(address.getAuthority())) return null;
                 String path=address.getPath(), asset;
@@ -181,7 +192,6 @@ public final class ConsoleActivity extends Activity {
             }
 
             @Override public void onPageFinished(WebView view, String address) {
-                if (error != null) error.setVisibility(View.GONE);
                 if(isLocal(Uri.parse(address))) view.evaluateJavascript("window.open=function(url){ORHAndroid.openTerminal(new URL(url,location.href).href);return {opener:null};};document.querySelectorAll('a[target=_blank]').forEach(function(a){if(a.pathname.indexOf('/terminal/open/')===0)a.removeAttribute('target');});",null);
             }
         });
@@ -246,7 +256,26 @@ public final class ConsoleActivity extends Activity {
         error.setVisibility(View.VISIBLE);
     }
 
+    private void prepare() {
+        if(connecting) return;
+        connecting=true;
+        status.setText("正在连接目标 Agent…");error.setVisibility(View.VISIBLE);retry.setVisibility(View.GONE);
+        worker.execute(() -> {
+            try {
+                String address=LocalApi.consoleURL(this,deviceID,peer,deviceName);
+                main.post(() -> {
+                    if(isDestroyed()||isFinishing()) return;
+                    connecting=false;url=address;error.setVisibility(View.GONE);retry.setVisibility(View.VISIBLE);
+                    web.loadUrl(url);main.removeCallbacks(poll);main.post(poll);
+                });
+            } catch(Exception failure) {
+                main.post(() -> {if(!isDestroyed()){connecting=false;retry.setVisibility(View.VISIBLE);fail(failure.getMessage());}});
+            }
+        });
+    }
+
     private void reload() {
+        if(deviceID!=null&&!deviceID.isEmpty()){prepare();return;}
         if (peer == null || peer.isEmpty()) {
             error.setVisibility(View.GONE);
             web.loadUrl(url);
@@ -267,6 +296,7 @@ public final class ConsoleActivity extends Activity {
 
     @Override protected void onDestroy() {
         main.removeCallbacks(poll);
+        worker.shutdownNow();
         if(fileCallback!=null) fileCallback.onReceiveValue(null);
         Diagnostics.log("console", "关闭控制台");
         if (web != null) {

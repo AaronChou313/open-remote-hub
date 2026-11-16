@@ -51,7 +51,7 @@ def load():
         # Existing installations retain their available entry points. A fresh
         # Agent initializes this file before its first account login.
         legacy = any((path.parent / name).exists() for name in ('credentials.json', 'cloud-binding.json'))
-        value = {name: legacy for name in CATALOG}
+        value = {name: legacy or name in ('terminal','files','services') for name in CATALOG}
         save(value)
         return value
 

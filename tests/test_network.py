@@ -94,3 +94,23 @@ def test_https_cookie_and_ipv6(network):
         r=c.post('/api/login',json={'password':'network-test-password'})
         assert r.status_code==200 and 'secure' in r.headers['set-cookie'].lower()
         assert c.get('/api/me').status_code==200
+
+
+def test_missing_backup_interface_keeps_loopback_listener():
+    network=Network.configured('192.0.2.1',[])
+    sockets,errors=network.listeners([0])
+    try:
+        assert errors
+        assert len(sockets)==1
+        assert sockets[0].getsockname()[0]=='127.0.0.1'
+    finally:
+        for listener in sockets:listener.close()
+
+
+def test_ipv6_listener_preserves_local_client_ipv4_entry():
+    sockets,errors=Network.configured('::1',[]).listeners([0])
+    try:
+        assert sockets[0].getsockname()[0]=='127.0.0.1'
+        assert errors or sockets[1].getsockname()[0]=='::1'
+    finally:
+        for listener in sockets:listener.close()
