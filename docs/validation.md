@@ -12,6 +12,10 @@ Windows 安装包构建后执行实际 Agent，检查新安装默认关闭模块
 
 最终 0.6.8 在 Windows 实机完成安装升级。实际打包进程创建原生 WebView，使用保存的账号进入设备目录，随后关闭测试窗口。通过 Mesh 验证 ConPTY 命令、尺寸变化、会话重连、文件上传、Range 下载和回收恢复，显式停止后台后确认打包 Mesh 退出并重新启动。反向由 Windows 的打包运行时连接 Mac，读取系统信息并启动、停止、重启专门创建的 Docker 测试容器。测试容器、辅助脚本、临时安装文件及测试任务已清理。
 
+Linux 最终 DEB 在干净 Ubuntu 22.04 中通过 apt 安装，自动补齐 CA 证书及系统库。Cloud 登录、默认关闭可选模块、快速命令、文件上传、Range 下载和回收恢复均通过。Mac 还通过真实 Mesh 与目标 Ticket 访问该 Linux Agent，核验目标身份并读取系统及文件 API。旧版 OpenSSL 的 Cloud 握手问题已通过更新打包运行时解决。
+
+macOS ARM 发行包使用已通过完整矩阵检查的构建，源码树与发布标签一致，并已在本机验证原生窗口、账号恢复及 Windows 工作区。该产物来自 [CI 构建记录](https://github.com/AaronChou313/open-remote-hub/actions/runs/43845587907)。
+
 Android 35 ARM64 模拟器使用正式签名 APK，实际接入同一账号 Mesh，连接安装版 Mac Agent。通过目标 Ticket、系统 API、终端真实输入输出、关闭 WebSocket 后重新接入、文件上传、Range 下载和回收恢复。正常网络记录为 P2P 直连。临时关闭目标直连传输后，同一组终端与文件测试在 DERP 中继路径重复通过，随后恢复正常组网配置。测试会话和测试文件已清理。
 
 Cloud 元数据更新已部署，HTTPS 健康接口成功，Headscale 正常运行。设备备注、手动地址及 `controller-only` 由对应 API 测试覆盖。
