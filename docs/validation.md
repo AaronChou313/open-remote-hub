@@ -1,10 +1,10 @@
-# 0.6.1 验证
+# 0.6.2 验证
 
 ## 自动检查
 
 Python 全量测试通过 277 项。前端交互脚本覆盖设备选择、账号错误、链路状态、模块路由、终端、上传、编辑保护及原有模块。Go 测试覆盖目标身份、隔离 Origin、Cookie、HTTP/WebSocket 和本机前端与目标 API 的分流。
 
-Windows 安装包构建后执行实际 Agent，检查新安装默认关闭模块、文件上传和 Range 下载、回收恢复、后台任务启停、ConPTY 命令执行、尺寸调整与重连。Linux 与两种 Mac 架构执行打包 Agent 的核心、模块、文件和任务检查。Android 正式签名包构建与 lint 通过。
+Windows 安装包构建后执行实际 Agent，检查新安装默认关闭模块、文件上传和 Range 下载、回收恢复、后台任务启停、ConPTY 命令执行、尺寸调整与重连。Linux 与两种 Mac 架构执行打包 Agent 的核心、模块、文件和任务检查。Android 正式签名包构建与 lint 通过。干净 Ubuntu 容器实际安装 DEB 后验证原生 Qt 窗口启动，补齐 XCB、GLib 和 Fontconfig 依赖，并在 Linux 构建流程加入原生窗口启动检查。
 
 ## 真实设备通道
 

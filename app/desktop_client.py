@@ -1,6 +1,7 @@
 """Native Client window. The Agent is owned by its existing service process."""
 from pathlib import Path
 import json
+import sys
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -76,4 +77,5 @@ def run(url, storage_path):
 
     menu = [Menu('OpenRemoteHub', [MenuAction('我的设备', devices),
                                   MenuAction('关闭窗口', window.destroy)])]
-    webview.start(private_mode=False, storage_path=str(storage_path), menu=menu)
+    gui = 'qt' if getattr(sys, 'frozen', False) and sys.platform.startswith('linux') else None
+    webview.start(private_mode=False, storage_path=str(storage_path), menu=menu, gui=gui)
