@@ -25,7 +25,7 @@ func RustDesk(port int) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("/Applications/RustDesk.app/Contents/MacOS/RustDesk", "--connect", address)
+		cmd = exec.Command("/usr/bin/open", "-n", "-a", "/Applications/RustDesk.app", "--args", "--connect", address)
 	case "windows":
 		path, err := exec.LookPath("rustdesk.exe")
 		if err != nil {

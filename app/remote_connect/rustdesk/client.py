@@ -40,7 +40,7 @@ def processes():
             # Gatekeeper can run the existing app from an AppTranslocation
             # bundle even when the installed copy is in /Applications.
             native_bundle = executable.parts[-4:] == ('RustDesk.app', 'Contents', 'MacOS', BINARY.name)
-            if (executable != BINARY and not native_bundle) or process.uids().real != os.getuid():
+            if (executable != BINARY and not native_bundle) or (sys.platform != 'win32' and process.uids().real != os.getuid()):
                 continue
             args = process.cmdline()[1:]
             if any(flag in args for flag in ('--cm', '--get-id', '--option')):
