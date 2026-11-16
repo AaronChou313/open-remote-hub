@@ -26,12 +26,16 @@ class Network:
 
     @classmethod
     def load(cls):
-        bind = os.environ.get('ORH_HOST', '127.0.0.1').strip()
+        return cls.configured(os.environ.get('ORH_HOST', '127.0.0.1'), os.environ.get('ORH_ALLOWED_HOSTS', '').split(','))
+
+    @classmethod
+    def configured(cls, bind, allowed_hosts):
+        bind = bind.strip()
         if bind != 'localhost':
             try: bind = ipaddress.ip_address(bind).compressed
             except ValueError: raise ValueError('ORH_HOST must be a local IP, 0.0.0.0, :: or localhost') from None
         hosts = {'localhost', '127.0.0.1', '::1'}
-        hosts.update(hostname(v) for v in os.environ.get('ORH_ALLOWED_HOSTS', '').split(',') if v.strip())
+        hosts.update(hostname(v) for v in allowed_hosts if v.strip())
         if bind not in ('0.0.0.0', '::', 'localhost'):
             hosts.add(bind)
         if hosts.intersection({'0.0.0.0', '::'}):

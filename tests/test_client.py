@@ -293,3 +293,19 @@ def test_windows_client_exit_keeps_server_and_startup_keeps_window_closed(tmp_pa
 def test_mac_bundle_keeps_background_process_out_of_dock():
     spec=(Path(__file__).resolve().parents[1]/'desktop/orh.spec').read_text()
     assert "'LSUIElement':True" in spec
+
+
+def test_android_keeps_in_app_mesh_and_immediate_console_entry():
+    root=Path(__file__).resolve().parents[1]/'client/android/app/src/main'
+    manifest=(root/'AndroidManifest.xml').read_text()
+    assert 'VpnService' not in manifest and 'BIND_VPN_SERVICE' not in manifest
+    assert 'android:foregroundServiceType="connectedDevice"' in manifest
+    assert 'android:stopWithTask="false"' in manifest
+    activity=(root/'java/top/openremotehub/client/MainActivity.java').read_text()
+    start=activity.index('consoleButton.setOnClickListener')
+    end=activity.index('consoleButton.setEnabled',start)
+    assert 'startActivity' in activity[start:end]
+    assert 'api(' not in activity[start:end]
+    console=(root/'java/top/openremotehub/client/ConsoleActivity.java').read_text()
+    assert 'LocalApi.consoleURL' in console
+    assert '正在连接目标 Agent' in console

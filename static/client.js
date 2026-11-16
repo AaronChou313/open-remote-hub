@@ -7,6 +7,7 @@ let directory;
 let account;
 let connecting = false;
 let refreshing = false;
+let page='devices';
 sessionStorage.removeItem('orh-current-device');
 if (localStorage.getItem('orh-theme') === 'dark' || (!localStorage.getItem('orh-theme') && matchMedia('(prefers-color-scheme: dark)').matches)) document.body.classList.add('dark');
 select('#clientTheme').onclick = () => {
@@ -38,6 +39,7 @@ async function showLogin() {
   const status = await response.json();
   select('#clientCloud').value = status.cloud?.cloud_url || 'https://cloud.openremotehub.top';
   select('#clientCloud').readOnly = Boolean(status.cloud?.bound);
+  select('#clientRecovery').hidden = !(status.recovery_enabled || (!status.cloud?.bound && status.local_password_set));
 }
 
 function renderDirectory() {
@@ -45,18 +47,13 @@ function renderDirectory() {
   select('#clientDevices').innerHTML = directory.devices.map(device => `
     <article class="client-device">
       <div class="client-device-info"><h2>${escapeHTML(device.name)}${device.local ? ' <span class="badge">本机</span>' : ''}</h2>
-        <p>${escapeHTML(device.os)} · ${!directory.cloud.bound ? '未绑定 Cloud' : device.heartbeat_online ? 'Cloud 心跳在线' : 'Cloud 心跳离线'} · ${pathLabels[device.path] || pathLabels.idle}</p>
+        <p>${escapeHTML(device.os)} · ${!directory.cloud.bound ? '未绑定 Cloud' : directory.cloud.error ? 'Cloud 心跳待确认' : device.heartbeat_online ? 'Cloud 心跳在线' : 'Cloud 心跳离线'} · ${pathLabels[device.path] || pathLabels.idle}</p>
         <p>${escapeHTML(device.mesh_ips.join(' · '))}${device.agent_published ? '' : ' · 未发布 Agent 管理能力'}</p>
       </div>
-      <div class="toolbar"><button class="primary" data-connect="${escapeHTML(device.device_id)}" ${device.agent_published ? '' : 'disabled'}>进入工作区</button>
+      <div class="toolbar"><button class="primary" data-connect="${escapeHTML(device.device_id)}" ${device.agent_published ? '' : 'disabled'}>打开控制台</button>
         ${device.desktop_published ? `<button data-desktop="${escapeHTML(device.device_id)}">远程桌面</button>` : ''}</div>
     </article>`).join('');
   const details = values => values.map(([name, value]) => `<div><dt>${escapeHTML(name)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('');
-  select('#clientHealth').innerHTML = details([
-    ['Cloud 目录', directory.cloud.error || (directory.cloud.bound ? '读取成功' : '尚未绑定')],
-    ['Mesh', directory.mesh.error || directory.mesh.state || '尚未连接'],
-    ['连接路径', '选择设备后通过 Mesh 核验目标身份，工作区读取 Agent API 后显示连接结果'],
-  ]);
   select('#clientAccount').innerHTML = details([
     ['账号', account.cloud?.username || '本机独立模式'],
     ['Cloud', account.cloud?.cloud_url || '尚未绑定'],
@@ -66,8 +63,8 @@ function renderDirectory() {
   select('#clientCloudAdmin').href = (account.cloud?.cloud_url || 'https://cloud.openremotehub.top') + '/';
   const localWorkspace = new URL('/', location.href);
   localWorkspace.search = new URLSearchParams({client:location.origin + '/client', device_id:account.device_id, device_name:account.host.hostname});
-  localWorkspace.hash = 'network';
-  select('#clientMeshSettings').href = localWorkspace.href;
+  localWorkspace.hash = 'modules';
+  select('#clientModules').href = localWorkspace.href;
 }
 
 async function refreshDevices() {
@@ -76,11 +73,13 @@ async function refreshDevices() {
   select('#clientRefresh').disabled = true;
   try {
     account = await request('/me');
-    directory = await request('/client/devices');
+    if(page==='devices'||!directory)directory = await request('/client/devices');
     select('#clientLogin').hidden = true;
     select('#clientShell').hidden = false;
     select('#clientError').hidden = true;
     renderDirectory();
+    if(page==='mesh')await RemoteHubMesh.render(()=>page==='mesh','#clientMesh',request);
+    if(page==='settings')await RemoteHubAgentSettings.render(()=>page==='settings','#clientAgentSettings',request);
   } catch (error) {
     const loginVisible = !select('#clientLogin').hidden;
     if (!loginVisible) select('#clientShell').hidden = false;
@@ -142,13 +141,19 @@ select('#clientDevices').onclick = async event => {
   }
 };
 
-document.querySelectorAll('[data-page]').forEach(button => button.onclick = () => {
-  const page = button.dataset.page;
-  for (const name of ['devices', 'diagnostics', 'settings']) select('#client' + name[0].toUpperCase() + name.slice(1)).hidden = name !== page;
+document.querySelectorAll('[data-page]').forEach(button => button.onclick = async () => {
+  if(page==='settings'&&!await RemoteHubAgentSettings.canLeave())return;
+  if(page==='mesh'&&!await RemoteHubMesh.canLeave())return;
+  page = button.dataset.page;
+  for (const name of ['devices', 'mesh', 'settings']) select('#client' + name[0].toUpperCase() + name.slice(1)).hidden = name !== page;
   document.querySelectorAll('[data-page]').forEach(item => item.setAttribute('aria-current', item === button ? 'page' : 'false'));
   select('#clientTitle').textContent = button.textContent;
   select('#clientTitle').focus();
+  await refreshDevices();
 });
+select('#clientRecoveryLogin').onclick=async()=>{
+ try{await request('/login',{password:select('#clientRecoveryPassword').value});select('#clientRecoveryPassword').value='';await refreshDevices()}catch(error){select('#clientLoginError').textContent=error.message}
+};
 select('#clientRefresh').onclick = refreshDevices;
 select('#clientLogout').onclick = async () => {
   try { await request('/auth/client/logout', {}); await showLogin(); }

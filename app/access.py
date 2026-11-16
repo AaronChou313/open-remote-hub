@@ -23,17 +23,21 @@ def credential(role):
     return cloud_agent.fingerprint() or passwords.fingerprint() or 'unconfigured'
 
 
-def create(token,role,expires):
+def create(token,role,expires,local=False):
+    from app import passwords
     with connection() as c:
         c.execute('DELETE FROM sessions WHERE expires < ?',(time.time(),))
-        c.execute('INSERT INTO sessions VALUES (?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),role,expires,credential(role)))
+        c.execute('INSERT INTO sessions VALUES (?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),role,expires,'recovery:'+passwords.fingerprint() if local else credential(role)))
 
 
 def get(token):
     if not token or credential('admin') == 'unconfigured':return None
     with connection() as c:
         row=c.execute('SELECT role,expires,credential FROM sessions WHERE digest=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
-    if row and row[1]>time.time() and row[2]==credential(row[0]):return dict(role=row[0],expires=row[1])
+    if row and row[1]>time.time():
+        from app import agent_settings, passwords
+        expected = 'recovery:'+(passwords.fingerprint() or '') if row[2].startswith('recovery:') and agent_settings.recovery_enabled() else credential(row[0])
+        if row[2]==expected:return dict(role=row[0],expires=row[1])
     return None
 
 

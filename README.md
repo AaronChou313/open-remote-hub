@@ -1,7 +1,6 @@
 # OpenRemoteHub
 
-在同一个客户端中选择自己的电脑，使用系统概览、终端、文件、Docker 和远程桌面。电脑安装包包含 Client、后台 Agent 和 Mesh。Android 提供控制端。
-
+私有组网与远程设备管理控制台。在“我的设备”选择电脑，打开系统概览、终端、文件与服务管理。内置 Mesh 提供 P2P / DERP 连接、诊断和通用 TCP 转发。桌面安装包包含 Client、Agent 和 Mesh，Android 提供应用内组网与控制端。
 ## 安装与使用
 
 从 [Releases](https://github.com/AaronChou313/open-remote-hub/releases/latest) 下载对应安装包。
@@ -17,7 +16,7 @@
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
 1. 打开 ORH，登录同一个 ORH Cloud 账号。默认服务为 `https://cloud.openremotehub.top`。
-2. 在“我的设备”选择电脑，进入应用内工作区。首次使用到目标电脑的“功能管理”启用需要的模块。
+2. 在“我的设备”选择电脑，点击“打开控制台”。终端、文件和进程与服务默认启用，可在目标设备的“功能管理”启用其他模块。
 3. 关闭窗口后，后台 Agent、Mesh 和会话继续运行。通过托盘或 macOS 菜单栏重新打开窗口，也可检查更新、显式停止后台。
 
 macOS 使用用户 LaunchAgent，Linux 使用用户 systemd 服务，Windows 使用用户启动项。这些机制随用户登录启动。无头 Linux 可运行 `openremotehub --headless`。需要用户服务在退出登录后持续运行时，可由管理员为对应用户启用 systemd lingering。
@@ -26,7 +25,7 @@ Android 需要按应用内提示允许通知和后台运行。第一阶段只控
 
 ## 可选功能
 
-新安装默认关闭全部可选模块。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
+新安装默认启用终端、文件和进程与服务。其他可选模块按需启用。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
 
 | 功能 | 支持与依赖 |
 | --- | --- |
@@ -48,6 +47,33 @@ Client 按长期 `device_id` 选择设备，经 Mesh 校验目标身份，再兑
 
 [Cloud 后台](https://cloud.openremotehub.top/) 管理账号、设备名称、备注、手动访问地址和解绑。组网 IP 由组网控制平面分配。手动地址与设备自动上报地址独立保存。
 
+## Web 控制台、备用网络与离线恢复
+
+目标 Agent 保留完整 Web 控制台。桌面 Client 与 Web 复用同一套系统、终端、文件、Docker 和其他模块页面。可通过 `http://设备IP:8765` 访问已配置的目标地址。
+
+1. 在目标设备的“设置”将监听地址设为 `0.0.0.0`，或填写需要监听的本机 IP。
+2. 将局域网、官方 Tailscale、节点小宝等备用网络的本机 IP 加入允许地址列表。地址变化后同步更新列表。
+3. 按需启用独立本地恢复密码，保存设置并重启后台。Cloud 不可用时，在目标 Web 登录页展开“本地恢复登录”。正常访问继续使用 ORH 账号。
+
+备用组网由对应软件独立运行。Agent 的本机管理 API 独立于 Mesh。Cloud 暂时不可用时，Client 保留该账号已缓存的设备目录，已可达的 Mesh 网关可打开目标恢复登录页。
+
+忘记恢复密码时，可在目标电脑的本机终端运行交互式恢复命令，密码通过交互输入。
+
+```sh
+# macOS 安装版
+/Applications/OpenRemoteHub.app/Contents/MacOS/OpenRemoteHub --run-script password.py --recovery
+# Linux 安装版
+openremotehub --run-script password.py --recovery
+# Windows 安装版，在 PowerShell 中运行
+Start-Process -FilePath "$env:LOCALAPPDATA\Programs\OpenRemoteHub\OpenRemoteHub.exe" -ArgumentList @("--run-script", "password.py", "--recovery") -NoNewWindow -Wait
+# 源码运行
+.venv/bin/python scripts/password.py --recovery
+```
+
+在“组网状态”选择目标设备与 TCP 端口，可创建 `127.0.0.1:本地端口` 转发。目标服务需在目标设备的“本机组网与发布端口”中发布，例如 `22=127.0.0.1:22` 或 `80=127.0.0.1:8080`。此通道可用于 SSH、HTTP 与 RustDesk 等 TCP 服务。
+
+Android 使用应用内 tsnet，保持与系统 VPN 并行运行。外部 App 通过本地映射端口使用 ORH 网络，Mesh 前台服务在切换应用后继续运行。Android 厂商的电池与后台设置仍需在对应设备上放行。
+
 ## 配置与数据
 
 | 平台 | Agent 数据目录 | Mesh 身份目录 |
@@ -56,7 +82,7 @@ Client 按长期 `device_id` 选择设备，经 Mesh 校验目标身份，再兑
 | Windows | `%LOCALAPPDATA%\OpenRemoteHub` | `%APPDATA%\orh-mesh` |
 | Linux | `~/.local/share/openremotehub` | `~/.config/orh-mesh` |
 
-Agent 的 `.env` 保存本机监听与文件目录配置，`.runtime` 保存绑定、模块状态、会话认证和业务元数据。默认仅监听回环地址，由 Mesh 发布访问。文件授权目录通过 `ORH_FILE_ROOTS` 的 JSON 数组配置。已有 macOS 源码 LaunchAgent 会迁移设备身份与账号绑定，并由安装版接管后台。
+Agent 的 `.env` 保存本机监听与文件目录配置，`.runtime` 保存绑定、模块状态、会话认证和业务元数据。默认监听回环地址，由 Mesh 发布访问。可在“设置 → Web 控制台与本地恢复”配置其他监听地址与允许访问的本机 IP，保存后使用“重启后台并应用”生效。文件授权目录通过 `ORH_FILE_ROOTS` 的 JSON 数组配置。已有 macOS 源码 LaunchAgent 会迁移设备身份与账号绑定，并由安装版接管后台。
 
 ## 开发与构建
 

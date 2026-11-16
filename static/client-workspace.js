@@ -73,12 +73,14 @@ window.ORHClientWorkspace = (() => {
     }
   });
   async function returnToDevices() {
-    for (const module of [window.RemoteHubWorkspace, window.RemoteHubKnowledge, window.RemoteHubSSH, window.RemoteHubProxyManager, window.RemoteHubRemoteConnect, window.RemoteHubApplications]) {
+    for (const module of [window.RemoteHubWorkspace, window.RemoteHubKnowledge, window.RemoteHubSSH, window.RemoteHubProxyManager, window.RemoteHubRemoteConnect, window.RemoteHubApplications, window.RemoteHubAgentSettings, window.RemoteHubMesh]) {
       if (module?.canLeave && !await module.canLeave()) return;
     }
     if (android) window.ORHAndroid?.returnToDevices();
     else location.assign(clientHome.href);
   }
   back.onclick = event => { event.preventDefault(); returnToDevices(); };
+  const sidebarHome=document.querySelector('aside nav a[href="/client"]');
+  if(sidebarHome){sidebarHome.href=back.href;sidebarHome.onclick=back.onclick;}
   return {openTerminal, returnToDevices};
 })();

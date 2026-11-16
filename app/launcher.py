@@ -212,6 +212,20 @@ def stop():
     stop_children()
 
 
+def restart_agent():
+    import psutil
+    path = APP / '.runtime/server.pid'
+    process = psutil.Process(int(path.read_text())) if path.exists() else None
+    stop_service()
+    kill('server.pid')
+    if process:
+        try:
+            process.wait(timeout=20)
+        except psutil.NoSuchProcess:
+            pass
+    ensure_server()
+
+
 def single_instance(name='Tray'):
     global _MUTEX
     if sys.platform != 'win32':
@@ -409,6 +423,9 @@ def main():
         os.fchdir(int(arguments[index + 1]))
         target = arguments[index + 2:]
         os.execvpe(target[0], target, os.environ)
+    if '--restart-agent' in arguments:
+        restart_agent()
+        return
     if '--headless' in arguments:
         install_files()
         ensure_server()

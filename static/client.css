@@ -49,3 +49,18 @@ body.client-workspace [data-view=meshremote], body.client-workspace [data-peer-c
   .client-device { transition: background-color .16s ease-out; }
   .client-device:hover { background-color: var(--soft); }
 }
+.mesh-form { display:grid; grid-template-columns:2fr 1fr 1fr; gap:16px; margin:20px 0; }
+.mesh-form label,.agent-access-form label { display:flex; flex-direction:column; gap:8px; }
+.mesh-form .toolbar { grid-column:1/-1; }
+.mesh-report { white-space:pre-wrap; overflow-wrap:anywhere; max-height:360px; overflow:auto; }
+.agent-access-form { max-width:720px; display:grid; gap:20px; margin:24px 0; }
+.agent-access-form .switch-row { flex-direction:row; align-items:center; }
+.agent-access-form small { color:var(--muted); line-height:1.6; }
+.agent-access-urls { overflow-wrap:anywhere; }
+@media(max-width:760px) { .mesh-form { grid-template-columns:1fr; } }
+
+body[data-module=desktop] .rc-tabs { display:none; }
+.module-navigation { width:100%; }
+.module-navigation summary { padding:12px; color:var(--muted); cursor:pointer; font-size:14px; }
+.module-navigation[open] summary { margin-bottom:4px; }
+aside nav > a.button { justify-content:flex-start; margin-bottom:8px; }

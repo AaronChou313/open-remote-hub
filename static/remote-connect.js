@@ -301,7 +301,7 @@ window.RemoteHubRemoteConnect = (() => {
           )
             return;
           if (dirty) fillSettings(original, effectiveOriginal, false);
-          if (next === "overview") await loadSettings();
+          if (next === "overview" && state?.ready) await loadSettings();
           else {
             dirty = false;
             $("#rcDirty").hidden = true;
@@ -391,7 +391,7 @@ window.RemoteHubRemoteConnect = (() => {
 
   function markup() {
     return `<div id="rcRoot" class="remote-connect" data-tab="lan">
-<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="network">${icon("network")}组网</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
+<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
 ${RemoteHubLAN.markup()}
 <section id="rcNetworkProxy" hidden></section>
 ${RemoteHubNodeBaby.markup()}
