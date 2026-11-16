@@ -57,6 +57,13 @@ def setup_service():
                 for name in ('instance-id', 'cloud-binding.json', 'credentials.json', 'modules.json'):
                     if (source / name).is_file():
                         shutil.copy2(source / name, runtime / name)
+            if source:
+                for name in ('connection.json', 'profiles.json'):
+                    old = source / 'proxy' / name
+                    target = runtime / 'proxy' / name
+                    if old.is_file() and not target.exists():
+                        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                        shutil.copy2(old, target)
             subprocess.run(['launchctl', 'bootout', f'gui/{os.getuid()}', str(legacy)], capture_output=True)
             legacy.unlink()
         path = Path.home() / 'Library/LaunchAgents/top.openremotehub.agent.plist'
@@ -394,6 +401,7 @@ def main():
             raise SystemExit('无效的内置脚本')
         script = BUNDLE / 'scripts' / name
         sys.argv = [str(script), *arguments[index + 2:]]
+        sys.path.insert(0, str(script.parent))
         runpy.run_path(str(script), run_name='__main__')
         return
     if '--cwd-exec' in arguments:

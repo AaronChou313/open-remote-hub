@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 import httpx
 import pytest
-from app import access,proxy
+from app import access,proxy,proxy_manager
 from app.platforms import MacHost
 
 
@@ -13,6 +13,7 @@ def proxy_client(workspace,monkeypatch):
     c,_,_=workspace
     state={'mode':'rule','groups':{'策略 / #中文':{'type':'Selector','now':'first','all':['first','second']},'automatic':{'type':'URLTest','now':'first','all':['first','second']},'first':{'type':'Direct'},'second':{'type':'Shadowsocks'}}}
     calls=[]
+    monkeypatch.setattr(proxy_manager,'default_socket',lambda:None)
     def backend(request):
         import json
         calls.append((request.method,request.url.raw_path))

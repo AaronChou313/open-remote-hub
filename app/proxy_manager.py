@@ -9,6 +9,8 @@ import os
 import shlex
 from pathlib import Path
 import socket
+import sys
+import shutil
 import tempfile
 import time
 from urllib.parse import urljoin, urlsplit
@@ -32,9 +34,19 @@ def root():
     return path
 
 
+def default_socket():
+    if sys.platform == 'darwin':
+        return Path('/var/run/openremotehub-proxy.sock')
+    if sys.platform.startswith('linux'):
+        return Path('/run/openremotehub-proxy.sock')
+
+
 def settings():
     path=root()/'connection.json'
-    return json.loads(path.read_text()) if path.exists() else {}
+    if path.exists():
+        return json.loads(path.read_text())
+    socket = default_socket()
+    return {'socket':str(socket)} if socket and socket.exists() else {}
 
 
 def client():
@@ -161,6 +173,44 @@ def public(row,active):
                 nodes=len(cfg.get('proxies') or []),groups=len(cfg.get('proxy-groups') or []),rules=len(cfg.get('rules') or []))
 
 
+def install_command():
+    import pwd
+    from app import launcher
+    owner=pwd.getpwuid(os.getuid()).pw_name
+    return launcher.command('--run-script','proxy_setup.py','setup','--authorize',
+                            '--owner',owner,'--data-dir',str(root()))
+
+
+def installation():
+    from app.main import read_tasks,task_members,task_logs
+    record=root()/'installation.json'
+    if not record.exists():return {}
+    key=json.loads(record.read_text())['task_id']
+    task=read_tasks().get(key)
+    if not task:return {}
+    return dict(task_id=key,running=bool(task_members(task)),output=task_logs(key)['output'][-6000:])
+
+
+@router.post('/install')
+async def install():
+    from app import main
+    if sys.platform not in ('darwin','linux'):
+        raise HTTPException(409,'Mihomo 专用后台安装目前支持 macOS 和 Linux')
+    async with lock:
+        if installation().get('running'):
+            raise HTTPException(409,'Mihomo 安装正在执行，请在目标主机完成管理员授权')
+        try:state=await call('GET','/orh/state')
+        except HTTPException:state={}
+        if state.get('ready') and state.get('privileged') and state.get('network_revision',0)>=2:
+            return dict(installed=True)
+        if sys.platform=='linux' and os.geteuid()!=0 and not shutil.which('pkexec'):
+            raise HTTPException(409,'此主机没有图形授权组件，请在目标主机终端运行页面提供的安装命令')
+        task=main.task_create(main.Task(name='安装 Mihomo 网络代理',argv=install_command(),cwd=str(root())))
+        atomic(root()/'installation.json',{'task_id':task['id']})
+        main.task_action(task['id'],main.Action(action='start',confirm=task['id']))
+        return task
+
+
 @router.get('')
 async def status():
     data=library()
@@ -169,9 +219,10 @@ async def status():
     active=next((x for x in data['profiles'] if x['id']==data['active']),None)
     # A crash between engine commit and library commit must be visible.
     consistent=not active or not engine.get('ready') or engine.get('config_revision')==hashlib.sha256(json.dumps(active['source'],sort_keys=True).encode()).hexdigest()
-    from app.main import ROOT
     managed=bool(settings()) and not os.environ.get('ORH_CLASH_SOCKET','').strip() and not os.environ.get('ORH_CLASH_URL','').strip()
-    return dict(managed=managed,network_update_required=bool(engine.get('ready') and engine.get('privileged') and engine.get('network_revision',0)<2),engine=engine,profiles=[public(x,data['active']) for x in sorted(data['profiles'],key=lambda x:x['name'].casefold())],consistent=consistent,install_command='sudo '+('/usr/bin/python3' if __import__('sys').platform=='darwin' else 'python3')+' '+shlex.quote(str(ROOT/'scripts/proxy_setup.py'))+' install')
+    supported=sys.platform in ('darwin','linux')
+    command='sudo '+shlex.join([value for value in install_command() if value!='--authorize']) if supported else ''
+    return dict(managed=managed,network_update_required=bool(engine.get('ready') and engine.get('privileged') and engine.get('network_revision',0)<2),engine=engine,profiles=[public(x,data['active']) for x in sorted(data['profiles'],key=lambda x:x['name'].casefold())],consistent=consistent,install_supported=supported,installation=installation(),install_command=command)
 
 
 class Import(BaseModel):

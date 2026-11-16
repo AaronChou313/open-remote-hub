@@ -288,3 +288,8 @@ def test_windows_client_exit_keeps_server_and_startup_keeps_window_closed(tmp_pa
     monkeypatch.setattr(launcher, 'tray', lambda open_window=True: calls.append(open_window))
     launcher.main()
     assert calls[-1] is False
+
+
+def test_mac_bundle_keeps_background_process_out_of_dock():
+    spec=(Path(__file__).resolve().parents[1]/'desktop/orh.spec').read_text()
+    assert "'LSUIElement':True" in spec

@@ -10,6 +10,8 @@ import platform
 import plistlib
 import pwd
 import shutil
+import shlex
+import ssl
 import subprocess
 import sys
 import time
@@ -27,16 +29,22 @@ def download():
     system={'Darwin':'darwin','Linux':'linux'}.get(platform.system())
     if not machine or not system:raise SystemExit('Unsupported architecture')
     req=urllib.request.Request('https://api.github.com/repos/MetaCubeX/mihomo/releases/latest',headers={'User-Agent':'OpenRemoteHub-setup'})
-    release=json.load(urllib.request.urlopen(req,timeout=30))
+    context=None
+    try:
+        import certifi
+        context=ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    release=json.load(urllib.request.urlopen(req,timeout=30,context=context))
     name='mihomo-'+system+'-'+machine+'-'+release['tag_name']+'.gz'
     asset=next((a for a in release['assets'] if a['name']==name),None)
     if not asset:raise SystemExit('Official release asset not found')
-    raw=urllib.request.urlopen(asset['browser_download_url'],timeout=60).read()
+    raw=urllib.request.urlopen(asset['browser_download_url'],timeout=60,context=context).read()
     if asset.get('digest')!='sha256:'+hashlib.sha256(raw).hexdigest():raise SystemExit('Official archive digest missing or mismatched')
     folder=DATA/'bin';folder.mkdir(mode=0o700,parents=True,exist_ok=True)
     binary=folder/'mihomo';binary.write_bytes(gzip.decompress(raw));binary.chmod(0o755)
     (folder/'release.json').write_text(json.dumps(dict(version=release['tag_name'],asset=name,binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),archive_digest=asset['digest'],source=release['html_url'])))
-    print('Verified official Mihomo',release['tag_name'])
+    print('Verified official Mihomo',release['tag_name'],flush=True)
 
 
 def run(argv):
@@ -74,15 +82,56 @@ def wait_ready(socket):
     raise SystemExit('Proxy service did not become ready; inspect the runner log. Clash was not changed.')
 
 
-def launchd(home,binary,socket,uid,preview):
+def runtime_executable(home):
+    if sys.platform=='darwin':
+        return home/'runtime/OpenRemoteHub.app/Contents/MacOS/OpenRemoteHub'
+    return home/'runtime/OpenRemoteHub'
+
+
+def owned_service(arguments,home):
+    return (arguments[:2]==['/usr/bin/python3',str(home/'proxy_engine.py')]
+            or arguments[:3]==[str(runtime_executable(home)),'--run-script','proxy_engine.py'])
+
+
+def install_runtime(home):
+    if not getattr(sys,'frozen',False):
+        return ['/usr/bin/python3',str(home/'proxy_engine.py')]
+    destination=home/'runtime'
+    shutil.rmtree(destination,ignore_errors=True)
+    if sys.platform=='darwin':
+        destination.mkdir()
+        shutil.copytree(Path(sys.executable).parents[2],destination/'OpenRemoteHub.app',symlinks=True)
+    else:
+        shutil.copytree(Path(sys.executable).parent,destination,symlinks=True)
+    return [str(runtime_executable(home)),'--run-script','proxy_engine.py']
+
+
+def authorize(owner):
+    arguments=([sys.executable,'--run-script','proxy_setup.py'] if getattr(sys,'frozen',False)
+               else [sys.executable,str(Path(__file__).resolve())])
+    arguments+=['install','--owner',owner,'--data-dir',str(DATA)]
+    print('请在目标主机完成管理员授权',flush=True)
+    if sys.platform=='darwin':
+        script='do shell script '+json.dumps(shlex.join(arguments),ensure_ascii=False)+' with administrator privileges'
+        run(['/usr/bin/osascript','-e',script])
+    elif sys.platform=='linux':
+        run(['pkexec',*arguments])
+    else:
+        raise SystemExit('Unsupported OS')
+
+
+def launchd(home,binary,socket,uid,preview,runner_command=None):
     label=LABEL+('.preview' if preview else '')
     runner=ROOT/'scripts/proxy_engine.py' if preview else home/'proxy_engine.py'
     domain='gui/'+str(uid) if preview else 'system'
     path=Path(pwd.getpwuid(uid).pw_dir)/'Library/LaunchAgents'/(label+'.plist') if preview else Path('/Library/LaunchDaemons')/(label+'.plist')
-    cfg=dict(Label=label,ProgramArguments=['/usr/bin/python3',str(runner),'--home',str(home/'engine'),'--binary',str(binary),'--socket',str(socket),'--uid',str(uid)],RunAtLoad=True,KeepAlive=True,ThrottleInterval=10,StandardOutPath=str(home/'runner.log'),StandardErrorPath=str(home/'runner.log'),Umask=0o077)
+    command=runner_command or ['/usr/bin/python3',str(runner)]
+    cfg=dict(Label=label,ProgramArguments=[*command,'--home',str(home/'engine'),'--binary',str(binary),'--socket',str(socket),'--uid',str(uid)],RunAtLoad=True,KeepAlive=True,ThrottleInterval=10,StandardOutPath=str(home/'runner.log'),StandardErrorPath=str(home/'runner.log'),Umask=0o077)
     if path.exists():
         old=plistlib.loads(path.read_bytes())
-        if old.get('Label')!=label or old.get('ProgramArguments',[None,None])[1]!=str(runner):raise SystemExit('Existing service is not owned by this installer')
+        previous=old.get('ProgramArguments',[])
+        if old.get('Label')!=label or not (previous[:len(command)]==command or owned_service(previous,home)):
+            raise SystemExit('Existing service is not owned by this installer')
         subprocess.run(['launchctl','bootout',domain,str(path)],capture_output=True)
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_bytes(plistlib.dumps(cfg));path.chmod(0o644 if not preview else 0o600)
@@ -90,16 +139,29 @@ def launchd(home,binary,socket,uid,preview):
 
 
 def main():
+    global DATA
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['download','stage','install'])
+    parser.add_argument('action',choices=['download','stage','install','setup'])
     parser.add_argument('--owner',default=os.environ.get('SUDO_USER') or pwd.getpwuid(os.getuid()).pw_name)
+    parser.add_argument('--data-dir',type=Path,default=DATA)
+    parser.add_argument('--authorize',action='store_true')
     args=parser.parse_args()
+    DATA=args.data_dir.resolve()
     DATA.mkdir(mode=0o700,parents=True,exist_ok=True)
     if args.action=='download':download();return
+    owner=pwd.getpwnam(args.owner)
+    if args.action=='setup':
+        print('正在下载 Mihomo',flush=True)
+        download()
+        if os.geteuid()!=0:
+            if not args.authorize:raise SystemExit('请使用 --authorize 或 sudo 完成安装')
+            authorize(args.owner)
+            return
+        for path in (DATA,DATA/'bin',DATA/'bin/mihomo',DATA/'bin/release.json'):
+            os.chown(path,owner.pw_uid,-1)
     binary=DATA/'bin/mihomo';metadata=DATA/'bin/release.json'
     if not binary.exists() or not metadata.exists():raise SystemExit('Run download first')
     if hashlib.sha256(binary.read_bytes()).hexdigest()!=json.loads(metadata.read_text())['binary_sha256']:raise SystemExit('Binary changed since verification')
-    owner=pwd.getpwnam(args.owner)
     if args.action=='stage':
         if sys.platform!='darwin':raise SystemExit('For Linux, install the provided systemd unit instead')
         if os.geteuid()==0:raise SystemExit('Stage as the ordinary user')
@@ -109,7 +171,8 @@ def main():
             if current and Path(current).exists() and current!=str(DATA/'preview.sock'):
                 raise SystemExit('Dedicated system service is already installed; use proxyctl.py status instead of staging another core')
         socket=DATA/'preview.sock'
-        launchd(DATA,binary,socket,owner.pw_uid,True)
+        command=[sys.executable,'--run-script','proxy_engine.py'] if getattr(sys,'frozen',False) else None
+        launchd(DATA,binary,socket,owner.pw_uid,True,command)
         wait_ready(socket)
         connection(socket,owner.pw_uid)
         print('Preview service installed. TUN and system proxy remain OFF.')
@@ -121,37 +184,44 @@ def main():
         preview=Path(owner.pw_dir)/'Library/LaunchAgents'/(LABEL+'.preview.plist')
         if preview.exists():
             cfg=plistlib.loads(preview.read_bytes())
-            if cfg.get('ProgramArguments',[None,None])[1]!=str(ROOT/'scripts/proxy_engine.py'):raise SystemExit('Unknown preview service')
+            previous=cfg.get('ProgramArguments',[])
+            runner=(len(previous)>1 and Path(previous[1]).name=='proxy_engine.py') or previous[1:3]==['--run-script','proxy_engine.py']
+            if cfg.get('Label')!=LABEL+'.preview' or not runner or previous[-2:]!=['--uid',str(owner.pw_uid)]:
+                raise SystemExit('Unknown preview service')
             subprocess.run(['launchctl','bootout','gui/'+str(owner.pw_uid),str(preview)],capture_output=True)
             preview.unlink()
         installed=Path('/Library/LaunchDaemons')/(LABEL+'.plist')
         if installed.exists():
             cfg=plistlib.loads(installed.read_bytes())
-            if cfg.get('ProgramArguments',[None,None])[1]!=str(home/'proxy_engine.py'):raise SystemExit('Unknown system proxy service; not changed')
+            if not owned_service(cfg.get('ProgramArguments',[]),home):raise SystemExit('Unknown system proxy service; not changed')
             subprocess.run(['launchctl','bootout','system',str(installed)],capture_output=True)
     elif sys.platform=='linux':
         home=Path('/opt/openremotehub-proxy');socket=Path('/run/openremotehub-proxy.sock')
         installed=Path('/etc/systemd/system/openremotehub-proxy.service')
         if installed.exists():
-            if 'ExecStart=/usr/bin/python3 /opt/openremotehub-proxy/proxy_engine.py ' not in installed.read_text():raise SystemExit('Unknown system proxy service; not changed')
+            previous=installed.read_text()
+            if ('ExecStart=/usr/bin/python3 /opt/openremotehub-proxy/proxy_engine.py ' not in previous
+                    and 'ExecStart=/opt/openremotehub-proxy/runtime/OpenRemoteHub --run-script proxy_engine.py ' not in previous):
+                raise SystemExit('Unknown system proxy service; not changed')
             run(['systemctl','stop','openremotehub-proxy.service'])
     else:raise SystemExit('Unsupported OS')
     home.mkdir(mode=0o755,parents=True,exist_ok=True)
     if home.is_symlink() or home.stat().st_uid!=0:raise SystemExit('Service installation directory must be root-owned')
     shutil.copyfile(binary,home/'mihomo');(home/'mihomo').chmod(0o755)
     shutil.copyfile(ROOT/'scripts/proxy_engine.py',home/'proxy_engine.py');(home/'proxy_engine.py').chmod(0o644)
-    if sys.platform=='darwin':launchd(home,home/'mihomo',socket,owner.pw_uid,False)
+    command=install_runtime(home)
+    if sys.platform=='darwin':launchd(home,home/'mihomo',socket,owner.pw_uid,False,command)
     else:
         unit='''[Unit]
 Description=OpenRemoteHub Mihomo broker
 After=network-online.target
 [Service]
-ExecStart=/usr/bin/python3 /opt/openremotehub-proxy/proxy_engine.py --home /opt/openremotehub-proxy/engine --binary /opt/openremotehub-proxy/mihomo --socket /run/openremotehub-proxy.sock --uid %d
+ExecStart=%s --home /opt/openremotehub-proxy/engine --binary /opt/openremotehub-proxy/mihomo --socket /run/openremotehub-proxy.sock --uid %d
 Restart=on-failure
 UMask=0077
 [Install]
 WantedBy=multi-user.target
-'''%owner.pw_uid
+'''%(shlex.join(command),owner.pw_uid)
         Path('/etc/systemd/system/openremotehub-proxy.service').write_text(unit)
         run(['systemctl','daemon-reload']);run(['systemctl','enable','--now','openremotehub-proxy.service'])
     connection(socket,owner.pw_uid)
