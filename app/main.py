@@ -66,7 +66,7 @@ def save_tasks(tasks):
 def task_process(task):
     try:
         p=psutil.Process(task['pid'])
-        if abs(p.create_time()-task['created'])<0.01 and os.getpgid(p.pid)==p.pid and p.status()!=psutil.STATUS_ZOMBIE:
+        if abs(p.create_time()-task['created'])<0.01 and (WINDOWS_EDITION or os.getpgid(p.pid)==p.pid) and p.status()!=psutil.STATUS_ZOMBIE:
             return p
     except (KeyError, ProcessLookupError, psutil.Error):
         pass
@@ -474,7 +474,11 @@ def task_action(key:str,body:Action):
             if body.action in ('stop','restart') and members:
                 t['members']=[dict(pid=x.pid,created=x.create_time()) for x in members]
                 save_tasks(tasks) # retain verified identities even if the leader exits first
-                if p:
+                if WINDOWS_EDITION:
+                    for member in reversed(members):
+                        try:member.terminate()
+                        except psutil.NoSuchProcess:pass
+                elif p:
                     try:os.killpg(p.pid,signal.SIGTERM)
                     except ProcessLookupError:pass
                 else:

@@ -56,6 +56,12 @@ def main():
     trashed = next(entry for entry in request('/api/files/trash?root=' + root)['entries'] if entry['original_name'] == name)
     request('/api/files/restore', dict(root=root, name=trashed['name'], revision=trashed['revision'], confirm=name))
     (Path(directory['path']) / name).unlink()
+    request('/api/modules/services/enable', {})
+    task = request('/api/tasks', dict(name='ORH package check', argv=[sys.executable, '-c', 'import time; time.sleep(60)'], cwd=directory['path']))['id']
+    request('/api/tasks/' + task, dict(action='start', confirm=task))
+    assert any(value['id'] == task and value['running'] for value in request('/api/tasks'))
+    request('/api/tasks/' + task, dict(action='stop', confirm=task))
+    request('/api/tasks/' + task, dict(action='delete', confirm=task))
     if os.name == 'nt':
         module = request('/api/modules/terminal/enable', {})
         assert module['state'] == 'ready', module
