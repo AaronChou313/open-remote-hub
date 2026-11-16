@@ -621,7 +621,7 @@ window.RemoteHubSSH = (() => {
     const data = await request('/ssh/config');
     data.files.sort((a, b) => Number(b.relative === 'config') - Number(a.relative === 'config') || a.name.localeCompare(b.name));
     if (!current() || version !== renderEpoch || tab !== 'config') return;
-    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div><div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '查看 / 高级编辑' : '查看', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}${data.backups.length ? '<details class="ssh-backup-section"><summary>配置备份与恢复 <span>' + data.backups.length + '</span></summary><div class="ssh-backups">' : ''}${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('')}${data.backups.length ? '</div></details>' : ''}`;
+    $('#sshPanel').innerHTML = `<div class="ssh-config-header"><div><h2>原生 SSH Config</h2><p class="mono muted">${esc(overview.directory)}</p></div>${!data.include.linked ? '<button class="primary" id="sshLink">接入原生 Config</button>' : '<span class="ssh-online">受管 Include 已接入</span>'}</div><div class="ssh-config-files">${data.files.map(file => `<div class="ssh-config-file"><div><strong>${esc(file.name)}</strong><p class="mono muted">${esc(file.path)}</p></div>${button('config-file', file.editable ? '管理配置项' : '查看配置项', `data-file="${file.id}"`)}</div>`).join('') || empty('尚无 SSH Config')}</div>${data.rules.length ? `<details class="ssh-rule-list"><summary>Host 模式规则 · ${data.rules.length}</summary><pre>${esc(data.rules.map(rule => rule.pattern).join('\n'))}</pre></details>` : ''}${data.warnings.map(warning => `<p class="danger-text">${esc(warning)}</p>`).join('')}${data.backups.length ? '<details class="ssh-backup-section"><summary>配置备份与恢复 <span>' + data.backups.length + '</span></summary><div class="ssh-backups">' : ''}${data.backups.slice().reverse().map(backup => `<div class="ssh-config-file"><span>${esc(backup.file)}<small class="muted">${new Date(backup.created * 1000).toLocaleString()}</small></span>${button('restore', '恢复', `data-backup="${backup.id}"`)}</div>`).join('')}${data.backups.length ? '</div></details>' : ''}`;
     const linkControl = $('#sshLink');
     if (linkControl) linkControl.onclick = async () => {
       try { const plan = await request('/ssh/config/plan', {action:'include'}); await applyPlan(plan); }
@@ -641,14 +641,24 @@ window.RemoteHubSSH = (() => {
 
   async function editConfig(fileId) {
     const result = await request('/ssh/config/read', {file:fileId});
-    if (!await open(result.name + (result.editable ? ' · 高级编辑' : ''), form(`<p class="mono muted">${esc(result.path)}</p><textarea name="text" class="ssh-config-editor" aria-label="SSH 配置内容" spellcheck="false" ${result.editable ? '' : 'readonly'}>${esc(result.text)}</textarea>`, result.editable ? '预览差异' : '关闭'))) return;
-    attachForm(async values => {
-      if (!result.editable) { submitting = false; dialog.close(); return; }
-      const plan = await request('/ssh/config/plan', {file:fileId, text:values.text, revision:result.revision});
-      dirty = false;
-      submitting = false;
-      await applyPlan(plan);
-    }, result.editable);
+    const options={Host:'适用主机',HostName:'服务器地址',User:'用户名',Port:'端口',IdentityFile:'私钥路径',ProxyJump:'跳板机',ForwardAgent:'转发 SSH Agent',ServerAliveInterval:'连接保活间隔',ConnectTimeout:'连接超时',Include:'包含配置文件',Match:'匹配规则'};
+    if (!await open(result.name,form(`<p class="mono muted">${esc(result.path)}</p><div id="sshConfigOptions" class="ssh-config-options"></div>${result.editable?'<button type="button" id="sshAddOption">添加配置项</button>':''}`,result.editable?'保存配置':'关闭')))return;
+    const rows=$('#sshConfigOptions');
+    function add(field={keyword:'HostName',value:''}){
+      const row=document.createElement('div');row.className='ssh-config-option';row.dataset.line=field.line ?? '';
+      const choices={...options,[field.keyword]:options[field.keyword]||field.keyword};
+      row.innerHTML=`<label>选项<select data-config-key ${result.editable?'':'disabled'}>${Object.entries(choices).map(([key,label])=>`<option value="${esc(key)}" ${field.keyword===key?'selected':''}>${esc(label)}</option>`).join('')}</select></label><label>值<input data-config-value value="${esc(field.value)}" ${result.editable?'':'readonly'}></label>${result.editable?'<button type="button">移除</button>':''}`;
+      if(result.editable)row.querySelector('button').onclick=()=>{row.remove();dirty=true;};
+      row.oninput=()=>{dirty=true;};rows.append(row);
+    }
+    result.fields.forEach(add);
+    if($('#sshAddOption'))$('#sshAddOption').onclick=()=>{add();dirty=true;};
+    attachForm(async()=>{
+      if(!result.editable){submitting=false;dialog.close();return;}
+      const fields=[...rows.children].map(row=>({line:row.dataset.line===''?null:Number(row.dataset.line),keyword:row.querySelector('[data-config-key]').value,value:row.querySelector('[data-config-value]').value}));
+      const plan=await request('/ssh/config/plan',{file:fileId,fields,revision:result.revision});
+      dirty=false;submitting=false;await applyPlan(plan);
+    },result.editable);
   }
 
   async function applyPlan(plan) {
@@ -658,7 +668,7 @@ window.RemoteHubSSH = (() => {
       submitting = false; dialog.close();
       notify('SSH 配置已保存');
       await reload();
-    }, `<pre class="ssh-diff">${esc(plan.diff)}</pre>`);
+    }, `<div class="ssh-options-review">${(plan.fields||[]).map(field=>`<p><strong>${esc(field.keyword)}</strong> ${esc(field.value)}</p>`).join('')}</div>`);
   }
 
   async function canLeave() {

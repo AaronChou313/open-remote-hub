@@ -14,7 +14,7 @@ from app.remote_connect.api import administrator
 lock = threading.RLock()
 router = APIRouter(prefix='/api/modules', tags=['modules'], dependencies=[Depends(administrator)])
 CATALOG = {
-    'terminal': ('终端', 'zellij', 'terminal', ('Darwin', 'Linux', 'Windows')),
+    'terminal': ('终端', 'zellij', 'zellij', ('Darwin', 'Linux', 'Windows')),
     'files': ('文件管理', 'files', 'files', ('Darwin', 'Linux', 'Windows')),
     'docker': ('Docker', 'docker', 'docker', ('Darwin', 'Linux', 'Windows')),
     'lan': ('本地局域网', None, 'lan', ('Darwin', 'Linux', 'Windows')),
@@ -125,7 +125,7 @@ def status(identifier, values=None):
     if requirement == 'zellij' and system == 'Linux':
         command = ''
     state = 'disabled' if not active else 'error' if not supported else 'ready' if check['available'] else 'missing_dependency'
-    return dict(id=identifier, name=name, enabled=active, supported=supported, platforms=platforms,
+    return dict(group='basic' if identifier in ('terminal','files','services','lan') else 'advanced', id=identifier, name=name, enabled=active, supported=supported, platforms=platforms,
                 state=state, dependency=check, entry=entry, guide=dict(text=hint, url=url, command=command))
 
 

@@ -22,7 +22,7 @@ final class Updates {
 
     private Updates() {}
 
-    static void check(ExecutorService worker, Handler main, String current, Consumer<Release> done) {
+    static void check(ExecutorService worker, Handler main, String current, Consumer<Release> done, Consumer<String> failure) {
         worker.execute(() -> {
             Release found = null;
             try {
@@ -46,8 +46,9 @@ final class Updates {
                     if (url.isEmpty()) url = value.optString("html_url");
                     if (!tag.isEmpty() && newer(tag, current)) found = new Release(tag, value.optString("body", ""), url);
                 }
+                else throw new IOException("HTTP "+connection.getResponseCode());
                 connection.disconnect();
-            } catch (Exception ignored) {}
+            } catch (Exception error) {main.post(() -> failure.accept("检查更新失败，请稍后重试。"));return;}
             Release result = found;
             main.post(() -> done.accept(result));
         });

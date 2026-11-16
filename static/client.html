@@ -9,10 +9,10 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/client.css">
   <link rel="stylesheet" href="/static/theme.css">
-  <script defer src="/static/mesh.js"></script>
+  <script defer src="/static/form-controls.js"></script><script defer src="/static/vendor/marked.js"></script><script defer src="/static/vendor/dompurify.js"></script><script defer src="/static/software.js"></script><script defer src="/static/mesh.js"></script>
   <script defer src="/static/agent-settings.js"></script>
   <script defer src="/static/client.js"></script>
-</head>
+<link rel="stylesheet" href="/static/settings.css"></head>
 <body class="client-page">
   <section id="clientLogin" class="login" hidden>
     <form id="clientLoginForm">
@@ -39,6 +39,7 @@
         <button type="button" data-page="devices" aria-current="page"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg><span>我的设备</span></button>
         <button type="button" data-page="mesh"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#network"></use></svg><span>组网状态</span></button>
         <button type="button" data-page="settings"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#settings-2"></use></svg><span>设置</span></button>
+        <button type="button" data-page="about"><svg class="orh-icon" aria-hidden="true"><use href="/static/icons.svg#info"></use></svg><span>关于 ORH</span></button>
       </nav>
     </header>
     <main class="client-main">
@@ -49,11 +50,12 @@
       <section id="clientMesh" hidden></section>
       <section id="clientSettings" hidden>
         <div class="toolbar"><a id="clientModules" class="button" href="/#modules">本机功能管理</a></div>
-        <div id="clientAgentSettings"></div>
+        <section class="settings-section"><h2>外观</h2><label for="clientAppearance">颜色主题</label><select id="clientAppearance"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></section><div id="clientAgentSettings"></div>
         <dl id="clientAccount" class="client-details"></dl>
-        <div class="toolbar"><button id="clientTheme" type="button">切换主题</button><a id="clientCloudAdmin" class="button" href="https://cloud.openremotehub.top/">账号与设备后台</a><button id="clientLogout" type="button">退出登录</button></div>
+        <div class="toolbar"><a id="clientCloudAdmin" class="button" href="https://cloud.openremotehub.top/">账号与设备后台</a><button id="clientLogout" type="button">退出登录</button></div>
         <p class="muted">关闭窗口后，后台 Agent、组网与现有任务继续运行。停止后台请使用托盘或菜单栏中的「停止后台并退出」。</p>
       </section>
+      <section id="clientAbout" hidden></section>
     </main>
   </div>
 </body>

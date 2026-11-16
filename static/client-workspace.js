@@ -19,7 +19,7 @@ window.ORHClientWorkspace = (() => {
   const back = document.createElement('a');
   back.href = android ? '#' : clientHome.href;
   back.className = 'button';
-  back.textContent = '← 我的设备';
+  back.textContent = '← 返回我的设备';
   const name = document.createElement('strong');
   name.textContent = params.get('device_name') || '设备工作区';
   const status = document.createElement('span');
@@ -72,15 +72,17 @@ window.ORHClientWorkspace = (() => {
       openTerminal(target.href);
     }
   });
-  async function returnToDevices() {
+  async function openClientPage(page = '') {
     for (const module of [window.RemoteHubWorkspace, window.RemoteHubKnowledge, window.RemoteHubSSH, window.RemoteHubProxyManager, window.RemoteHubRemoteConnect, window.RemoteHubApplications, window.RemoteHubAgentSettings, window.RemoteHubMesh]) {
       if (module?.canLeave && !await module.canLeave()) return;
     }
-    if (android) window.ORHAndroid?.returnToDevices();
-    else location.assign(clientHome.href);
+    if (android) {
+      if (window.ORHAndroid?.openClientPage) window.ORHAndroid.openClientPage(page);
+      else window.ORHAndroid?.returnToDevices();
+    }
+    else location.assign(clientHome.href + (page ? '#' + page : ''));
   }
+  const returnToDevices = () => openClientPage();
   back.onclick = event => { event.preventDefault(); returnToDevices(); };
-  const sidebarHome=document.querySelector('aside nav a[href="/client"]');
-  if(sidebarHome){sidebarHome.href=back.href;sidebarHome.onclick=back.onclick;}
-  return {openTerminal, returnToDevices};
+  return {openTerminal, returnToDevices, openClientPage};
 })();

@@ -52,12 +52,19 @@ def run(url, storage_path):
                                    min_size=(680, 480))
 
     def terminal_request(event, key, value):
-        if event != 'change' or key not in ('terminal_request', 'service_request'):
+        if event != 'change' or key not in ('terminal_request', 'service_request', 'dsh_request'):
             return
         try:
             if not isinstance(value, dict) or not isinstance(value.get('url'), str):
                 raise ValueError('终端入口无效')
-            if key == 'service_request':
+            if key == 'dsh_request':
+                address, source = urlsplit(value['url']), urlsplit(window.get_current_url() or '')
+                if (address.scheme not in ('http', 'https') or address.username or address.password
+                        or address.hostname != source.hostname or address.scheme != source.scheme or address.path != '/'
+                        or not address.port):
+                    raise ValueError('DSH 窗口必须来自当前设备的认证网关')
+                webview.create_window('OpenRemoteHub · DSH', value['url'], width=1440, height=960, min_size=(680, 480))
+            elif key == 'service_request':
                 address = urlsplit(value['url'])
                 if (address.scheme not in ('http', 'https', 'rustdesk') or address.username or address.password
                         or address.scheme != 'rustdesk' and not (address.hostname or '').endswith('.localhost')):
@@ -86,4 +93,4 @@ def run(url, storage_path):
     menu = [Menu('OpenRemoteHub', [MenuAction('我的设备', devices),
                                   MenuAction('关闭窗口', window.destroy)])]
     gui = 'qt' if getattr(sys, 'frozen', False) and sys.platform.startswith('linux') else None
-    webview.start(private_mode=False, storage_path=str(storage_path), menu=menu, gui=gui)
+    webview.start(private_mode=False, storage_path=str(storage_path), menu=menu if sys.platform == 'darwin' else None, gui=gui)

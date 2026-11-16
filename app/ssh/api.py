@@ -1,5 +1,6 @@
 """SSH management API authorized by the console administrator session."""
 import json
+import re
 from pathlib import Path
 import secrets
 import time
@@ -240,7 +241,14 @@ def config_read(request: Request, value=Depends(body)):
     content = config.read_source(file['path'])[1].decode()
     if 'PRIVATE KEY-----' in content or '\x00' in content:
         raise HTTPException(403, '私钥只能通过专用密钥导出操作读取')
-    return dict(file, text=content)
+    fields=[]
+    for line,text in enumerate(content.splitlines()):
+        try:parts=config.tokens(text)
+        except HTTPException:
+            parts=text.strip().split(None,1)
+            if len(parts)>1:parts[1]=parts[1].strip('\"\'')
+        if parts:fields.append(dict(line=line,keyword=parts[0],value=' '.join(parts[1:])))
+    return dict(file,text=content,fields=fields)
 
 
 @router.post('/config/plan')
@@ -252,10 +260,35 @@ def config_plan(request: Request, value=Depends(body)):
         file = next((f for f in config.discover()['files'] if f['id'] == value.get('file') and f['editable']), None)
         if not file:
             raise HTTPException(403, '此配置不在可编辑的 SSH 管理范围')
+        old = config.read_source(file['path'])[1].decode()
         text = value.get('text')
+        if 'fields' in value:
+            fields=value['fields']
+            if not isinstance(fields,list):raise HTTPException(400,'配置选项无效')
+            remaining={};added=[]
+            for field in fields:
+                if not isinstance(field,dict):raise HTTPException(400,'配置选项无效')
+                key=field.get('keyword','');content=field.get('value','')
+                if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9]+',key) or not isinstance(content,str) or any(c in content for c in ('\n','\r','\x00')):
+                    raise HTTPException(400,'每行填写一个 SSH 配置选项')
+                line=field.get('line')
+                rendered=key+' '+(config.quote(content) if key.lower() in ('identityfile','userknownhostsfile') else content)
+                if isinstance(line,int):remaining[line]=(key,content,rendered)
+                else:added.append(rendered)
+            output=[]
+            for index,original in enumerate(old.splitlines()):
+                try:tokens=config.tokens(original)
+                except HTTPException:tokens=None
+                if tokens is None:
+                    if index in remaining:output.append(remaining[index][2])
+                    continue
+                if not tokens:output.append(original);continue
+                if index in remaining:
+                    key,content,rendered=remaining[index]
+                    output.append(original if key==tokens[0] and content==' '.join(tokens[1:]) else rendered)
+            text='\n'.join(output+added)+'\n'
         if not isinstance(text, str) or '\x00' in text or len(text.encode()) > store.LIMIT or 'PRIVATE KEY-----' in text:
             raise HTTPException(400, '配置文本无效')
-        old = config.read_source(file['path'])[1].decode()
         if store.digest(old.encode()) != value.get('revision'):
             raise HTTPException(409, '配置已修改，请重新打开')
         # Syntax and effective rules are checked by OpenSSH at use time. Validation
@@ -268,7 +301,7 @@ def config_plan(request: Request, value=Depends(body)):
     config.validate(result['file'], result['text'])
     token = secrets.token_hex(16)
     store.put('plan', token, dict(result, expires=time.time() + 300))
-    return dict(result, plan=token)
+    return dict(result, plan=token, fields=value.get('fields',[]))
 
 
 @router.post('/config/apply')

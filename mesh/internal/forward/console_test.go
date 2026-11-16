@@ -75,6 +75,10 @@ func TestConsoleOriginCookieRedirectAndWebSocket(t *testing.T) {
 		case "/api/dsh/status":
 			w.Header().Set("Content-Security-Policy", "frame-src http://100.64.0.20:8767")
 			json.NewEncoder(w).Encode(map[string]any{"gateway_port": 8767})
+		case "/gateway-login":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			io.WriteString(w, `<a href="http://100.64.0.20:8765/">登录 RemoteHub</a>`)
 		case "/gateway-health":
 			if r.Host != "100.64.0.20:8767" {
 				t.Error("gateway Host not translated")
@@ -156,9 +160,18 @@ func TestConsoleOriginCookieRedirectAndWebSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	response.Body.Close()
-	gatewayTransport.CloseIdleConnections()
 	if response.StatusCode != 200 || !strings.Contains(response.Header.Get("Content-Security-Policy"), entry.URL) {
 		t.Fatal("DSH gateway not mapped")
+	}
+	response, err = gatewayClient.Get(strings.Replace(gatewayURL, "/gateway-health", "/gateway-login", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loginBody, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	gatewayTransport.CloseIdleConnections()
+	if response.StatusCode != http.StatusUnauthorized || !strings.Contains(string(loginBody), entry.URL+"/") || strings.Contains(string(loginBody), "100.64.0.20") {
+		t.Fatalf("DSH login destination was not mapped: %s", loginBody)
 	}
 	request, _ := http.NewRequest("GET", entry.URL+"/", nil)
 	request.Host = "attacker.example"

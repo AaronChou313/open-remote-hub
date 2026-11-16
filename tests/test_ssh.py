@@ -567,3 +567,22 @@ def test_connection_authentication_modes_use_native_ssh_config(ssh_home, authent
     assert 'PubkeyAuthentication=yes' in command
     invalid = client.post('/api/ssh/connections/save', json=dict(alias='invalid', authentication='password;id'))
     assert invalid.status_code == 400
+
+
+def test_structured_config_preserves_comments_and_unchanged_options(ssh_home):
+    client, directory, _ = ssh_home
+    original = '# user notes\nHost fixture\n  HostName localhost # keep comment\n  User old\n  Port 22\n'
+    (directory / 'config').write_text(original)
+    info = client.get('/api/ssh/config').json()['files'][0]
+    detail = post(client, '/config/read', {'file': info['id']})
+    fields = detail['fields']
+    for field in fields:
+        if field['keyword'] == 'User':
+            field['value'] = 'new'
+    fields = [field for field in fields if field['keyword'] != 'Port']
+    fields.append({'keyword': 'ServerAliveInterval', 'value': '30'})
+    plan = post(client, '/config/plan', {'file': info['id'], 'revision': info['revision'], 'fields': fields})
+    assert '# user notes\n' in plan['text'] and '  HostName localhost # keep comment\n' in plan['text']
+    assert 'User new\n' in plan['text'] and 'Port 22' not in plan['text']
+    post(client, '/config/apply', {'plan': plan['plan'], 'confirm': 'config'})
+    assert client.get('/api/ssh/connections/fixture/effective').json()['user'] == 'new'

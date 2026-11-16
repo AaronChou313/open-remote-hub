@@ -312,23 +312,28 @@ def newer(candidate, current):
     return False
 
 
-def latest():
-    request = urllib.request.Request(RELEASES, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'ORH-Windows/' + version()})
+def release_info():
+    request = urllib.request.Request(RELEASES, headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'OpenRemoteHub/' + version()})
     with urllib.request.urlopen(request, timeout=12) as response:
         data = json.load(response)
     tag = str(data.get('tag_name', '')).lstrip('vV')
-    if not tag or not newer(tag, version()):
-        return None
     for asset in data.get('assets', []):
         name = asset.get('name', '')
-        if asset_matches(name):
-            return {'version': tag, 'url': asset['browser_download_url'], 'name':name}
-    return None
+        if tag and asset_matches(name):
+            return {'version': tag, 'url': asset['browser_download_url'], 'name':name,
+                    'size':asset.get('size',0), 'notes':data.get('body',''), 'page':data.get('html_url','https://github.com/AaronChou313/open-remote-hub/releases/latest')}
+    raise RuntimeError('发行页面尚未提供当前平台的安装包')
 
 
-def apply_update(release):
-    target = Path(tempfile.gettempdir()) / release['name']
-    urllib.request.urlretrieve(release['url'], target)
+def latest():
+    release = release_info()
+    return release if newer(release['version'], version()) else None
+
+
+def apply_update(release, downloaded=None):
+    target = Path(downloaded) if downloaded else Path(tempfile.gettempdir()) / release['name']
+    if not downloaded:
+        urllib.request.urlretrieve(release['url'], target)
     if sys.platform != 'win32':
         subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', str(target)], close_fds=True)
         return
@@ -337,7 +342,7 @@ def apply_update(release):
     # A running exe cannot replace itself: hand the install to a detached
     # helper that waits for this process to exit, then upgrades and restarts.
     helper = Path(tempfile.gettempdir()) / 'orh-update.cmd'
-    helper.write_text('@echo off\r\n:wait\r\ntasklist /FI "PID eq ' + str(os.getpid()) + '" 2>nul | find "' + str(os.getpid()) + '" >nul\r\nif not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\r\n"' + str(target) + '" /SILENT /CLOSEAPPLICATIONS /NORESTART\r\nstart "" "' + str(installed) + '"\r\ndel "%~f0"\r\n', encoding='ascii')
+    helper.write_text('@echo off\r\nchcp 65001 >nul\r\n:wait\r\ntasklist /FI "PID eq ' + str(os.getpid()) + '" 2>nul | find "' + str(os.getpid()) + '" >nul\r\nif not errorlevel 1 (timeout /t 1 /nobreak >nul & goto wait)\r\n"' + str(target) + '" /SILENT /CLOSEAPPLICATIONS /NORESTART\r\nstart "" "' + str(installed) + '"\r\ndel "%~f0"\r\n', encoding='utf-8')
     subprocess.Popen(['cmd', '/c', str(helper)], creationflags=CREATE_NO_WINDOW, close_fds=True)
 
 
@@ -347,41 +352,8 @@ def tray(open_window=True):
     install_files()
     (APP / '.runtime').mkdir(parents=True, exist_ok=True)
     (APP / '.runtime' / 'tray.pid').write_text(str(os.getpid()), encoding='ascii')
-    pending = {}
-
     def open_console(icon=None, item=None):
         open_client()
-
-    def check(icon, item=None):
-        threading.Thread(target=notify_available, args=(icon,), daemon=True).start()
-
-    def notify_available(icon):
-        try:
-            release = latest()
-        except Exception:
-            if icon:
-                icon.notify('检查更新失败，请稍后再试')
-            return
-        if release:
-            icon.notify('发现新版本 ' + release['version'] + '，可在托盘菜单「安装更新」')
-            try:
-                icon.update_menu()
-            except Exception:
-                pass
-        else:
-            icon.notify('当前已是最新版本 ' + version())
-
-    def install(icon, item):
-        try:
-            release = latest()
-        except Exception:
-            icon.notify('检查更新失败，请稍后再试')
-            return
-        if not release:
-            icon.notify('当前已是最新版本 ' + version())
-            return
-        pending['release'] = release
-        icon.stop()
 
     def shutdown(icon, item):
         icon.stop()
@@ -389,21 +361,16 @@ def tray(open_window=True):
     image = Image.open(BUNDLE / 'static' / 'orh-logo.png').convert('RGBA').resize((64, 64))
     menu = pystray.Menu(
         pystray.MenuItem('打开 OpenRemoteHub', open_console, default=True),
-        pystray.MenuItem('检查更新', check),
-        pystray.MenuItem('安装更新', install),
         pystray.MenuItem('停止后台并退出', shutdown),
     )
     icon = pystray.Icon('OpenRemoteHub', image, 'OpenRemoteHub ' + version(), menu)
     ensure_server()
     if open_window:
         open_client()
-    threading.Thread(target=notify_available, args=(icon,), daemon=True).start()
     icon.run()
     kill('client.pid')
     stop_service()
     stop_children()
-    if pending.get('release'):
-        apply_update(pending['release'])
 
 
 def main():
@@ -426,6 +393,18 @@ def main():
         os.fchdir(int(arguments[index + 1]))
         target = arguments[index + 2:]
         os.execvpe(target[0], target, os.environ)
+    if '--restart-app' in arguments:
+        stop()
+        subprocess.Popen(command(), creationflags=CREATE_NO_WINDOW, close_fds=True)
+        return
+    if '--install-update' in arguments:
+        target = Path(arguments[arguments.index('--install-update') + 1])
+        if target.parent != Path(tempfile.gettempdir()) / 'orh-updates' or not asset_matches(target.name):
+            raise SystemExit('无效的更新安装包')
+        if sys.platform == 'win32':
+            stop()
+        apply_update({'name': target.name}, downloaded=target)
+        return
     if '--restart-agent' in arguments:
         restart_agent()
         return

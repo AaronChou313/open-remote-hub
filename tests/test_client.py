@@ -247,8 +247,11 @@ def test_native_window_and_terminal_have_no_agent_stop_lifecycle(tmp_path, monke
     desktop_client.run('http://127.0.0.1:8765/client', tmp_path / 'webview')
     assert starts[0]['private_mode'] is False
     assert webview.settings['ALLOW_DOWNLOADS'] is True
-    starts[0]['menu'][0][1][0][1]()
-    assert 'returnToDevices()' in scripts[0] and 'eval(' not in scripts[0]
+    if sys.platform == 'darwin':
+        starts[0]['menu'][0][1][0][1]()
+        assert 'returnToDevices()' in scripts[0] and 'eval(' not in scripts[0]
+    else:
+        assert starts[0]['menu'] is None
     assert windows[0].url.endswith('/client')
     assert 'js_api' not in windows[0].options
     state = windows[0].state
@@ -309,3 +312,22 @@ def test_android_keeps_in_app_mesh_and_immediate_console_entry():
     console=(root/'java/top/openremotehub/client/ConsoleActivity.java').read_text()
     assert 'LocalApi.consoleURL' in console
     assert '正在连接目标 Agent' in console
+
+
+def test_windows_client_has_no_menu_strip_and_dsh_shares_window_profile(tmp_path,monkeypatch):
+    windows=[];starts=[]
+    class State:
+        def __iadd__(self,handler):self.handler=handler;return self
+    def create(title,url,**options):
+        window=SimpleNamespace(title=title,url=url,state=State(),events=SimpleNamespace(closed=State()),get_current_url=lambda:'http://orh-device.localhost:1234/',destroy=lambda:None)
+        windows.append(window);return window
+    monkeypatch.setitem(sys.modules,'webview',SimpleNamespace(settings={},windows=windows,create_window=create,start=lambda **options:starts.append(options)))
+    monkeypatch.setitem(sys.modules,'webview.menu',SimpleNamespace(Menu=lambda *a:a,MenuAction=lambda *a:a))
+    monkeypatch.setattr(desktop_client.sys,'platform','win32')
+    desktop_client.run('http://127.0.0.1:8765/client',tmp_path/'profile')
+    assert starts[0]['menu'] is None
+    windows[0].state.handler('change','dsh_request',{'url':'http://orh-device.localhost:9876/'})
+    assert windows[1].title=='OpenRemoteHub · DSH'
+    assert 'storage_path' not in vars(windows[1])
+    windows[0].state.handler('change','dsh_request',{'url':'https://other.example/'})
+    assert len(windows)==2

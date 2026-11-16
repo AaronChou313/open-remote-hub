@@ -7,17 +7,17 @@
 
 | 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `ORH-Setup-0.6.15.exe` | 运行安装向导，从开始菜单打开 |
-| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.15-macos-arm64.dmg` | 把应用拖入 Applications |
-| macOS 15+ Intel | `OpenRemoteHub-0.6.15-macos-amd64.dmg` | 把应用拖入 Applications |
-| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.15-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.15-linux-amd64.deb` |
-| Android 8+ ARM64 | `OpenRemoteHub-0.6.15-android-arm64.apk` | 下载 APK 后安装 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.16.exe` | 运行安装向导，从开始菜单打开 |
+| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.16-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS 15+ Intel | `OpenRemoteHub-0.6.16-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.16-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.16-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.16-android-arm64.apk` | 下载 APK 后安装 |
 
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
 1. 打开 ORH，已有账号可直接登录，新用户点击“没有账号？注册账号”，注册后返回客户端登录。默认 Cloud 已开放注册，自建服务可通过 `ORH_CLOUD_INVITE_REQUIRED` 选择邀请码模式。默认服务为 `https://cloud.openremotehub.top`。
 2. 在“我的设备”选择电脑，点击“打开控制台”。终端、文件、进程与服务和本地局域网默认启用，可在目标设备的“功能管理”启用其他模块。
-3. 关闭窗口后，后台 Agent、Mesh 和会话继续运行。通过托盘或 macOS 菜单栏重新打开窗口，也可检查更新、显式停止后台。
+3. 关闭窗口后，后台 Agent、Mesh 和会话继续运行。通过托盘或 macOS 菜单栏重新打开窗口，可显式停止后台。软件更新在“关于 ORH”页查看、下载和安装。
 
 macOS 使用用户 LaunchAgent，Linux 使用用户 systemd 服务，Windows 使用用户启动项。这些机制随用户登录启动。无头 Linux 可运行 `openremotehub --headless`。需要用户服务在退出登录后持续运行时，可由管理员为对应用户启用 systemd lingering。
 
@@ -25,7 +25,7 @@ Android 需要按应用内提示允许通知和后台运行。第一阶段只控
 
 ## 可选功能
 
-新安装默认启用终端、文件、进程与服务和本地局域网。其他可选模块按需启用。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
+新安装默认启用终端、文件、进程与服务和本地局域网。其他可选模块按需启用。功能管理固定在基本导航，区分基本功能与进阶功能，并显示未启用、缺少依赖、可用和不可用四种状态及安装说明。
 
 | 功能 | 支持与依赖 |
 | --- | --- |
@@ -66,7 +66,7 @@ DSH 在目标电脑安装 DeepSeek Harness 后，可从“功能管理”启用�
 
 目标 Agent 保留完整 Web 控制台。桌面 Client 与 Web 复用同一套系统、终端、文件、Docker 和其他模块页面。可通过 `http://设备IP:8765` 访问已配置的目标地址。
 
-1. 在目标设备的“设置”将监听地址设为 `0.0.0.0`，或填写需要监听的本机 IP。
+1. 在目标设备的“设备访问设置”选择“允许局域网和备用网络”，或选择“指定本机网络地址”填写监听 IP。
 2. 将局域网、官方 Tailscale、节点小宝等备用网络的本机 IP 加入允许地址列表。地址变化后同步更新列表。指定备用监听 IP 时，本机回环入口会继续保留。
 3. 按需启用独立本地恢复密码，保存设置并重启后台。Cloud 不可用时，在目标 Web 登录页展开“本地恢复登录”。正常访问继续使用 ORH 账号。
 
@@ -130,3 +130,11 @@ cd mesh && go test ./internal/...
 ```
 
 Cloud 部署沿用 `cloud/compose.yml` 和 `cloud/compose.orn.yml`。架构与模块位置见 [架构说明](docs/architecture.md)，本次改造与验证见 [客户端版本说明](docs/client-first.md)。
+
+## 设置与软件信息
+
+桌面与 Android 提供“设置”和“关于 ORH”入口。关于页展示版本、检查结果和更新说明，并提供安装包下载。Windows 可在页内安装更新并重启，macOS / Linux 打开系统安装包完成安装。
+
+设备访问地址、组网发布端口、代理 DNS 和 SSH 配置均使用表单组件。地址通过添加、移除管理，端口映射提供 SSH、HTTP、HTTPS 和 RustDesk 模板。代理配置可通过订阅链接或文件导入，表单修改保留已有节点、规则和自定义配置。
+
+DSH 页面填充设备工作区剩余高度。桌面的“独立窗口”在 ORH 内打开并共享登录会话，Android 在应用内打开，工具栏可返回控制台。

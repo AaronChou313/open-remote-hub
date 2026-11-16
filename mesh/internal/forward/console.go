@@ -117,6 +117,17 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 					response.ContentLength = int64(len(data))
 					response.Header.Set("Content-Length", strconv.Itoa(len(data)))
 				}
+				if target == gatewayTarget && response.StatusCode == http.StatusUnauthorized && strings.Contains(response.Header.Get("Content-Type"), "text/html") {
+					body, err := io.ReadAll(io.LimitReader(response.Body, 65536))
+					response.Body.Close()
+					if err != nil {
+						return err
+					}
+					body = []byte(originRewriter.Replace(string(body)))
+					response.Body = io.NopCloser(bytes.NewReader(body))
+					response.ContentLength = int64(len(body))
+					response.Header.Set("Content-Length", strconv.Itoa(len(body)))
+				}
 				location := response.Header.Get("Location")
 				if location == "" {
 					return nil

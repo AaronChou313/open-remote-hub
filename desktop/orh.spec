@@ -30,7 +30,7 @@ a = Analysis([str(ROOT / 'desktop' / 'main.py')], pathex=[str(ROOT)], binaries=p
              hiddenimports=hiddenimports, hookspath=[], runtime_hooks=[], excludes=[], noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='OpenRemoteHub', debug=False,
-          bootloader_ignore_signals=False, strip=False, upx=False, console=False)
+          bootloader_ignore_signals=False, strip=False, upx=False, console=False, icon=str(ROOT / 'static/orh-logo.png') if __import__('sys').platform == 'win32' else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='OpenRemoteHub')
 
 if __import__('sys').platform == 'darwin':

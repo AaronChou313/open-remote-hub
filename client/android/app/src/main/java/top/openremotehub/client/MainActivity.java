@@ -24,12 +24,13 @@ import top.openremotehub.client.core.mobile.Mobile;
 public final class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
-    private LinearLayout page, binding, devicePage, meshPage, settingsPage, forwardRows;
+    private LinearLayout page, binding, devicePage, meshPage, settingsPage, aboutPage, forwardRows;
     private TextView pageTitle;
     private int selectedPage;
-    private TextView status, message, selfDetail, selfChip, selfDot, updateBanner, powerNotice;
+    private TextView status, message, selfDetail, selfChip, selfDot, powerNotice, aboutStatus, aboutNotes;
     private EditText cloudAddress, cloudUser, cloudPassword;
     private Button cloudLoginButton;
+    private Button aboutDownload;
     private String latestUpdateUrl = "";
     private boolean boundBefore, needsAccountLogin;
     private Button backgroundButton;
@@ -53,6 +54,17 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},1);
         startForegroundService(new Intent(this,MeshService.class));
         build();
+        openRequestedPage(getIntent());
+    }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        openRequestedPage(intent);
+    }
+    private void openRequestedPage(Intent intent) {
+        String page=intent.getStringExtra("page");
+        if(page==null) return;
+        selectPage("about".equals(page)?3:"settings".equals(page)?2:"mesh".equals(page)?1:0);
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private int color(int resource) { return getColor(resource); }
@@ -129,22 +141,15 @@ public final class MainActivity extends Activity {
         catch (Exception error) { return ""; }
     }
     private void checkForUpdate(boolean manual) {
+        if(aboutStatus!=null)aboutStatus.setText("正在检查更新…");
         Updates.check(worker, main, versionName(), release -> {
             if (!active) return;
-            if (release == null) {
-                updateBanner.setVisibility(View.GONE);
-                if (manual) info("已是最新版本 " + versionName());
-                return;
-            }
-            latestUpdateUrl = release.url;
-            updateBanner.setText("新版本 " + release.version + " · 更新");
-            updateBanner.setVisibility(View.VISIBLE);
-            if (manual) new AlertDialog.Builder(this).setTitle("发现新版本 " + release.version)
-                .setMessage(release.notes.isEmpty() ? "可以下载安装新版本。" : release.notes)
-                .setPositiveButton("下载", (dialog, which) -> open(release.url))
-                .setNegativeButton("稍后", null).show();
-            else info("新版本 " + release.version + " 可用");
-        });
+            if(release==null){aboutStatus.setText("当前已是最新版本 "+versionName());aboutDownload.setVisibility(View.GONE);aboutNotes.setText("");return;}
+            latestUpdateUrl=release.url;
+            aboutStatus.setText("发现新版本 "+release.version);
+            aboutNotes.setText(release.notes);
+            aboutDownload.setVisibility(View.VISIBLE);
+        }, error -> {if(active)aboutStatus.setText(error);});
     }
     private EditText field(String hint, boolean secret) {
         EditText input = new EditText(this);
@@ -221,13 +226,10 @@ public final class MainActivity extends Activity {
         });
         brand.addView(logo);
         TextView mark = text("ORH",15,true); mark.setTextColor(color(R.color.accent)); mark.setLetterSpacing(0.14f); brand.addView(mark);
-        updateBanner = text("",12,false); updateBanner.setTextColor(color(R.color.accent)); updateBanner.setGravity(Gravity.END);
-        updateBanner.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1f)); updateBanner.setVisibility(View.GONE);
-        updateBanner.setOnClickListener(view -> { if (!latestUpdateUrl.isEmpty()) open(latestUpdateUrl); });
-        brand.addView(updateBanner); page.addView(brand);
+        page.addView(brand);
         pageTitle=text("我的设备",30,true); page.addView(pageTitle);
         LinearLayout navigation=new LinearLayout(this);
-        String[] labels={"我的设备","组网状态","设置"};
+        String[] labels={"我的设备","组网状态","设置","关于 ORH"};
         for(int index=0;index<labels.length;index++) {
             final int target=index;
             Button tab=secondary(labels[index], () -> {});
@@ -235,7 +237,7 @@ public final class MainActivity extends Activity {
             navigation.addView(tab,new LinearLayout.LayoutParams(0,-2,1f));
         }
         page.addView(navigation);
-        devicePage=column(); meshPage=column(); settingsPage=column();
+        devicePage=column(); meshPage=column(); settingsPage=column();aboutPage=column();
         powerNotice = text("",13,false); powerNotice.setTextColor(Color.WHITE);
         GradientDrawable warn = new GradientDrawable(); warn.setColor(color(R.color.warn)); warn.setCornerRadius(dp(10));
         powerNotice.setBackground(warn); powerNotice.setPadding(dp(14),dp(10),dp(14),dp(10));
@@ -285,7 +287,7 @@ public final class MainActivity extends Activity {
         });
         Button diagnoseButton = secondary("连接诊断", () -> {});
         diagnoseButton.setOnClickListener(view -> diagnose());
-        for (Button action : new Button[]{netcheck, diagnoseButton, secondary("检查更新", () -> checkForUpdate(true)), secondary("厂商后台设置", this::openVendorSettings), leave}) {
+        for (Button action : new Button[]{netcheck, diagnoseButton, secondary("厂商后台设置", this::openVendorSettings), leave}) {
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0; params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
             params.setMargins(dp(2), dp(2), dp(2), dp(2));
@@ -300,7 +302,12 @@ public final class MainActivity extends Activity {
         settingsPage.addView(signIn);
         settingsPage.addView(options);
         settingsPage.addView(muted("ORH 通过应用内 Mesh 连接设备，可与系统 VPN 同时使用。"));
-        page.addView(devicePage); page.addView(meshPage); page.addView(settingsPage);
+        LinearLayout about=card();about.addView(section("OpenRemoteHub"));about.addView(muted("私有组网与远程设备管理控制台"));about.addView(muted("当前版本 "+versionName()));
+        aboutStatus=text("检查是否有可用更新",14,false);about.addView(aboutStatus);
+        about.addView(secondary("检查更新",()->checkForUpdate(true)));
+        aboutDownload=primary("下载并安装更新",()->open(latestUpdateUrl));aboutDownload.setVisibility(View.GONE);about.addView(aboutDownload);
+        aboutNotes=muted("");about.addView(aboutNotes);aboutPage.addView(about);
+        page.addView(devicePage); page.addView(meshPage); page.addView(settingsPage);page.addView(aboutPage);
         selectPage(selectedPage);
         setContentView(scroll);
         scroll.setOnApplyWindowInsetsListener((view,insets) -> {
@@ -312,14 +319,15 @@ public final class MainActivity extends Activity {
             }
             return insets;
         });
-        checkForUpdate(false);
+
     }
     private void selectPage(int index) {
         selectedPage=index;
         devicePage.setVisibility(index==0?View.VISIBLE:View.GONE);
         meshPage.setVisibility(index==1?View.VISIBLE:View.GONE);
         settingsPage.setVisibility(index==2?View.VISIBLE:View.GONE);
-        pageTitle.setText(new String[]{"我的设备","组网状态","设置"}[index]);
+        aboutPage.setVisibility(index==3?View.VISIBLE:View.GONE);
+        pageTitle.setText(new String[]{"我的设备","组网状态","设置","关于 ORH"}[index]);
     }
     private void buildForwards() {
         meshPage.addView(section("通用 TCP 端口转发"));

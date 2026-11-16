@@ -67,6 +67,7 @@ const api = async (path, body) => {
 };
 const ctx = vm.createContext({
   window: { confirm: () => true },
+  RemoteHubFormControls:{escape:value=>String(value ?? ''),list:(selector,values)=>{nodes.get(selector).value=values.join('\n');return {values:()=>nodes.get(selector).value.split(/\s+/).filter(Boolean)}},facts:value=>String(value)},
   document: {
     querySelector: (s) => nodes.get(s) || null,
     querySelectorAll: (s) => (s === "[data-mesh-close]" ? closeButtons : []),
@@ -95,7 +96,7 @@ assert.deepEqual(
 await closeButtons[0].onclick();
 assert.equal(calls.at(-2).path, "/client/mesh/close");
 await ctx.window.RemoteHubAgentSettings.render(() => true, "#content", api);
-$("#agentBindAddress").value = "0.0.0.0";
+$("#agentAccessMode").value = "network";
 $("#agentAllowedHosts").value = "10.77.1.2\n100.100.1.2";
 $("#agentRecovery").checked = true;
 $("#agentRecoveryPassword").value = "fixture-recovery-password";

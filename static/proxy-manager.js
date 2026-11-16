@@ -64,11 +64,11 @@ window.RemoteHubProxyManager=(()=>{
    };
    $('#proxyProfileSearch').oninput=draw;draw();
    if(admin)$('#proxyImport').onclick=()=>{
-    const dialog=modal('导入机场配置',`<form id="proxyImportForm"><label for="proxyProfileName">配置名称</label><input id="proxyProfileName" required maxlength="120" autocomplete="off"><label for="proxyImportKind">导入方式</label><select id="proxyImportKind"><option value="url">订阅 URL</option><option value="file">YAML 文件</option><option value="text">粘贴 YAML</option></select><div id="proxyURLField"><label for="proxySubscription">订阅 URL</label><input id="proxySubscription" type="password" autocomplete="off" placeholder="https://…"><small class="muted">选择机场提供的 Clash / Mihomo 格式订阅。</small></div><div id="proxyFileField" hidden><label for="proxyYAMLFile">YAML 文件</label><input id="proxyYAMLFile" type="file" accept=".yaml,.yml,.json"></div><div id="proxyTextField" hidden><label for="proxyYAML">YAML 内容</label><textarea id="proxyYAML" class="file-editor" spellcheck="false"></textarea></div><p id="proxyFormError" class="proxy-error" role="alert"></p><div class="dialog-actions"><button type="submit" id="proxyImportSubmit" class="primary">导入并检查</button></div></form>`);
-    $('#proxyImportKind').onchange=()=>{const kind=$('#proxyImportKind').value;$('#proxyURLField').hidden=kind!=='url';$('#proxyFileField').hidden=kind!=='file';$('#proxyTextField').hidden=kind!=='text'};
+    const dialog=modal('导入机场配置',`<form id="proxyImportForm"><label for="proxyProfileName">配置名称</label><input id="proxyProfileName" required maxlength="120" autocomplete="off"><label for="proxyImportKind">导入方式</label><select id="proxyImportKind"><option value="url">订阅 URL</option><option value="file">YAML 文件</option></select><div id="proxyURLField"><label for="proxySubscription">订阅 URL</label><input id="proxySubscription" type="password" autocomplete="off" placeholder="https://…"><small class="muted">选择机场提供的 Clash / Mihomo 格式订阅。</small></div><div id="proxyFileField" hidden><label for="proxyYAMLFile">YAML 文件</label><input id="proxyYAMLFile" type="file" accept=".yaml,.yml,.json"></div><p id="proxyFormError" class="proxy-error" role="alert"></p><div class="dialog-actions"><button type="submit" id="proxyImportSubmit" class="primary">导入并检查</button></div></form>`);
+    $('#proxyImportKind').onchange=()=>{const kind=$('#proxyImportKind').value;$('#proxyURLField').hidden=kind!=='url';$('#proxyFileField').hidden=kind!=='file'};
     $('#proxyImportForm').oninput=()=>{dirty=true};
     $('#proxyImportForm').onsubmit=async event=>{
-     event.preventDefault();const kind=$('#proxyImportKind').value,body={name:$('#proxyProfileName').value,url:kind==='url'?$('#proxySubscription').value.trim():'',text:kind==='text'?$('#proxyYAML').value:''};
+     event.preventDefault();const kind=$('#proxyImportKind').value,body={name:$('#proxyProfileName').value,url:kind==='url'?$('#proxySubscription').value.trim():'',text:''};
      try{
       if(kind==='file'){const file=$('#proxyYAMLFile').files[0];if(!file)throw Error('请选择配置文件');if(file.size>3*1024*1024)throw Error('配置最大为 3 MiB');body.text=await file.text()}
       await runBusy($('#proxyImportSubmit'),'proxy:import','下载并检查中…',()=>api('/proxy/manager/import',body));dirty=false;dialog.close();notify('已导入配置，点击「使用配置」即可选用');if(check())await reload();
@@ -80,11 +80,15 @@ window.RemoteHubProxyManager=(()=>{
   async function operate(button,row,action){
    if(action==='edit'){
     const result=await runBusy(button,'proxy:read','读取中…',()=>api('/proxy/manager/profile/'+row.id));if(!check())return;
-    const dialog=modal('编辑 · '+row.name,`<form id="proxyEditForm"><p>编辑节点、规则、DNS 和策略组。监听端口与 TUN 路由由 RemoteHub 管理。配置含凭据，请妥善保管。</p><label class="sr-only" for="proxyConfigText">配置 YAML</label><textarea id="proxyConfigText" class="file-editor" spellcheck="false"></textarea><p id="proxyFormError" class="proxy-error" role="alert"></p><div class="dialog-actions"><a class="button" href="/api/proxy/manager/profile/${row.id}/download" download>导出 YAML</a><button id="proxySaveConfig" type="submit" class="primary">检查并保存</button></div></form>`);
-    $('#proxyConfigText').value=result.text;$('#proxyConfigText').oninput=()=>{dirty=$('#proxyConfigText').value!==result.text};
+    const settings=result.settings;
+    const dialog=modal('配置选项 · '+row.name,`<form id="proxyEditForm" class="settings-form"><label class="switch-row"><span>启用 IPv6</span><input type="checkbox" id="proxyIPv6" role="switch" ${settings.ipv6?'checked':''}></label><label>日志级别<select id="proxyLogLevel">${[['silent','静默'],['error','错误'],['warning','警告'],['info','常规'],['debug','调试']].map(([key,name])=>`<option value="${key}" ${settings.log_level===key?'selected':''}>${name}</option>`).join('')}</select></label><fieldset><legend>DNS</legend><label class="switch-row"><span>启用 DNS 解析</span><input type="checkbox" id="proxyDNSEnabled" role="switch" ${settings.dns_enabled?'checked':''}></label><label>解析模式<select id="proxyDNSMode"><option value="fake-ip" ${settings.dns_mode==='fake-ip'?'selected':''}>Fake IP</option><option value="redir-host" ${settings.dns_mode==='redir-host'?'selected':''}>真实 IP</option></select></label><label>DNS 服务器</label><div id="proxyNameservers"></div><label>备用 DNS</label><div id="proxyFallback"></div></fieldset><p id="proxyFormError" class="proxy-error" role="alert"></p><div class="dialog-actions"><button id="proxySaveConfig" type="submit" class="primary">保存配置</button></div></form>`);
+    const nameservers=RemoteHubFormControls.list('#proxyNameservers',settings.nameservers,{label:'DNS 服务器',placeholder:'例如 https://dns.alidns.com/dns-query',onChange:()=>{dirty=true;}});
+    const fallback=RemoteHubFormControls.list('#proxyFallback',settings.fallback,{label:'备用 DNS',placeholder:'例如 1.1.1.1',onChange:()=>{dirty=true;}});
+    $('#proxyEditForm').oninput=()=>{dirty=true;};
     $('#proxyEditForm').onsubmit=async event=>{
-     event.preventDefault();if(!dirty)return;
-     try{await runBusy($('#proxySaveConfig'),'proxy:profile','检查并保存中…',()=>api('/proxy/manager/profile',{action:'save',id:row.id,revision:result.revision,confirm:row.name,text:$('#proxyConfigText').value}));dirty=false;dialog.close();notify('配置已保存');if(check())await reload()}catch(error){$('#proxyFormError').textContent=error.message}
+     event.preventDefault();
+     const settings={ipv6:$('#proxyIPv6').checked,log_level:$('#proxyLogLevel').value,dns_enabled:$('#proxyDNSEnabled').checked,dns_mode:$('#proxyDNSMode').value,nameservers:nameservers.values(),fallback:fallback.values()};
+     try{await runBusy($('#proxySaveConfig'),'proxy:profile','保存中…',()=>api('/proxy/manager/profile',{action:'settings',id:row.id,revision:result.revision,settings}));dirty=false;dialog.close();notify('配置已保存');if(check())await reload()}catch(error){$('#proxyFormError').textContent=error.message}
     };return;
    }
    if(action==='more'){

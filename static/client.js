@@ -10,10 +10,7 @@ let refreshing = false;
 let page='devices';
 sessionStorage.removeItem('orh-current-device');
 if (localStorage.getItem('orh-theme') === 'dark' || (!localStorage.getItem('orh-theme') && matchMedia('(prefers-color-scheme: dark)').matches)) document.body.classList.add('dark');
-select('#clientTheme').onclick = () => {
-  document.body.classList.toggle('dark');
-  localStorage.setItem('orh-theme', document.body.classList.contains('dark') ? 'dark' : 'light');
-};
+
 
 async function request(path, body) {
   const response = await fetch('/api' + path, {
@@ -36,6 +33,7 @@ async function showLogin() {
   if(typeof RemoteHubAgentSettings!=='undefined')RemoteHubAgentSettings.reset();
   if(typeof RemoteHubMesh!=='undefined')RemoteHubMesh.reset();
   select('#clientAgentSettings').innerHTML='';select('#clientMesh').innerHTML='';
+  window.RemoteHubSoftware?.reset();
   directory=null;account=null;
   select('#clientShell').hidden = true;
   select('#clientLogin').hidden = false;
@@ -47,6 +45,7 @@ async function showLogin() {
 }
 
 function renderDirectory() {
+  directory ||= {devices:[],cloud:{bound:Boolean(account.cloud?.bound),error:''},mesh:{}};
   select('#clientNotice').textContent = directory.cloud.error || (!directory.cloud.bound ? '本机独立模式。登录 ORH 账号后可查看同账号设备。' : directory.mesh.error || '');
   select('#clientDevices').innerHTML = directory.devices.map(device => `
     <article class="client-device">
@@ -77,12 +76,13 @@ async function refreshDevices() {
   select('#clientRefresh').disabled = true;
   try {
     account = await request('/me');
-    if(page==='devices'||!directory)directory = await request('/client/devices');
+    if(page==='devices')directory = await request('/client/devices');
     select('#clientLogin').hidden = true;
     select('#clientShell').hidden = false;
     select('#clientError').hidden = true;
     renderDirectory();
     if(page==='mesh')await RemoteHubMesh.render(()=>page==='mesh','#clientMesh',request);
+    if(page==='about')await RemoteHubSoftware.render(()=>page==='about','#clientAbout',request);
     if(page==='settings')await RemoteHubAgentSettings.render(()=>page==='settings','#clientAgentSettings',request);
   } catch (error) {
     const loginVisible = !select('#clientLogin').hidden;
@@ -126,7 +126,10 @@ select('#clientDevices').onclick = async event => {
     if (button.dataset.connect) {
       currentDeviceId = result.device_id;
       sessionStorage.setItem('orh-current-device', currentDeviceId);
-      location.assign(result.url);
+      const targetURL=new URL(result.url,location.href);
+      const theme=localStorage.getItem('orh-theme');
+      if(theme)targetURL.searchParams.set('client_theme',theme);
+      location.assign(targetURL.href);
     } else select('#clientNotice').textContent = '已启动本机 RustDesk';
   } catch (error) {
     if (error.module && account) {
@@ -145,16 +148,24 @@ select('#clientDevices').onclick = async event => {
   }
 };
 
-document.querySelectorAll('[data-page]').forEach(button => button.onclick = async () => {
+async function showPage(next, load = true) {
   if(page==='settings'&&!await RemoteHubAgentSettings.canLeave())return;
   if(page==='mesh'&&!await RemoteHubMesh.canLeave())return;
-  page = button.dataset.page;
-  for (const name of ['devices', 'mesh', 'settings']) select('#client' + name[0].toUpperCase() + name.slice(1)).hidden = name !== page;
-  document.querySelectorAll('[data-page]').forEach(item => item.setAttribute('aria-current', item === button ? 'page' : 'false'));
-  select('#clientTitle').textContent = button.textContent;
-  select('#clientTitle').focus();
-  await refreshDevices();
-});
+  if(!['devices','mesh','settings','about'].includes(next))next='devices';
+  page=next;
+  for(const name of ['devices','mesh','settings','about'])select('#client'+name[0].toUpperCase()+name.slice(1)).hidden=name!==page;
+  document.querySelectorAll('button[data-page]').forEach(button=>button.setAttribute('aria-current',button.dataset.page===page?'page':'false'));
+  select('#clientTitle').textContent={devices:'我的设备',mesh:'组网状态',settings:'设置',about:'关于 ORH'}[page];
+  if(load)await refreshDevices();
+}
+document.querySelectorAll('button[data-page]').forEach(button=>button.onclick=()=>showPage(button.dataset.page));
+window.addEventListener?.('hashchange',()=>showPage(location.hash.slice(1)));
+select('#clientAppearance').value=localStorage.getItem('orh-theme')||'system';
+select('#clientAppearance').onchange=()=>{
+ const value=select('#clientAppearance').value;
+ if(value==='system')localStorage.removeItem('orh-theme');else localStorage.setItem('orh-theme',value);
+ document.body.classList.toggle('dark',value==='dark'||value==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
+};
 select('#clientRecoveryPassword').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();select('#clientRecoveryLogin').click()}};
 select('#clientRecoveryLogin').onclick=async()=>{
  try{await request('/login',{password:select('#clientRecoveryPassword').value});select('#clientRecoveryPassword').value='';await refreshDevices()}catch(error){select('#clientLoginError').textContent=error.message}
@@ -166,4 +177,5 @@ select('#clientLogout').onclick = async () => {
 };
 select('#clientRegister').onclick = () => { select('#clientRegister').href = select('#clientCloud').value.trim().replace(/\/+$/, '') + '/#register'; };
 setInterval(() => { if (!document.hidden && !select('#clientShell').hidden) refreshDevices(); }, 15000);
+if(['#about','#settings','#mesh'].includes(location.hash))showPage(location.hash.slice(1),false);
 refreshDevices();

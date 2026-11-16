@@ -1,5 +1,6 @@
 """Private profile library and authenticated, bounded commands to the proxy broker."""
 import asyncio
+import copy
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -260,7 +261,9 @@ def admin(request):
 @router.get('/profile/{key}')
 async def profile(key:str,request:Request):
     admin(request);data=library();row=find(data,key)
-    return dict(**public(row,data['active']),text=yaml.safe_dump(row['source'],allow_unicode=True,sort_keys=False))
+    source=row['source'];dns=source.get('dns') or {}
+    settings=dict(ipv6=bool(source.get('ipv6',False)),log_level=source.get('log-level','info'),dns_enabled=dns.get('enable',True),dns_mode=dns.get('enhanced-mode','fake-ip'),nameservers=dns.get('nameserver') or [],fallback=dns.get('fallback') or [])
+    return dict(**public(row,data['active']),settings=settings,text=yaml.safe_dump(source,allow_unicode=True,sort_keys=False))
 
 
 @router.get('/profile/{key}/download')
@@ -269,8 +272,18 @@ async def export_profile(key:str,request:Request):
     return Response(yaml.safe_dump(row['source'],allow_unicode=True,sort_keys=False),media_type='application/yaml',headers={'Content-Disposition':'attachment; filename="profile.yaml"'})
 
 
+class ProfileSettings(BaseModel):
+    ipv6: bool
+    log_level: str
+    dns_enabled: bool
+    dns_mode: str
+    nameservers: list[str] = Field(max_length=64)
+    fallback: list[str] = Field(max_length=64)
+
+
 class Operation(BaseModel):
     action:str
+    settings:ProfileSettings|None=None
     id:str=Field(default='',max_length=32)
     revision:str=Field(default='',max_length=64)
     confirm:str=Field(default='',max_length=120)
@@ -282,7 +295,7 @@ class Operation(BaseModel):
 @router.post('/profile')
 async def operate(body:Operation):
     from app.main import audit
-    if body.action not in ('activate','update','save','rename','delete','subscription'):raise HTTPException(400,'不支持的配置操作')
+    if body.action not in ('activate','update','save','settings','rename','delete','subscription'):raise HTTPException(400,'不支持的配置操作')
     async with lock:
         with disk_lock():
             data=library();row=find(data,body.id,body.revision)
@@ -307,9 +320,19 @@ async def operate(body:Operation):
             else:
                 new=dict(row)
                 if body.action=='update':
-                    if not row.get('url'):raise HTTPException(400,'此配置没有订阅 URL，请编辑 YAML')
+                    if not row.get('url'):raise HTTPException(400,'此配置没有订阅地址，可在配置选项中更换订阅 URL')
                     text,usage=await download(row['url']);new.update(source=parse(text),usage=usage,updated=time.time())
                 elif body.action=='save':new.update(source=parse(body.text),updated=time.time())
+                elif body.action=='settings':
+                    if body.settings is None:raise HTTPException(400,'请填写配置选项')
+                    form=body.settings
+                    if form.log_level not in ('silent','error','warning','info','debug') or form.dns_mode not in ('fake-ip','redir-host'):
+                        raise HTTPException(400,'请选择支持的日志级别和 DNS 模式')
+                    source=copy.deepcopy(row['source']);dns=source.get('dns') or {}
+                    source.update(ipv6=form.ipv6,**{'log-level':form.log_level})
+                    dns.update(enable=form.dns_enabled,**{'enhanced-mode':form.dns_mode,'nameserver':form.nameservers,'fallback':form.fallback})
+                    source['dns']=dns
+                    new.update(source=parse(yaml.safe_dump(source)),updated=time.time())
                 if body.action=='activate' or data['active']==row['id']:
                     state=await call('GET','/orh/state')
                     await call('POST','/orh/control',{'action':'apply','source':new['source'],'revision':state['revision']})

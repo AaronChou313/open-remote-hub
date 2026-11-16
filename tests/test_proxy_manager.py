@@ -276,3 +276,20 @@ def test_installer_downloads_baseline_x64_build(monkeypatch,tmp_path):
     setup.download()
     assert (tmp_path/'bin/mihomo').read_bytes()==b'baseline-core'
     assert json.loads((tmp_path/'bin/release.json').read_text())['asset']=='mihomo-linux-amd64-v1-vfixture.gz'
+
+
+def test_component_settings_preserve_profile_nodes_rules_and_custom_dns(profiles):
+    client, _, mutations = profiles
+    source = copy.deepcopy(SOURCE)
+    source['dns'] = {'enable': True, 'nameserver': ['1.1.1.1'], 'nameserver-policy': {'+.example.com': '8.8.8.8'}}
+    row = client.post('/api/proxy/manager/import', json={'name': 'structured', 'text': json.dumps(source)}).json()
+    settings = client.get('/api/proxy/manager/profile/' + row['id']).json()['settings']
+    settings.update(ipv6=True, log_level='warning', nameservers=['https://dns.example/dns-query'], fallback=[])
+    result = client.post('/api/proxy/manager/profile', json={'action': 'settings', 'id': row['id'], 'revision': row['revision'], 'settings': settings})
+    assert result.status_code == 200, result.text
+    stored = manager.library()['profiles'][0]['source']
+    assert stored['proxies'] == source['proxies'] and stored['rules'] == source['rules']
+    assert stored['dns']['nameserver-policy'] == source['dns']['nameserver-policy']
+    assert stored['dns']['nameserver'] == settings['nameservers'] and stored['ipv6']
+    assert not mutations
+    assert client.post('/api/proxy/manager/profile', json={'action': 'settings', 'id': row['id'], 'revision': row['revision'], 'settings': settings}).status_code == 409

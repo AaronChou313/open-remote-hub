@@ -121,7 +121,19 @@ public final class ConsoleActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface public void returnToDevices() { runOnUiThread(() -> finish()); }
+            @JavascriptInterface public void openClientPage(String page) {
+                runOnUiThread(() -> {
+                    startActivity(new Intent(ConsoleActivity.this,MainActivity.class)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            .putExtra("page",page));
+                    finish();
+                });
+            }
             @JavascriptInterface public void agentReady(boolean ready) { agentReady=ready; }
+            @JavascriptInterface public void openDsh(String address) {
+                Uri target=Uri.parse(address), origin=Uri.parse(url);
+                if(isLocal(target)&&origin.getHost().equals(target.getHost())&&"/".equals(target.getPath())) runOnUiThread(() -> web.loadUrl(address));
+            }
             @JavascriptInterface public void openService(String address) {
                 Uri target = Uri.parse(address);
                 boolean webService = ("http".equals(target.getScheme()) || "https".equals(target.getScheme()))

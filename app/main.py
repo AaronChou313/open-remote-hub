@@ -546,6 +546,8 @@ def client_index():
 
 from app.client import router as client_router
 app.include_router(client_router)
+from app.software_updates import router as software_router
+app.include_router(software_router)
 from app.modules import router as modules_router
 app.include_router(modules_router)
 from app.dsh import router as dsh_router

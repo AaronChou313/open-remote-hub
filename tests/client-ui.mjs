@@ -6,7 +6,7 @@ const nodes = new Map();
 function node(selector) {
   if (!nodes.has(selector)) nodes.set(selector, {
     hidden:true, disabled:false, value:'', textContent:'', innerHTML:'', dataset:{},
-    classList:{add() {}}, setAttribute() {}, focus() {},
+    classList:{add() {}}, setAttribute() {}, focus() {}, remove(){this.removed=true;},
   });
   return nodes.get(selector);
 }
@@ -19,7 +19,7 @@ let directory = {
 };
 let connect;
 let failAgent = true;
-const context = vm.createContext({
+const context = vm.createContext({window:{},
   console, URL, URLSearchParams, AbortSignal, setInterval() {},
   location:{origin:'http://127.0.0.1:8765', href:'http://127.0.0.1:8765/client', assign:value => navigation.push(value)},
   matchMedia:() => ({matches:false}), localStorage:{getItem:() => null},
