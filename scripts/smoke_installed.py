@@ -44,7 +44,7 @@ def main():
     assert status['version'] == (Path(__file__).resolve().parents[1] / 'VERSION').read_text().strip()
     request('/api/auth/setup', dict(password=secrets.token_urlsafe(24)))
     modules = request('/api/modules')['modules']
-    assert {module['id'] for module in modules if module['enabled']}=={'terminal','files','services'}
+    assert {module['id'] for module in modules if module['enabled']}=={'terminal','files','services','lan'}
     request('/api/modules/files/enable', {})
     directory = request('/api/files/roots')['roots'][0]
     root = directory['id']

@@ -66,7 +66,7 @@ func (m *Manager) openService(w http.ResponseWriter, r *http.Request, ip, device
 			fail(502, err.Error())
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"url": "rustdesk://connection/new/" + url.PathEscape(net.JoinHostPort("127.0.0.1", strconv.Itoa(entry.LocalPort)))})
+		json.NewEncoder(w).Encode(map[string]string{"url": "rustdesk://connection/new/" + net.JoinHostPort("127.0.0.1", strconv.Itoa(entry.LocalPort))})
 		return
 	}
 	if input.Kind != "application" {

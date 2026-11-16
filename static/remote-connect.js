@@ -8,7 +8,6 @@ window.RemoteHubRemoteConnect = (() => {
   let operation = false;
   let dirty = false;
   let loadingSettings = false;
-  let expectedDisconnect = false;
   const rdApi = (path, body) => api("/remote-connect/rustdesk" + path, body);
   const confirm = (title, message) => confirmAction(title, message);
   async function busy(button, work) {
@@ -51,7 +50,7 @@ window.RemoteHubRemoteConnect = (() => {
       $("#rcCopyId").disabled = !value.device_id;
       const host = location.hostname;
       const port = original["direct-access-port"] || "21118";
-      $("#rcConnectHere").href = "rustdesk://connection/new/" + encodeURIComponent((host.includes(":") ? "[" + host + "]" : host) + ":" + port);
+      $("#rcConnectHere").href = "rustdesk://connection/new/" + ((host.includes(":") ? "[" + host + "]" : host) + ":" + port);
       $("#rcConnectHere").setAttribute("aria-disabled", String(!value.ready));
       $("#rcVersion").textContent = value.version
         ? "v" + value.version
@@ -458,7 +457,7 @@ window.RemoteHubRemoteConnect = (() => {
       !$("#confirmDialog").open
     ) {
       controller.refresh().catch((error) => {
-        if (current() && !expectedDisconnect) showError(error, false);
+        if (current()) showError(error, false);
       });
     }
   }, 5000);

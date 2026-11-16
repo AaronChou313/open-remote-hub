@@ -67,6 +67,7 @@ window.RemoteHubApplications = (() => {
       if (entry.mode !== 'host') return;
       anchor.onclick = async event => {
         event.preventDefault();
+        if (pendingOperations.has('application:open:' + entry.id)) return;
         const native = Boolean(window.ORHAndroid?.openService || window.pywebview?.state);
         const popup = native ? null : window.open('about:blank', '_blank');
         try {
