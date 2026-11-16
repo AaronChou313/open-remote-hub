@@ -56,6 +56,35 @@ def test_recycled_or_foreign_pid_is_never_owned():
     assert main.task_process({'pid':os.getpid(),'created':0}) is None
 
 
+@pytest.mark.parametrize('windows', [False, True])
+def test_task_can_finish_before_process_identity_is_read(tmp_path, monkeypatch, windows):
+    from types import SimpleNamespace
+    monkeypatch.setattr(main, 'WINDOWS_EDITION', windows)
+    monkeypatch.setattr(main, 'children', {})
+    c=client()
+    assert login(c).status_code==200
+    key=c.post('/api/tasks',json={'name':'quick command','argv':['quick-command'],'cwd':str(tmp_path)}).json()['id']
+    tasks=main.read_tasks()
+    tasks[key].update(pid=12345,created=1)
+    main.save_tasks(tasks)
+
+    def finished_process(*args, **kwargs):
+        kwargs['stdout'].write(b'COMMAND_FINISHED\n')
+        return SimpleNamespace(pid=23456,poll=lambda:0)
+
+    def vanished_process(pid):
+        raise main.psutil.NoSuchProcess(pid)
+
+    monkeypatch.setattr(main.subprocess, 'Popen', finished_process)
+    monkeypatch.setattr(main.psutil, 'Process', vanished_process)
+    assert c.post('/api/tasks/'+key,json={'action':'start','confirm':key}).status_code==200
+    row=next(task for task in c.get('/api/tasks').json() if task['id']==key)
+    assert not row['running'] and 'pid' not in row and 'created' not in row
+    assert main.children=={}
+    assert 'COMMAND_FINISHED' in c.get('/api/tasks/'+key+'/logs').json()['output']
+    assert c.post('/api/tasks/'+key,json={'action':'delete','confirm':key}).status_code==200
+
+
 def test_login_rate_limit():
     c=client();main.attempts.clear()
     for _ in range(8):assert c.post('/api/login',json={'password':'wrong'}).status_code==401

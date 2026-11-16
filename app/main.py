@@ -506,7 +506,14 @@ def task_action(key:str,body:Action):
                     try:child=subprocess.Popen(t['argv'],cwd=t['cwd'],stdout=f,stderr=f,stdin=subprocess.DEVNULL,start_new_session=True)
                     except OSError as e:raise HTTPException(400,str(e))
                 children[key]=child
-                t['pid']=child.pid;t['created']=psutil.Process(child.pid).create_time()
+                try:
+                    created=psutil.Process(child.pid).create_time()
+                except psutil.NoSuchProcess:
+                    t.pop('pid',None)
+                    t.pop('created',None)
+                else:
+                    t['pid']=child.pid
+                    t['created']=created
             for k in list(children):
                 if children[k].poll() is not None:children.pop(k)
         save_tasks(tasks)
