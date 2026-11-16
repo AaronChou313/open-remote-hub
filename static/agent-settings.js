@@ -48,7 +48,7 @@ window.RemoteHubAgentSettings = (() => {
       $("#agentRestart").onclick = async () => {
         if (
           !window.confirm(
-            "重启目标后台会暂时中断控制台与 Mesh 通道，现有终端会话保留。现在重启？",
+            "重启目标后台会中断控制台、Mesh 和终端连接。Windows 的终端会话将结束。现在重启？",
           )
         )
           return;
