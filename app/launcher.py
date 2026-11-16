@@ -67,17 +67,19 @@ def setup_service():
         loaded = subprocess.run(['launchctl', 'print', target], capture_output=True).returncode == 0
         if not loaded:
             subprocess.run(['launchctl', 'bootstrap', f'gui/{os.getuid()}', str(path)], check=True)
-        return True
+            return 'started'
+        return 'running'
     elif shutil.which('systemctl'):
         available = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True).returncode == 0
         if available:
+            active = subprocess.run(['systemctl', '--user', 'is-active', '--quiet', 'openremotehub.service'], capture_output=True).returncode == 0
             path = Path.home() / '.config/systemd/user/openremotehub.service'
             path.parent.mkdir(parents=True, exist_ok=True)
             executable = str(Path(sys.executable).resolve()).replace('"', '\\"')
             path.write_text('[Unit]\nDescription=OpenRemoteHub Agent\nAfter=network-online.target\n\n[Service]\nExecStart="' + executable + '" --serve\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n')
             subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
             subprocess.run(['systemctl', '--user', 'enable', '--now', 'openremotehub.service'], check=True)
-            return True
+            return 'running' if active else 'started'
     return False
 
 
@@ -206,8 +208,10 @@ def ensure_server():
         return None
     managed = setup_service()
     if managed:
-        if sys.platform == 'darwin':
+        if managed == 'running' and sys.platform == 'darwin':
             subprocess.run(['launchctl', 'kickstart', '-k', f'gui/{os.getuid()}/top.openremotehub.agent'], check=True)
+        elif managed == 'running':
+            subprocess.run(['systemctl', '--user', 'restart', 'openremotehub.service'], check=True)
         for _ in range(80):
             if healthy():
                 return None
