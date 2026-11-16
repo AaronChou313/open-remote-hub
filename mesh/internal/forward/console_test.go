@@ -194,6 +194,39 @@ func TestConsoleOriginCookieRedirectAndWebSocket(t *testing.T) {
 func TestConsoleOpensSavedServicesOnController(t *testing.T) {
 	const device = "f57bc9e0-1f1e-4c96-b4f8-c9e3be1f41c9"
 	const app = "abcdef0123456789"
+	payload := strings.Repeat("http-and-websocket-bytes", 5000)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "127.0.0.1:17861" {
+			t.Errorf("application Host was not normalized: %s", r.Host)
+		}
+		if origin := r.Header.Get("Origin"); origin != "" && origin != "http://127.0.0.1:17861" {
+			t.Errorf("application Origin was not normalized: %s", origin)
+		}
+		if strings.Contains(r.Header.Get("Cookie"), "orh=") {
+			t.Error("Agent cookie leaked into application")
+		}
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "http://localhost:17861/login", 302)
+			return
+		}
+		if r.URL.Path == "/socket" {
+			connection, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer connection.CloseNow()
+			kind, data, err := connection.Read(r.Context())
+			if err == nil {
+				connection.Write(r.Context(), kind, data)
+			}
+			return
+		}
+		io.WriteString(w, payload)
+	}))
+	defer backend.Close()
+	backendURL, _ := url.Parse(backend.URL)
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/openremotehub":
@@ -219,7 +252,14 @@ func TestConsoleOpensSavedServicesOnController(t *testing.T) {
 			defer connection.CloseNow()
 			connection.SetReadLimit(128 * 1024)
 			stream := websocket.NetConn(r.Context(), connection, websocket.MessageBinary)
-			io.Copy(stream, stream)
+			remote, err := net.Dial("tcp", backendURL.Host)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer remote.Close()
+			go func() { io.Copy(remote, stream); remote.Close() }()
+			io.Copy(stream, remote)
 		default:
 			t.Errorf("unexpected target %s", r.URL.Path)
 		}
@@ -264,18 +304,42 @@ func TestConsoleOpensSavedServicesOnController(t *testing.T) {
 	if err != nil || !strings.HasPrefix(destination.Hostname(), "app-"+device) || destination.Path != "/signin" || destination.RawQuery != "q=1" {
 		t.Fatalf("wrong service URL %+v", result)
 	}
-	connection, err := net.Dial("tcp", "127.0.0.1:"+destination.Port())
+	request, _ := http.NewRequest("GET", result["url"], nil)
+	request.Header.Set("Origin", destination.Scheme+"://"+destination.Host)
+	page, err := client.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer connection.Close()
-	connection.SetDeadline(time.Now().Add(5 * time.Second))
-	payload := strings.Repeat("http-and-websocket-bytes", 5000)
-	go io.WriteString(connection, payload)
-	echoed := make([]byte, len(payload))
-	if _, err = io.ReadFull(connection, echoed); err != nil || string(echoed) != payload {
-		t.Fatalf("service stream lost bytes: %v", err)
+	echoed, err := io.ReadAll(page.Body)
+	page.Body.Close()
+	if err != nil || string(echoed) != payload {
+		t.Fatalf("service response lost bytes: %v", err)
 	}
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	redirect, err := client.Get(destination.Scheme + "://" + destination.Host + "/redirect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirect.Body.Close()
+	if redirect.Header.Get("Location") != destination.Scheme+"://"+destination.Host+"/login" {
+		t.Fatal("local application redirect was not mapped")
+	}
+	socketURL := "ws://" + destination.Host + "/socket"
+	socket, _, err := websocket.Dial(context.Background(), socketURL, &websocket.DialOptions{HTTPClient: client, HTTPHeader: http.Header{"Origin": {destination.Scheme + "://" + destination.Host}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer socket.CloseNow()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err = socket.Write(ctx, websocket.MessageText, []byte("app socket")); err != nil {
+		t.Fatal(err)
+	}
+	_, data, err := socket.Read(ctx)
+	if err != nil || string(data) != "app socket" {
+		t.Fatalf("application WebSocket failed: %s %v", data, err)
+	}
+
 	missing := open("orh=session", "application", "missing")
 	missing.Body.Close()
 	if missing.StatusCode != 404 {

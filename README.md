@@ -7,11 +7,11 @@
 
 | 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `ORH-Setup-0.6.12.exe` | 运行安装向导，从开始菜单打开 |
-| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.12-macos-arm64.dmg` | 把应用拖入 Applications |
-| macOS 15+ Intel | `OpenRemoteHub-0.6.12-macos-amd64.dmg` | 把应用拖入 Applications |
-| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.12-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.12-linux-amd64.deb` |
-| Android 8+ ARM64 | `OpenRemoteHub-0.6.12-android-arm64.apk` | 下载 APK 后安装 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.13.exe` | 运行安装向导，从开始菜单打开 |
+| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.13-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS 15+ Intel | `OpenRemoteHub-0.6.13-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.13-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.13-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.13-android-arm64.apk` | 下载 APK 后安装 |
 
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
@@ -54,7 +54,7 @@ Client 按长期 `device_id` 选择设备，经 Mesh 校验目标身份，再兑
 在目标设备的“进程与服务”找到 HTTP / HTTPS 端口，点击加号添加到“我的应用”。也可手动填写“当前主机端口”。在 Client 的远端工作区点击“打开应用”后，ORH 在控制端建立独立的本地访问地址，经目标 Agent 的认证连接转发到服务端口。已有应用入口可以直接使用更新后的连接方式。
 
 - 目标服务需要正在运行，并监听 `127.0.0.1` 或全部网卡。此方式支持仅本机监听的 Web 服务。
-- 服务可以使用相对路径、WebSocket 和自己的登录认证。若应用配置了固定公网域名、绝对回调地址或 Host 白名单，需要按该应用的配置方式允许当前访问地址。
+- HTTP 通道会转换本机 Host 与同源 Origin，并处理本机绝对重定向，服务可保留 localhost 访问检查。服务可以使用相对路径、WebSocket 和自己的登录认证。若应用配置了固定公网域名、绝对回调地址或 Host 白名单，需要按该应用的配置方式允许当前访问地址。
 - HTTPS 服务仍由浏览器验证其证书。绑定固定域名和证书的服务可使用“自定义网址”。
 - 从普通浏览器直接访问备用网络的 Agent Web 页面时，“当前主机端口”使用目标主机地址，服务需要允许该网络访问，目标防火墙需放行服务端口。
 

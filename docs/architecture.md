@@ -73,6 +73,6 @@ Client 以账号指纹绑定私有设备目录缓存。Cloud 返回连接失败�
 
 控制台网关 `/__remotehub__/open` 在当前查看设备执行，核验目标 Agent 现有登录会话及设备 ID。远程桌面入口创建控制端到目标 Mesh `21118` 的通用 TCP 转发，与设备列表使用相同路径。
 
-已保存的“当前主机端口”应用通过 Agent `/api/applications/{id}/tunnel` 的二进制 WebSocket 传输 TCP 数据。Agent 核验现有会话、来源与已启用模块，从目标私有应用记录读取端口并连接本机回环地址。控制端以独立 `app-设备ID-应用ID.localhost` 主机名提供原始服务，应用自己的 HTTP Cookie 与 ORH 控制台 Cookie 按主机隔离。HTTP、HTTPS 和应用 WebSocket 均通过同一字节通道传输，目标服务无需另行发布 Mesh 端口。Cloud 继续仅提供账号及设备元数据。
+已保存的“当前主机端口”应用通过 Agent `/api/applications/{id}/tunnel` 的二进制 WebSocket 传输 TCP 数据。Agent 核验现有会话、来源与已启用模块，从目标私有应用记录读取端口并连接本机回环地址。控制端以独立 `app-设备ID-应用ID.localhost` 主机名提供应用入口，应用自己的 HTTP Cookie 与 ORH 控制台 Cookie 按主机隔离。HTTP 与应用 WebSocket 复用标准反向代理，将 Host 和同源 Origin 转为目标本机服务地址，并将本机绝对重定向映射回应用入口。HTTPS 保留端到端 TCP 字节转发，由浏览器校验证书。两种方式都通过 Agent 的二进制通道传输，目标服务无需另行发布 Mesh 端口。Cloud 继续仅提供账号及设备元数据。
 
 DSH 状态检测会通过官方 launch token 恢复本机 Cookie。源码版迁移遗漏认证时，可从同用户、通过 PID 和创建时间验证的 ORH DSH supervisor 接续私有认证记录。原进程继续运行，后续 Cookie 刷新由安装版保存。认证失败时提供明确状态及恢复按钮，单独重启仅作用于 ORH 管理的 DSH supervisor。

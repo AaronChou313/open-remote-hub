@@ -1,10 +1,12 @@
 # 验证记录
 
-## 0.6.12 增量
+## 0.6.13 增量
 
 拆分本地局域网、节点小宝、网络代理和远程桌面模块，补齐导航图标与注册入口。Cloud 部署已改为开放注册，并实际完成新账号注册与登录后清理测试账号。共享前端交互检查通过，Python 全量检查通过 298 项，相关 46 项检查通过。Go 内部包通过 race 检查，覆盖控制端认证、已保存应用的字节通道和 RustDesk 转发入口。
 
-本机安装版验证 已接续源码版现有 DSH supervisor 认证，实际 Web 工作台加载原生会话与模型界面。迁移过程中原 DSH supervisor、Mihomo broker 和 Mihomo 进程持续运行。Android 正式签名 APK 构建与 lint 通过。
+本机安装版验证 已接续源码版现有 DSH supervisor 认证，实际 Web 工作台加载原生会话与模型界面。迁移过程中原 DSH supervisor、Mihomo broker 和 Mihomo 进程持续运行。Android 正式签名 APK 构建与 lint 通过。Android 35 ARM64 模拟器使用真实账号进入已安装 Mac 的共享控制台。
+
+独立服务访问验证覆盖本机 Host/Origin 转换、本机绝对重定向和应用 WebSocket。使用现有“果壳签到”17861 服务实际读取页面与 33224 字节脚本，均返回 HTTP 200。
 
 ## 0.6.10 增量
 

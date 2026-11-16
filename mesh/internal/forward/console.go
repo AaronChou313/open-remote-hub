@@ -165,30 +165,7 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 			}
 			request.Out.Header.Del("Forwarded")
 		}
-		server := &http.Server{ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-		server.ConnContext = func(ctx context.Context, connection net.Conn) context.Context {
-			return context.WithValue(ctx, connectionKey{}, &consoleConn{connection: connection})
-		}
-		server.ConnState = func(connection net.Conn, status http.ConnState) {
-			m.mu.Lock()
-			defer m.mu.Unlock()
-			switch status {
-			case http.StateNew:
-				if tunnel.closed {
-					connection.Close()
-					return
-				}
-				tunnel.active[connection] = struct{}{}
-				tunnel.Connections++
-				tunnel.last = time.Now()
-			case http.StateClosed:
-				if _, ok := tunnel.active[connection]; ok {
-					delete(tunnel.active, connection)
-					tunnel.Connections--
-				}
-				tunnel.last = time.Now()
-			}
-		}
+		server := m.httpServer(tunnel)
 		server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Host != origin.Host || r.Header.Get("Origin") != "" && r.Header.Get("Origin") != origin.String() {
 				http.Error(w, "控制台请求来源无效", http.StatusForbidden)
@@ -231,4 +208,33 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 	go server.Serve(tunnel.listener)
 	go gatewayServer.Serve(gatewayListener)
 	return entry, nil
+}
+
+// httpServer tracks HTTP and upgraded connections in the normal forward lifecycle.
+func (m *Manager) httpServer(tunnel *tunnel) *http.Server {
+	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	server.ConnContext = func(ctx context.Context, connection net.Conn) context.Context {
+		return context.WithValue(ctx, connectionKey{}, &consoleConn{connection: connection})
+	}
+	server.ConnState = func(connection net.Conn, status http.ConnState) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		switch status {
+		case http.StateNew:
+			if tunnel.closed {
+				connection.Close()
+				return
+			}
+			tunnel.active[connection] = struct{}{}
+			tunnel.Connections++
+			tunnel.last = time.Now()
+		case http.StateClosed:
+			if _, ok := tunnel.active[connection]; ok {
+				delete(tunnel.active, connection)
+				tunnel.Connections--
+			}
+			tunnel.last = time.Now()
+		}
+	}
+	return server
 }

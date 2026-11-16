@@ -7,8 +7,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -131,9 +134,91 @@ func (m *Manager) openService(w http.ResponseWriter, r *http.Request, ip, device
 		tunnel.URL = fmt.Sprintf("%s://app-%s-%s.localhost:%d%s", app.Scheme, device, app.ID, tunnel.LocalPort, app.Path)
 		entry := tunnel.Entry
 		m.mu.Unlock()
-		go m.accept(tunnel)
+		if app.Scheme == "http" {
+			m.serveApplication(tunnel, dial)
+		} else {
+			go m.accept(tunnel)
+		}
 		json.NewEncoder(w).Encode(map[string]string{"url": entry.URL})
 		return
 	}
 	fail(404, "应用入口已移除或使用自定义网址，请刷新应用列表")
+}
+
+// HTTP applications retain their local Host/Origin checks behind a distinct
+// browser origin. HTTPS remains an end-to-end TCP stream for browser TLS checks.
+func (m *Manager) serveApplication(tunnel *tunnel, dial func(context.Context) (net.Conn, error)) {
+	origin, _ := url.Parse(tunnel.URL)
+	target := &url.URL{Scheme: "http", Host: net.JoinHostPort("127.0.0.1", strconv.Itoa(tunnel.RemotePort))}
+	transport := &http.Transport{ResponseHeaderTimeout: 30 * time.Second, IdleConnTimeout: 60 * time.Second,
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			connection, err := dial(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return &applicationConn{Conn: connection, tunnel: tunnel}, nil
+		},
+	}
+	proxy := &httputil.ReverseProxy{
+		Transport: transport,
+		Rewrite: func(request *httputil.ProxyRequest) {
+			request.SetURL(target)
+			request.Out.Host = target.Host
+			if request.In.Header.Get("Origin") == origin.Scheme+"://"+origin.Host {
+				request.Out.Header.Set("Origin", target.String())
+			}
+			request.Out.Header.Del("Forwarded")
+		},
+		ModifyResponse: func(response *http.Response) error {
+			redirect, err := url.Parse(response.Header.Get("Location"))
+			if err != nil {
+				return err
+			}
+			if (redirect.Hostname() == "127.0.0.1" || redirect.Hostname() == "localhost") && redirect.Port() == strconv.Itoa(tunnel.RemotePort) {
+				redirect.Scheme, redirect.Host = origin.Scheme, origin.Host
+				response.Header.Set("Location", redirect.String())
+			}
+			return nil
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			m.mu.Lock()
+			tunnel.lastErr = "应用连接中断，请返回控制台重新打开应用"
+			m.mu.Unlock()
+			http.Error(w, "应用连接中断，请返回控制台重新打开应用", http.StatusBadGateway)
+		},
+	}
+	server := m.httpServer(tunnel)
+	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != origin.Host {
+			http.Error(w, "应用访问地址无效", http.StatusForbidden)
+			return
+		}
+		link := r.Context().Value(connectionKey{}).(*consoleConn)
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			defer func() { link.connection.Close(); server.ConnState(link.connection, http.StateClosed) }()
+		}
+		proxy.ServeHTTP(w, r)
+	})
+	m.mu.Lock()
+	tunnel.cleanup = func() { server.Close(); transport.CloseIdleConnections() }
+	m.mu.Unlock()
+	go server.Serve(tunnel.listener)
+}
+
+type applicationConn struct {
+	net.Conn
+	tunnel *tunnel
+}
+
+func (c *applicationConn) Read(data []byte) (int, error) {
+	n, err := c.Conn.Read(data)
+	c.tunnel.bytesIn.Add(int64(n))
+	c.tunnel.lastActive.Store(time.Now().UnixNano())
+	return n, err
+}
+func (c *applicationConn) Write(data []byte) (int, error) {
+	n, err := c.Conn.Write(data)
+	c.tunnel.bytesOut.Add(int64(n))
+	c.tunnel.lastActive.Store(time.Now().UnixNano())
+	return n, err
 }
