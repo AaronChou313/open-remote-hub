@@ -128,6 +128,10 @@ public final class ConsoleActivity extends Activity {
             }
         }, "ORHAndroid");
         web.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                if(message.messageLevel()==ConsoleMessage.MessageLevel.ERROR) Diagnostics.log("console-web",message.message());
+                return false;
+            }
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams parameters) {
                 if(fileCallback!=null) fileCallback.onReceiveValue(null);
                 fileCallback=callback;

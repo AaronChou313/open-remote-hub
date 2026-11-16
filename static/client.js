@@ -33,6 +33,10 @@ async function request(path, body) {
 }
 
 async function showLogin() {
+  if(typeof RemoteHubAgentSettings!=='undefined')RemoteHubAgentSettings.reset();
+  if(typeof RemoteHubMesh!=='undefined')RemoteHubMesh.reset();
+  select('#clientAgentSettings').innerHTML='';select('#clientMesh').innerHTML='';
+  directory=null;account=null;
   select('#clientShell').hidden = true;
   select('#clientLogin').hidden = false;
   const response = await fetch('/api/auth/status');
@@ -151,6 +155,7 @@ document.querySelectorAll('[data-page]').forEach(button => button.onclick = asyn
   select('#clientTitle').focus();
   await refreshDevices();
 });
+select('#clientRecoveryPassword').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();select('#clientRecoveryLogin').click()}};
 select('#clientRecoveryLogin').onclick=async()=>{
  try{await request('/login',{password:select('#clientRecoveryPassword').value});select('#clientRecoveryPassword').value='';await refreshDevices()}catch(error){select('#clientLoginError').textContent=error.message}
 };

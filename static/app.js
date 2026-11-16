@@ -184,6 +184,7 @@ $('#cloudLoginSubmit').onclick = async () => {
  } catch (error) {$('#loginError').textContent = error.message;}
  finally {button.disabled = false;}
 };
+$('#localPassword').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();$('#localLogin').click()}};
 $('#localLogin').onclick=async()=>{try{await api($('#localLogin').dataset.setup==='true'?'/auth/setup':'/login',{password:$('#localPassword').value});$('#localPassword').value='';await enter()}catch(error){$('#loginError').textContent=error.message}};
 $('#loginForm').onsubmit=event=>{event.preventDefault();if(!$('#cloudBlock').hidden)$('#cloudLoginSubmit').click()};
 

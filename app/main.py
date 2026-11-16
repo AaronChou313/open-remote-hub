@@ -307,7 +307,7 @@ def capabilities():
     from app import mesh_runtime
     listing=modules.listing()['modules']
     values = {value['id']:value['state'] == 'ready' for value in listing}
-    return dict(values, enabled_modules=[value['id'] for value in listing if value['enabled']], zellij=values['terminal'], rustdesk=values['desktop'], mesh=mesh_runtime.binary() is not None)
+    return dict(values, enabled_modules=[value['id'] for value in listing if value['enabled'] and value['supported']], zellij=values['terminal'], rustdesk=values['desktop'], mesh=mesh_runtime.binary() is not None)
 
 
 @app.get('/api/history')

@@ -37,6 +37,8 @@ Android 需要按应用内提示允许通知和后台运行。第一阶段只控
 | 进程与服务 | macOS launchd、Linux systemd、Windows Services |
 | SSH、项目、开发环境、知识库、DSH、网络代理 | macOS/Linux。按功能检测宿主机依赖，Windows 界面明确显示支持状态 |
 
+macOS / Linux 可在“功能管理”启用网络代理，然后点击“前往安装 → 安装 Mihomo”，在目标主机完成系统管理员授权。已有 ORH Mihomo 后台自动识别，机场配置保存在目标主机。
+
 Windows ConPTY 由 Agent 持有进程，关闭终端窗口后可重新接入。macOS/Linux 复用 Zellij 会话与原生 Web Client。停用模块保留用户已安装的第三方软件和已有任务。macOS 的 RustDesk 启动、连接和文件传输统一经过 LaunchServices，屏幕录制权限归属 RustDesk 应用。
 
 ## 连接方式

@@ -292,6 +292,12 @@ public final class MainActivity extends Activity {
             if(action==netcheck || action==diagnoseButton) meshPage.addView(action);
             else options.addView(action, params);
         }
+        Button signIn=secondary("重新登录账号", () -> {});
+        signIn.setOnClickListener(view -> {
+            needsAccountLogin=true;binding.setVisibility(View.VISIBLE);
+            binding.requestRectangleOnScreen(new android.graphics.Rect(0,0,binding.getWidth(),binding.getHeight()),false);
+        });
+        settingsPage.addView(signIn);
         settingsPage.addView(options);
         settingsPage.addView(muted("ORH 通过应用内 Mesh 连接设备，可与系统 VPN 同时使用。"));
         page.addView(devicePage); page.addView(meshPage); page.addView(settingsPage);
@@ -452,7 +458,7 @@ public final class MainActivity extends Activity {
         JSONArray targets=directory==null?new JSONArray():directory;
         for (int index=0;index<targets.length();index++) {
             JSONObject targetDevice=targets.optJSONObject(index);
-            if (targetDevice==null||targetDevice.optBoolean("self")) continue;
+            if (targetDevice==null||targetDevice.optBoolean("self")||"controller-only".equals(targetDevice.optString("kind"))) continue;
             JSONObject targetMesh=targetDevice.optJSONObject("mesh");
             JSONArray targetIPs=targetMesh==null?null:targetMesh.optJSONArray("ips");
             String targetIP=targetIPs==null?"":targetIPs.optString(0);
@@ -474,8 +480,8 @@ public final class MainActivity extends Activity {
             detail.setTextColor(color(R.color.muted)); entry.addView(detail);
             String ip=targetIP;
             String deviceID=targetDevice.optString("instance_id");
-            boolean console=!ip.isEmpty()&&consoleAvailable(directory,ip)&&running;
-            if (!console) detail.setText(detail.getText()+" · 未发布 Agent 或 Mesh 未连接");
+            boolean console=!ip.isEmpty()&&consoleAvailable(directory,ip);
+            if (!console) detail.setText(detail.getText()+" · 目标尚未发布 Agent 控制台");
             LinearLayout actions=new LinearLayout(this);
             actions.addView(secondary("检测", () -> {
                 JSONObject result=(JSONObject)api("/ping",new JSONObject().put("peer_ip",ip),"POST");

@@ -55,7 +55,7 @@ macOS 上 RustDesk 的启动与连接通过 `/usr/bin/open -n -a RustDesk.app --
 
 `static/mesh.js` 在 Client 与 Web 中复用。`/api/client/mesh*` 使用现有 ORH Mesh LocalAPI 提供状态、P2P / DERP 诊断、TCP 转发与关闭。发布服务继续由 `mesh_runtime.save_config` 管理。备用 Tailscale、节点小宝由外部软件持有生命周期。
 
-Android 使用相同的一级导航，设备卡片以“打开控制台”为主操作。点击后立即打开控制台加载页，由该页面异步建立目标通道和交换账号 Ticket。加载失败保留错误与重试入口。目标工作区仍使用打包的共享 Web 页面。
+Android 使用相同的一级导航，设备卡片以“打开控制台”为主操作。点击后立即打开控制台加载页，由该页面异步建立目标通道和交换账号 Ticket。加载失败保留错误与重试入口。Android 的账号登录与 Ticket 请求统一复用 Go Cloud 传输，账号 Token 仅在本次请求内使用。目标工作区仍使用打包的共享 Web 页面。
 
 ## 备用监听与恢复认证
 

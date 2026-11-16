@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -437,4 +438,49 @@ func (s *Server) cloudLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, map[string]any{"ok": true, "instance_id": deviceID, "username": login.User.Username, "cloud_url": base, "account_token": login.Token})
+}
+
+// cloudTicket shares the existing Go Cloud transport with Android account login.
+// The account token is supplied by the Client and remains in request memory.
+func (s *Server) cloudTicket(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		DeviceID     string `json:"device_id"`
+		Address      string `json:"address"`
+		AccountToken string `json:"account_token"`
+	}
+	if err := body(w, r, &input); err != nil {
+		fail(w, 400, err)
+		return
+	}
+	valid, _ := regexp.MatchString(`^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$`, input.DeviceID)
+	if !valid || input.Address == "" || input.AccountToken == "" {
+		fail(w, 400, fmt.Errorf("请选择目标设备并登录 ORH 账号"))
+		return
+	}
+	s.cloudMu.RLock()
+	config := s.Config.Cloud
+	s.cloudMu.RUnlock()
+	if !config.Bound {
+		fail(w, 409, fmt.Errorf("请先登录 ORH 账号"))
+		return
+	}
+	var result struct {
+		URL string `json:"url"`
+	}
+	err := cloudclient.Call(r.Context(), config.BaseURL, "/api/devices/"+input.DeviceID+"/ticket", input.AccountToken,
+		map[string]string{"address": input.Address, "state": ""}, &result)
+	if err != nil {
+		status := 503
+		var response *cloudclient.HTTPError
+		if errors.As(err, &response) {
+			status = response.Status
+		}
+		fail(w, status, err)
+		return
+	}
+	if result.URL == "" {
+		fail(w, 502, fmt.Errorf("Cloud 未返回设备授权"))
+		return
+	}
+	reply(w, result)
 }

@@ -68,7 +68,7 @@ def devices():
         from app.main import host
         directory.insert(0, dict(instance_id=identity['instance_id'], name=identity['name'],
                                  os=host.info()['system'], online=False))
-    return dict(devices=[device_model(device, mesh, identity['instance_id']) for device in directory],
+    return dict(devices=[device_model(device, mesh, identity['instance_id']) for device in directory if device.get('kind')!='controller-only'],
                 cloud=dict(bound=bool(cloud_agent.binding()), error=error),
                 mesh=dict(state=mesh.get('state', ''), error=mesh.get('error', '')))
 

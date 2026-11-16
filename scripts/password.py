@@ -22,6 +22,7 @@ from app import passwords, agent_settings
 
 if __name__ == '__main__':
     password = getpass.getpass('New RemoteHub password: ')
+    if len(password)<8:raise SystemExit('Use at least 8 characters.')
     if password != getpass.getpass('Repeat password: '):
         raise SystemExit('Passwords differ; nothing changed.')
     passwords.save(password)
