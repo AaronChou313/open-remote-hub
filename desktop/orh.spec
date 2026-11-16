@@ -37,4 +37,4 @@ if __import__('sys').platform == 'darwin':
     app = BUNDLE(coll, name='OpenRemoteHub.app', icon=str(ROOT / 'build/orh.icns'),
                  bundle_identifier='top.openremotehub.client',
                  info_plist={'CFBundleShortVersionString':(ROOT/'VERSION').read_text().strip(),
-                             'NSHighResolutionCapable':True, 'LSMinimumSystemVersion':'12.0'})
+                             'NSHighResolutionCapable':True, 'LSMinimumSystemVersion':'15.0'})
