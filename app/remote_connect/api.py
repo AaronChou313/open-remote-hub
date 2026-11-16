@@ -106,6 +106,20 @@ def overview():
                 lan_urls=tailscale.access_urls(), mesh=mesh_runtime.status())
 
 
+@router.get('/rustdesk')
+def rustdesk_status():
+    from app import modules
+    modules.require('desktop')
+    return client.status()
+
+
+@router.get('/nodebaby')
+def nodebaby_status():
+    from app import modules
+    modules.require('nodebaby')
+    return nodebaby.status()
+
+
 @router.get('/rustdesk/settings')
 def settings():
     return dict(options=client.settings())

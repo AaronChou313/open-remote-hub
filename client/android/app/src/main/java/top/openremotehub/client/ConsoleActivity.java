@@ -122,6 +122,19 @@ public final class ConsoleActivity extends Activity {
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface public void returnToDevices() { runOnUiThread(() -> finish()); }
             @JavascriptInterface public void agentReady(boolean ready) { agentReady=ready; }
+            @JavascriptInterface public void openService(String address) {
+                Uri target = Uri.parse(address);
+                boolean webService = ("http".equals(target.getScheme()) || "https".equals(target.getScheme()))
+                        && target.getHost() != null && target.getHost().startsWith("app-" + deviceID + "-")
+                        && target.getHost().endsWith(".localhost");
+                if (!webService && !"rustdesk".equals(target.getScheme())) return;
+                runOnUiThread(() -> {
+                    Intent service = new Intent(ConsoleActivity.this, MeshService.class).putExtra("desktop", true);
+                    startForegroundService(service);
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, target)); }
+                    catch (ActivityNotFoundException unavailable) { toast("请先安装 RustDesk 或浏览器"); }
+                });
+            }
             @JavascriptInterface public void openTerminal(String address) {
                 Uri target=Uri.parse(address), origin=Uri.parse(url);
                 if(isLocal(target)&&origin.getAuthority().equals(target.getAuthority())&&target.getPath()!=null&&target.getPath().startsWith("/terminal/open/")) runOnUiThread(() -> web.loadUrl(address));

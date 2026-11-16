@@ -190,3 +190,101 @@ func TestConsoleOriginCookieRedirectAndWebSocket(t *testing.T) {
 	}
 	manager.Delete(entry.ID)
 }
+
+func TestConsoleOpensSavedServicesOnController(t *testing.T) {
+	const device = "f57bc9e0-1f1e-4c96-b4f8-c9e3be1f41c9"
+	const app = "abcdef0123456789"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openremotehub":
+			json.NewEncoder(w).Encode(map[string]string{"service": "openremotehub", "instance_id": device})
+		case "/api/me":
+			if r.Header.Get("Cookie") != "orh=session" {
+				w.WriteHeader(401)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]string{"role": "admin", "device_id": device})
+		case "/api/applications":
+			json.NewEncoder(w).Encode(map[string]any{"applications": []map[string]any{{"id": app, "mode": "host", "port": 17861, "scheme": "http", "path": "/signin?q=1"}}})
+		case "/api/applications/" + app + "/tunnel":
+			if r.Header.Get("Cookie") != "orh=session" {
+				w.WriteHeader(401)
+				return
+			}
+			connection, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer connection.CloseNow()
+			connection.SetReadLimit(128 * 1024)
+			stream := websocket.NetConn(r.Context(), connection, websocket.MessageBinary)
+			io.Copy(stream, stream)
+		default:
+			t.Errorf("unexpected target %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+	target, _ := url.Parse(upstream.URL)
+	manager := New(mappedDialer{target: target.Host})
+	defer manager.Close()
+	entry, err := manager.CreateConsole(context.Background(), "100.64.0.20", device)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := &http.Transport{DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		_, port, _ := net.SplitHostPort(address)
+		return (&net.Dialer{}).DialContext(ctx, network, "127.0.0.1:"+port)
+	}}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	open := func(cookie, kind, id string) *http.Response {
+		request, _ := http.NewRequest("POST", entry.URL+"/__remotehub__/open", strings.NewReader(fmt.Sprintf(`{"kind":%q,"id":%q}`, kind, id)))
+		request.Header.Set("Cookie", cookie)
+		request.Header.Set("X-ORH-Request", "1")
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+	denied := open("", "application", app)
+	denied.Body.Close()
+	if denied.StatusCode != 401 {
+		t.Fatal("unauthenticated service creation accepted")
+	}
+	response := open("orh=session", "application", app)
+	var result map[string]string
+	json.NewDecoder(response.Body).Decode(&result)
+	response.Body.Close()
+	if response.StatusCode != 200 {
+		t.Fatalf("open failed: %+v", result)
+	}
+	destination, err := url.Parse(result["url"])
+	if err != nil || !strings.HasPrefix(destination.Hostname(), "app-"+device) || destination.Path != "/signin" || destination.RawQuery != "q=1" {
+		t.Fatalf("wrong service URL %+v", result)
+	}
+	connection, err := net.Dial("tcp", "127.0.0.1:"+destination.Port())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	connection.SetDeadline(time.Now().Add(5 * time.Second))
+	payload := strings.Repeat("http-and-websocket-bytes", 5000)
+	go io.WriteString(connection, payload)
+	echoed := make([]byte, len(payload))
+	if _, err = io.ReadFull(connection, echoed); err != nil || string(echoed) != payload {
+		t.Fatalf("service stream lost bytes: %v", err)
+	}
+	missing := open("orh=session", "application", "missing")
+	missing.Body.Close()
+	if missing.StatusCode != 404 {
+		t.Fatal("unsaved service accepted")
+	}
+	desktop := open("orh=session", "desktop", "")
+	json.NewDecoder(desktop.Body).Decode(&result)
+	desktop.Body.Close()
+	if !strings.HasPrefix(result["url"], "rustdesk://connection/new/127.0.0.1") {
+		t.Fatalf("desktop did not use controller forward: %+v", result)
+	}
+}

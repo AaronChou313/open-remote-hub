@@ -1,7 +1,8 @@
 """Saved Web entry points. Visiting an application uses its own HTTP service."""
+import asyncio
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from app import workspace_store as store
 
@@ -79,3 +80,61 @@ def remove(key: str, body: Remove):
     store.remove('application', key, body.revision)
     audit(key, 'remove')
     return dict(ok=True)
+
+
+@router.websocket('/{key}/tunnel')
+async def tunnel(ws: WebSocket, key: str):
+    """Carry a saved local Web service over the authenticated Agent channel."""
+    from app import access, main, modules
+    session = access.get(ws.cookies.get('orh', ''))
+    scheme = 'https' if ws.url.scheme == 'wss' else 'http'
+    if (not session or not modules.enabled('services')
+            or not main.NETWORK.same_origin(ws.headers.get('host', ''), ws.headers.get('origin'), main.PORT, scheme)):
+        await ws.close(code=1008)
+        return
+    try:
+        entry = store.get('application', key)
+    except HTTPException:
+        await ws.close(code=1008)
+        return
+    if entry['mode'] != 'host':
+        await ws.close(code=1008)
+        return
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', entry['port']), 8)
+    except (OSError, TimeoutError):
+        await ws.close(code=1011, reason='目标服务未启动或未监听回环地址')
+        return
+    await ws.accept()
+
+    async def send():
+        while data := await reader.read(65536):
+            if not access.get(ws.cookies.get('orh', '')):
+                return
+            await ws.send_bytes(data)
+
+    async def receive():
+        while True:
+            data = await ws.receive_bytes()
+            if not access.get(ws.cookies.get('orh', '')):
+                return
+            writer.write(data)
+            await writer.drain()
+
+    tasks = [asyncio.create_task(send()), asyncio.create_task(receive())]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            task.result()
+    except (OSError, RuntimeError, WebSocketDisconnect):
+        pass
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        writer.close()
+        await writer.wait_closed()
+        try:
+            await ws.close()
+        except RuntimeError:
+            pass

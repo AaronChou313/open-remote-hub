@@ -52,12 +52,20 @@ def run(url, storage_path):
                                    min_size=(680, 480))
 
     def terminal_request(event, key, value):
-        if event != 'change' or key != 'terminal_request':
+        if event != 'change' or key not in ('terminal_request', 'service_request'):
             return
         try:
             if not isinstance(value, dict) or not isinstance(value.get('url'), str):
                 raise ValueError('终端入口无效')
-            open_terminal(value['url'])
+            if key == 'service_request':
+                address = urlsplit(value['url'])
+                if (address.scheme not in ('http', 'https', 'rustdesk') or address.username or address.password
+                        or address.scheme != 'rustdesk' and not (address.hostname or '').endswith('.localhost')):
+                    raise ValueError('服务入口必须来自本机 Client 通道')
+                import webbrowser
+                webbrowser.open(value['url'])
+            else:
+                open_terminal(value['url'])
         except ValueError as error:
             window.state.terminal_error = str(error)
 

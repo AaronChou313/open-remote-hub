@@ -9,7 +9,7 @@ window.RemoteHubNodeBaby = (() => {
   const $ = (selector) => document.querySelector(selector);
 
   function markup() {
-    return `<section id="rcNodeBaby" hidden>
+    return `<section id="rcNodeBaby">
       <div class="rc-tail-toolbar"><div class="rc-tail-actions"><span id="nbState" class="badge">—</span>
         <button id="nbOpen" disabled>${icon("external")}在主机打开客户端</button>
         <button id="nbCheckAll">${icon("diagnose")}全部检测</button><label class="rc-online-filter"><input type="checkbox" id="nbAutoCheck" checked>自动检测</label>
@@ -147,9 +147,21 @@ window.RemoteHubNodeBaby = (() => {
     checkDevices(visibleRows().filter((item) => item.prefix === 32).map((item) => item.id));
   }
 
+  async function render(check) {
+    if (!$("#rcNodeBaby")) {
+      $("#content").innerHTML = '<div class="remote-connect">' + markup() + '</div>';
+      mount({copy:copyText, current:check, refresh:() => render(check), busy:async (button, work) => {
+        try { await withBusy(button, "nodebaby:action", "处理中…", work); } catch(error) { showError(error); }
+      }});
+    } else context.current = check;
+    const owner = context;
+    const value = await api("/remote-connect/nodebaby");
+    if (context === owner && owner.current()) { update(value); maybeCheck(); }
+  }
+  setInterval(() => { if (context?.current() && !document.hidden) maybeCheck(); }, 5000);
   function reset() {
     context = null;
     state = null;
   }
-  return { markup, mount, update, reset, maybeCheck };
+  return { render, markup, mount, update, reset, maybeCheck };
 })();

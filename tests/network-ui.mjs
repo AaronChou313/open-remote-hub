@@ -13,15 +13,16 @@ function element(){
 for(const id of ['#content','#updated','#outputDialog','#confirmDialog'])nodes.set(id,element());
 const document={hidden:false,querySelector:s=>nodes.get(s)||null,querySelectorAll:()=>[]};
 const ctx=vm.createContext({window:{addEventListener(){},scrollTo(){}},document,Date,JSON,Object,Promise,
- location:{hostname:'localhost'},Set,setInterval(){},setTimeout(){},bytes:String,table:()=>'',icon:()=>'',esc:String,empty:String,me:{role:'admin'},
+ location:{hostname:'localhost'},copyText:async()=>{},Set,setInterval(){},setTimeout(){},bytes:String,table:()=>'',icon:()=>'',esc:String,empty:String,me:{role:'admin'},
  showError:error=>errors.push(error.message),notify(){},confirmAction:async()=>true,withBusy:async(b,k,l,work)=>work(),
  RemoteHubProxyManager:{canLeave:async()=>true},
  RemoteHubProxy:{render:async(check,target)=>{assert.equal(check(),true);assert.equal(target,'#rcNetworkProxy');proxyRenders++}},
  api:async path=>{
   calls.push(path);
   if(path==='/remote-connect/lan'){lanRefreshes++;return {interfaces:[],devices:[],gateways:[],dns:[],warnings:[]}}
-  assert.equal(path,'/remote-connect');
-  return {rustdesk:{ready:false,processes:[],connections:0},tailscale:{available:true,reachable:true,state:'Running',peers:[],device:{addresses:[]},health:[]},mesh:{available:true},nodebaby:{available:false,addresses:[],mappings:[]},lan_urls:[]};
+  if(path==='/remote-connect/nodebaby')return {available:false,addresses:[],mappings:[]};
+  assert.equal(path,'/remote-connect/rustdesk');
+  return {ready:false,processes:[],connections:0};
  }});
 for(const file of ['lan','nodebaby','remote-connect']){
  vm.runInContext(fs.readFileSync('static/'+file+'.js','utf8'),ctx);
@@ -30,11 +31,14 @@ for(const file of ['lan','nodebaby','remote-connect']){
 }
 const view=ctx.window.RemoteHubRemoteConnect;
 await view.render(()=>true);
-assert.equal(lanRefreshes,1);
+assert.equal(lanRefreshes,0);
 assert.equal(proxyRenders,0);
-assert.equal(nodes.has('#rcProxyState'),false,'Removed summary cards stay absent in the real DOM');
-view.openTab('proxy');
-await view.render(()=>true);
-assert.equal(proxyRenders,1);
+assert.equal(nodes.has('#rcLAN'),false);
+assert.equal(nodes.has('#rcNodeBaby'),false);
+assert.equal(nodes.has('#rcNetworkProxy'),false);
+assert.equal(nodes.has('#rcOverview'),true);
+nodes.delete('#rcRoot');
+await ctx.RemoteHubLAN.render(()=>true);
+assert.equal(lanRefreshes,1);
 assert.deepEqual(errors,[]);
-console.log('Network UI renders with real absent elements and opens the proxy tab.');
+console.log('RustDesk and LAN render independently without unrelated module requests.');

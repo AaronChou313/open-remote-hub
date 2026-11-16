@@ -167,12 +167,12 @@ public final class MainActivity extends Activity {
         cloudPassword = field("密码", true);
         binding.addView(cloudAddress); binding.addView(cloudUser); binding.addView(cloudPassword);
         LinearLayout row = new LinearLayout(this);
-        cloudLoginButton = primary("登录并注册", () -> {});
+        cloudLoginButton = primary("登录并添加此设备", () -> {});
         cloudLoginButton.setOnClickListener(view -> loginCloud());
         row.addView(cloudLoginButton);
         row.addView(secondary("注册账号", () -> {
             String base = cloudAddress.getText().toString().trim().replaceAll("/+$", "");
-            if (!base.isEmpty()) open(base + "/");
+            if (!base.isEmpty()) open(base + "/#register");
         }));
         binding.addView(row);
     }

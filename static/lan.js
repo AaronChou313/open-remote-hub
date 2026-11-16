@@ -72,6 +72,13 @@ window.RemoteHubLAN = (() => {
       try { await api("/remote-connect/lan/note", {id:row.id,note}); await refresh(); } catch (error) { showError(error); }
     }; });
   }
+  async function render(check) {
+    if (!$("#rcLAN")) {
+      $("#content").innerHTML = '<div class="remote-connect">' + markup() + '</div>';
+      mount({copy:copyText, current:check});
+    } else context.current = check;
+    await refresh();
+  }
   function reset() { context = null; data = null; }
-  return {markup, mount, refresh, reset};
+  return {render, markup, mount, refresh, reset};
 })();

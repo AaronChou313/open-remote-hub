@@ -54,6 +54,7 @@ type tunnel struct {
 	lastErr    string
 	cleanup    func()
 	closed     bool
+	dial       func(context.Context) (net.Conn, error)
 }
 type Manager struct {
 	Frontend        string
@@ -156,7 +157,13 @@ func (m *Manager) pipe(t *tunnel, local net.Conn) {
 	m.record("connection", t.ID, t.PeerIP, fmt.Sprintf("连接开始，本地端口 %d", t.LocalPort))
 	ctx, cancel := context.WithTimeout(m.ctx, 12*time.Second)
 	defer cancel()
-	remote, err := m.dialer.Dial(ctx, "tcp", net.JoinHostPort(t.PeerIP, fmt.Sprint(t.RemotePort)))
+	dial := t.dial
+	if dial == nil {
+		dial = func(ctx context.Context) (net.Conn, error) {
+			return m.dialer.Dial(ctx, "tcp", net.JoinHostPort(t.PeerIP, fmt.Sprint(t.RemotePort)))
+		}
+	}
+	remote, err := dial(ctx)
 	if err != nil {
 		m.mu.Lock()
 		t.lastErr = fmt.Sprintf("连接 %s:%d 失败: %v", t.PeerIP, t.RemotePort, err)
@@ -204,6 +211,10 @@ func (m *Manager) pipe(t *tunnel, local net.Conn) {
 	go copySide(local, remote, &t.bytesIn)
 	go copySide(remote, local, &t.bytesOut)
 	<-done
+	if t.dial != nil {
+		local.Close()
+		remote.Close()
+	}
 	<-done
 }
 

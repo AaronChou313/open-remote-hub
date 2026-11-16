@@ -164,5 +164,6 @@ select('#clientLogout').onclick = async () => {
   try { await request('/auth/client/logout', {}); await showLogin(); }
   catch (error) { select('#clientError').textContent = error.message; select('#clientError').hidden = false; }
 };
+select('#clientRegister').onclick = () => { select('#clientRegister').href = select('#clientCloud').value.trim().replace(/\/+$/, '') + '/#register'; };
 setInterval(() => { if (!document.hidden && !select('#clientShell').hidden) refreshDevices(); }, 15000);
 refreshDevices();

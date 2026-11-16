@@ -12,6 +12,7 @@ import time
 import httpx
 import psutil
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from app.access import admin
 
 router=APIRouter(prefix='/api/dsh',dependencies=[Depends(admin)])
@@ -126,12 +127,38 @@ def recover():
     """Re-exchange the stored launch token; the only sanctioned way to revive a stale cookie."""
     from app.main import DATA
     try:record=json.loads((DATA/'dsh-auth.json').read_text())
-    except (OSError,ValueError):return False
+    except (OSError,ValueError):record={}
+    if not record.get('launch_token'):
+        record=adopt_supervisor() or record
     if record.get('port')!=settings()['port'] or not record.get('launch_token'):return False
     from app.dsh_auth import exchange,save
     try:save(DATA,exchange(record['port'],record['launch_token']))
     except (httpx.HTTPError,RuntimeError):return False
     return True
+
+
+def adopt_supervisor():
+    """Recover credentials from this user's already running ORH DSH supervisor."""
+    from app.main import DATA
+    from app.dsh_auth import save
+    for process in psutil.process_iter(['pid','cmdline','username']):
+        args=process.info['cmdline'] or []
+        if not any(Path(arg).name=='dsh_host.py' for arg in args):continue
+        try:
+            if process.username()!=psutil.Process().username():continue
+            plan=json.loads(Path(args[-1]).read_text())
+            if plan['port']!=settings()['port']:continue
+            folder=Path(plan['data'])
+            identity=json.loads((folder/'dsh-process.json').read_text())
+            if identity['pid']!=process.pid or abs(identity['created']-process.create_time())>=.01:continue
+            record=json.loads((folder/'dsh-auth.json').read_text())
+            if record.get('port')!=plan['port'] or not record.get('launch_token'):continue
+            save(DATA,record)
+            state_path().write_text(json.dumps(identity))
+            state_path().chmod(0o600)
+            return record
+        except (OSError,ValueError,KeyError,psutil.Error):continue
+    return None
 
 
 @router.get('/status')
@@ -142,7 +169,9 @@ def status():
     if managed():
         try:version=json.loads(state_path().read_text()).get('version',version)
         except (OSError,ValueError):pass
-    return dict(enabled=cfg['enabled'],installed=bool(installed),version=version,gateway_port=cfg['gateway_port'],running=bool(p and healthy()),managed=bool(managed()),pid=p.pid if p else None)
+    running=bool(p and (healthy() or recover() and healthy()))
+    state='disabled' if not cfg['enabled'] else 'missing_dependency' if not installed else 'running' if running else 'needs_auth' if p else 'stopped'
+    return dict(enabled=cfg['enabled'],installed=bool(installed),version=version,gateway_port=cfg['gateway_port'],running=running,state=state,managed=bool(managed()),pid=p.pid if p else None)
 
 
 @router.post('/start')
@@ -158,7 +187,7 @@ def start():
             if healthy():return status()
             if recover() and healthy():
                 main.audit('dsh','web','recover');return status()
-            raise HTTPException(409,'DSH 进程存在但未通过本机认证；请重启控制台后再连接（docs/dsh-recovery.md）')
+            raise HTTPException(409,'DSH 正在运行，认证恢复未成功。可在此页重试认证；ORH 管理的进程支持单独重启 DSH。外部启动的实例请先在原客户端退出，再回到此页启动。')
         with socket.socket() as sock:
             if sock.connect_ex(('127.0.0.1',cfg['port']))==0:raise HTTPException(409,'DSH 内部端口已占用，未连接未知服务')
         argv=info['argv']+['web','--patch',str(main.ROOT/'config/dsh-web.patch.yml'),'--host','127.0.0.1','--port',str(cfg['port']),'--no-open']
@@ -180,3 +209,33 @@ def start():
                 main.audit('dsh','web','start');return status()
             time.sleep(.2)
         raise HTTPException(504,'DSH 尚未完成启动，进程已保留；请重试连接，不会重复启动')
+
+
+@router.post('/recover')
+def recover_connection():
+    with mutex:
+        if not recover() or not healthy():
+            raise HTTPException(409,'未能恢复 DSH 认证。ORH 管理的实例可单独重启；外部实例请先在原客户端退出，再从此页启动。')
+        return status()
+
+
+class RestartRequest(BaseModel):
+    confirm: bool = False
+
+
+@router.post('/restart')
+def restart(body: RestartRequest):
+    with mutex:
+        if not body.confirm:raise HTTPException(400,'请确认重启 DSH，正在运行的模型任务会中断')
+        process=managed()
+        if not process:raise HTTPException(409,'此 DSH 实例由其他软件启动，请先在原客户端退出')
+        try:
+            children=process.children(recursive=True)
+            process.terminate()
+            _,alive=psutil.wait_procs([process,*children],timeout=8)
+            if alive:raise HTTPException(409,'DSH 尚未退出，请稍后重试')
+        except psutil.NoSuchProcess:pass
+        state_path().unlink(missing_ok=True)
+        from app.main import DATA
+        (DATA/'dsh-auth.json').unlink(missing_ok=True)
+        return start()

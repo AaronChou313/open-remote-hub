@@ -1,7 +1,7 @@
 'use strict';
 // SVG assets are served locally. Labels stay on the containing control.
 const RemoteHubIcons = Object.freeze({
-  server: 'server', overview: 'layout-dashboard', docker: 'boxes', terminal: 'terminal',
+  desktop: 'monitor', server: 'server', overview: 'layout-dashboard', docker: 'boxes', terminal: 'terminal',
   folder: 'folder', project: 'folder-git-2', environment: 'layers', tasks: 'list-start',
   deepseek: 'deepseek', sun: 'sun', moon: 'moon', refresh: 'refresh-cw', password: 'key-round',
   logout: 'log-out', plus: 'plus', external: 'external-link', file: 'file', code: 'file-code',

@@ -7,16 +7,16 @@
 
 | 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `ORH-Setup-0.6.10.exe` | 运行安装向导，从开始菜单打开 |
-| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.10-macos-arm64.dmg` | 把应用拖入 Applications |
-| macOS 15+ Intel | `OpenRemoteHub-0.6.10-macos-amd64.dmg` | 把应用拖入 Applications |
-| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.10-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.10-linux-amd64.deb` |
-| Android 8+ ARM64 | `OpenRemoteHub-0.6.10-android-arm64.apk` | 下载 APK 后安装 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.11.exe` | 运行安装向导，从开始菜单打开 |
+| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.11-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS 15+ Intel | `OpenRemoteHub-0.6.11-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.11-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.11-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.11-android-arm64.apk` | 下载 APK 后安装 |
 
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
-1. 打开 ORH，登录同一个 ORH Cloud 账号。默认服务为 `https://cloud.openremotehub.top`。
-2. 在“我的设备”选择电脑，点击“打开控制台”。终端、文件和进程与服务默认启用，可在目标设备的“功能管理”启用其他模块。
+1. 打开 ORH，已有账号可直接登录，新用户点击“没有账号？注册账号”，注册后返回客户端登录。默认 Cloud 已开放注册，自建服务可通过 `ORH_CLOUD_INVITE_REQUIRED` 选择邀请码模式。默认服务为 `https://cloud.openremotehub.top`。
+2. 在“我的设备”选择电脑，点击“打开控制台”。终端、文件、进程与服务和本地局域网默认启用，可在目标设备的“功能管理”启用其他模块。
 3. 关闭窗口后，后台 Agent、Mesh 和会话继续运行。通过托盘或 macOS 菜单栏重新打开窗口，也可检查更新、显式停止后台。
 
 macOS 使用用户 LaunchAgent，Linux 使用用户 systemd 服务，Windows 使用用户启动项。这些机制随用户登录启动。无头 Linux 可运行 `openremotehub --headless`。需要用户服务在退出登录后持续运行时，可由管理员为对应用户启用 systemd lingering。
@@ -25,7 +25,7 @@ Android 需要按应用内提示允许通知和后台运行。第一阶段只控
 
 ## 可选功能
 
-新安装默认启用终端、文件和进程与服务。其他可选模块按需启用。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
+新安装默认启用终端、文件、进程与服务和本地局域网。其他可选模块按需启用。功能管理显示未启用、缺少依赖、可用和不可用四种状态，并提供检测和安装说明。
 
 | 功能 | 支持与依赖 |
 | --- | --- |
@@ -48,6 +48,19 @@ Client 按长期 `device_id` 选择设备，经 Mesh 校验目标身份，再兑
 桌面共享导航和页面资源由本机 Client 提供，Android 使用 APK 内的共享页面资源。HTTP API、WebSocket、文件和终端流量通过目标设备独立的 `.localhost` 网关传输。优先 P2P，底层使用 DERP 时，中继会承载相应流量。
 
 [Cloud 后台](https://cloud.openremotehub.top/) 管理账号、设备名称、备注、手动访问地址和解绑。组网 IP 由组网控制平面分配。手动地址与设备自动上报地址独立保存。
+
+## 独立 Web 应用
+
+在目标设备的“进程与服务”找到 HTTP / HTTPS 端口，点击加号添加到“我的应用”。也可手动填写“当前主机端口”。在 Client 的远端工作区点击“打开应用”后，ORH 在控制端建立独立的本地访问地址，经目标 Agent 的认证连接转发到服务端口。已有应用入口可以直接使用更新后的连接方式。
+
+- 目标服务需要正在运行，并监听 `127.0.0.1` 或全部网卡。此方式支持仅本机监听的 Web 服务。
+- 服务可以使用相对路径、WebSocket 和自己的登录认证。若应用配置了固定公网域名、绝对回调地址或 Host 白名单，需要按该应用的配置方式允许当前访问地址。
+- HTTPS 服务仍由浏览器验证其证书。绑定固定域名和证书的服务可使用“自定义网址”。
+- 从普通浏览器直接访问备用网络的 Agent Web 页面时，“当前主机端口”使用目标主机地址，服务需要允许该网络访问，目标防火墙需放行服务端口。
+
+本地局域网、节点小宝、网络代理、远程桌面是独立模块。节点小宝继续由其客户端管理。远程桌面页的连接按钮复用 ORH 控制端通道，目标设备需启用 RustDesk IP 直连。
+
+DSH 在目标电脑安装 DeepSeek Harness 后，可从“功能管理”启用。ORH 自动检测桌面版或命令行安装，首次进入使用原生工作台配置模型账号。认证异常可在模块内恢复，单独重启 DSH 会提示正在运行的模型任务受到影响。
 
 ## Web 控制台、备用网络与离线恢复
 

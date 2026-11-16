@@ -38,3 +38,36 @@ def test_custom_address_and_name_order(workspace):
     for name,url in [('zeta','https://example.org/path?q=1#section'),('Alpha','http://[::1]:3000/')]:
         assert client.post('/api/applications',json=dict(name=name,mode='custom',url=url)).status_code == 200
     assert [row['name'] for row in client.get('/api/applications').json()['applications']] == ['Alpha','zeta']
+
+
+def test_saved_service_tunnel_is_authenticated_and_carries_raw_http(workspace,monkeypatch):
+    import socketserver
+    import threading
+    from starlette.websockets import WebSocketDisconnect
+    from app import main, modules
+    client,_,_ = workspace
+    monkeypatch.setattr(modules,'enabled',lambda key:True)
+    payload=b'x'*70000
+    class Service(socketserver.BaseRequestHandler):
+        def handle(self):
+            request=self.request.recv(65536)
+            assert b'GET / HTTP/1.1' in request
+            self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 70000\r\n\r\n'+payload)
+    with socketserver.TCPServer(('127.0.0.1',0),Service) as server:
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        saved=client.post('/api/applications',json=dict(name='本机服务',port=server.server_address[1])).json()
+        path=f'ws://127.0.0.1:{main.PORT}/api/applications/'+saved['id']+'/tunnel'
+        origin=f'http://127.0.0.1:{main.PORT}'
+        try:
+            with pytest.raises(WebSocketDisconnect):
+                with client.websocket_connect(path,headers={'Origin':'http://evil.test'}):pass
+            with client.websocket_connect(path,headers={'Origin':origin}) as ws:
+                ws.send_bytes(b'GET / HTTP/1.1\r\nHost: app.localhost\r\n\r\n')
+                received=b''
+                while not received.endswith(payload):received+=ws.receive_bytes()
+                assert received.endswith(payload)
+            client.post('/api/logout',json={})
+            with pytest.raises(WebSocketDisconnect):
+                with client.websocket_connect(path,headers={'Origin':origin}):pass
+        finally:
+            server.shutdown();thread.join()

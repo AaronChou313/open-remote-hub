@@ -9,6 +9,7 @@ let devices = [];
 let mutating = false;
 let refreshRequest;
 let intent;
+let invitationRequired = true;
 const icon = name => `<svg aria-hidden="true"><use href="./icons.svg#${name}"></use></svg>`;
 
 async function api(path, body, method = body === undefined ? 'GET' : 'POST') {
@@ -42,9 +43,9 @@ async function action(button, work) {
 function loginPage(register = false) {
   user = null;
   refreshRequest = null;
-  document.querySelector('main').innerHTML = `<section class="cloud-login"><h1>OpenRemoteHub Cloud</h1><p class="muted">${register ? '创建账号，连接你的设备。' : '登录后访问你的设备。'}</p><form id="cloudLoginForm"><label for="cloudUsername">账号</label><input id="cloudUsername" autocomplete="username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_.@+\\-]*" placeholder="用户名或邮箱"><label for="cloudPassword">密码</label><input id="cloudPassword" type="password" autocomplete="${register ? 'new-password' : 'current-password'}" required maxlength="1024">${register ? '<label for="cloudInvitation">邀请码</label><input id="cloudInvitation" required maxlength="128" autocomplete="off">' : ''}<p id="cloudNotice" class="notice" role="alert" hidden></p><button class="primary" id="cloudLoginSubmit">${register ? '注册并登录' : '登录'}</button></form><button class="text-button" id="cloudSwitch">${register ? '已有账号，去登录' : '注册账号'}</button><details class="cloud-server"><summary>Cloud 服务地址</summary><input id="cloudServer" type="url" value="${escapeHTML(base)}" aria-label="Cloud 服务地址"></details></section>`;
+  document.querySelector('main').innerHTML = `<section class="cloud-login"><h1>OpenRemoteHub Cloud</h1><p class="muted">${register ? '创建账号，连接你的设备。' : '登录后访问你的设备。'}</p><form id="cloudLoginForm"><label for="cloudUsername">账号</label><input id="cloudUsername" autocomplete="username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9][A-Za-z0-9_.@+\\-]*" placeholder="用户名或邮箱"><label for="cloudPassword">密码</label><input id="cloudPassword" type="password" autocomplete="${register ? 'new-password' : 'current-password'}" required maxlength="1024">${register && invitationRequired ? '<label for="cloudInvitation">邀请码</label><input id="cloudInvitation" required maxlength="128" autocomplete="off"><p class="muted">此服务启用了邀请注册，请向 Cloud 服务管理员获取邀请码。</p>' : ''}<p id="cloudNotice" class="notice" role="alert" hidden></p><button class="primary" id="cloudLoginSubmit">${register ? '注册并登录' : '登录'}</button></form><button class="text-button" id="cloudSwitch">${register ? '已有账号，去登录' : '注册账号'}</button><details class="cloud-server"><summary>Cloud 服务地址</summary><input id="cloudServer" type="url" value="${escapeHTML(base)}" aria-label="Cloud 服务地址"></details></section>`;
   $('#cloudAccount')?.remove();
-  $('#cloudSwitch').onclick = () => loginPage(!register);
+  $('#cloudSwitch').onclick = () => { history.replaceState(null, '', register ? location.pathname : '#register'); loginPage(!register); };
   $('#cloudLoginForm').onsubmit = async event => {
     event.preventDefault();
     const submit = $('#cloudLoginSubmit');
@@ -55,7 +56,7 @@ function loginPage(register = false) {
       if (base !== url.origin) {token = ''; localStorage.removeItem('orh-cloud-token');}
       base = url.origin;
       localStorage.setItem('orh-cloud-url',base);
-      const result = await api(register ? '/api/register' : '/api/login', {username:$('#cloudUsername').value.trim(),password:$('#cloudPassword').value,...(register ? {invitation:$('#cloudInvitation').value.trim()} : {})});
+      const result = await api(register ? '/api/register' : '/api/login', {username:$('#cloudUsername').value.trim(),password:$('#cloudPassword').value,...(register ? {invitation:$('#cloudInvitation')?.value.trim() || ''} : {})});
       token = result.token; user = result.user;
       localStorage.setItem('orh-cloud-token',token);
       await dashboard();
@@ -206,8 +207,13 @@ async function start() {
   try {
     const config = await fetch('./cloud-config.json',{cache:'no-store'}).then(response=>response.json());
     base = config.url || base;
+    invitationRequired = config.invitation_required !== false;
   } catch { /* A user can select another endpoint in the login form. */ }
   base = localStorage.getItem('orh-cloud-url') || base;
+  try {
+    const config = await fetch(base + '/cloud-config.json', {credentials:'omit', signal:AbortSignal.timeout(10000)}).then(response => response.json());
+    invitationRequired = config.invitation_required !== false;
+  } catch { /* The registration API reports the selected server policy if it is temporarily unavailable. */ }
   setTheme((localStorage.getItem('openremotehub.portal.theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light')) === 'dark');
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.has('bind')) intent = {bind:hash.get('bind')};
@@ -221,6 +227,7 @@ async function start() {
     try {intent = JSON.parse(sessionStorage.getItem('orh-cloud-intent') || 'null');} catch {intent=null;}
   }
   document.querySelector('footer').innerHTML = '<span>OpenRemoteHub Cloud</span><span>账号与设备元数据</span>';
+  if (location.hash === '#register') { loginPage(true); return; }
   if (token) {
     try {user = await api('/api/me'); await dashboard(); return;} catch (error) {loginPage(); message(error.message,true); return;}
   }

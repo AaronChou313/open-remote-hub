@@ -68,3 +68,11 @@ Client 以账号指纹绑定私有设备目录缓存。Cloud 返回连接失败�
 ## Android 与系统 VPN 并行
 
 `mesh/mobile` 使用应用内 tsnet。Android Manifest 仅声明 `connectedDevice` 前台 Mesh 服务，保持系统 VPN 槽位可用。`MeshService` 与 Activity 独立，使用既有网络重绑定、前台通知及活动转发保活。通用本地 TCP 转发为外部 App 提供接入。Activity 切换与销毁仅关闭界面资源。
+
+## 控制端服务入口
+
+控制台网关 `/__remotehub__/open` 在当前查看设备执行，核验目标 Agent 现有登录会话及设备 ID。远程桌面入口创建控制端到目标 Mesh `21118` 的通用 TCP 转发，与设备列表使用相同路径。
+
+已保存的“当前主机端口”应用通过 Agent `/api/applications/{id}/tunnel` 的二进制 WebSocket 传输 TCP 数据。Agent 核验现有会话、来源与已启用模块，从目标私有应用记录读取端口并连接本机回环地址。控制端以独立 `app-设备ID-应用ID.localhost` 主机名提供原始服务，应用自己的 HTTP Cookie 与 ORH 控制台 Cookie 按主机隔离。HTTP、HTTPS 和应用 WebSocket 均通过同一字节通道传输，目标服务无需另行发布 Mesh 端口。Cloud 继续仅提供账号及设备元数据。
+
+DSH 状态检测会通过官方 launch token 恢复本机 Cookie。源码版迁移遗漏认证时，可从同用户、通过 PID 和创建时间验证的 ORH DSH supervisor 接续私有认证记录。原进程继续运行，后续 Cookie 刷新由安装版保存。认证失败时提供明确状态及恢复按钮，单独重启仅作用于 ORH 管理的 DSH supervisor。

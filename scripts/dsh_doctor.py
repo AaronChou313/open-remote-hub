@@ -78,7 +78,7 @@ def line(report):
 def restart_console(port, wait=15):
     if sys.platform != "darwin":
         return False
-    label = "local.openremotehub"
+    label = "top.openremotehub.agent" if (Path.home()/"Library/LaunchAgents/top.openremotehub.agent.plist").exists() else "local.openremotehub"
     result = subprocess.run(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"], capture_output=True, text=True)
     if result.returncode != 0:
         return False

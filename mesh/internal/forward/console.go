@@ -194,6 +194,10 @@ func (m *Manager) CreateConsole(ctx context.Context, ip, expectedDevice string) 
 				http.Error(w, "控制台请求来源无效", http.StatusForbidden)
 				return
 			}
+			if target == mainTarget && r.URL.Path == "/__remotehub__/open" {
+				m.openService(w, r, ip, identity.InstanceID, mainTarget, client)
+				return
+			}
 			link := r.Context().Value(connectionKey{}).(*consoleConn)
 			// ReverseProxy serves a hijacked WebSocket until its bidirectional relay ends.
 			websocket := strings.EqualFold(r.Header.Get("Upgrade"), "websocket")

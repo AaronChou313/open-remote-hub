@@ -58,6 +58,9 @@ def setup_service():
                     if (source / name).is_file():
                         shutil.copy2(source / name, runtime / name)
             if source:
+                for name in ('dsh-auth.json', 'dsh-process.json'):
+                    if (source / name).is_file() and not (runtime / name).exists():
+                        shutil.copy2(source / name, runtime / name)
                 for name in ('connection.json', 'profiles.json'):
                     old = source / 'proxy' / name
                     target = runtime / 'proxy' / name

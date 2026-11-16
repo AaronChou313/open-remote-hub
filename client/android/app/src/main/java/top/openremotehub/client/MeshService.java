@@ -51,7 +51,7 @@ public final class MeshService extends Service {
                 if (connected || SystemClock.elapsedRealtime() < desktopStartingUntil) {
                     holdLocks();
                     getSharedPreferences("desktop", MODE_PRIVATE).edit().putLong("until", System.currentTimeMillis() + 300_000).apply();
-                    notice(connected ? "远程桌面转发中，收尾时请返回 ORH 断开" : "ORH 正在运行，点击管理设备");
+                    notice(connected ? "设备通道活动中，返回 ORH 可管理连接" : "ORH 正在运行，点击管理设备");
                 } else {
                     releaseLocks();
                     notice("ORH 正在运行，点击管理设备");

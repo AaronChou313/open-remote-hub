@@ -13,6 +13,7 @@ window.RemoteHubLocalServices = (() => {
   const localBrowser = () => ['localhost','127.0.0.1','[::1]','::1'].includes(location.hostname);
 
   function entryUrl(endpoint) {
+    if (RemoteHubApplications.meshGateway()) return null;
     if (endpoint.binding === 'loopback' && !localBrowser()) return null;
     const hostname = endpoint.binding === 'loopback' ? endpoint.address : location.hostname;
     return RemoteHubApplications.url({mode:'host',scheme:endpoint.protocol,port:endpoint.port,path:'/'},hostname);
@@ -35,7 +36,7 @@ window.RemoteHubLocalServices = (() => {
     const label = `${address.includes(':')?'['+address+']':address}:${endpoint.port}`;
     if (!isWeb(endpoint)) return `<span class="service-tcp mono">${esc(label)}<small>TCP</small></span>`;
     const target = entryUrl(endpoint);
-    return `<span class="service-web-entry">${target ? `<a href="${esc(target)}" target="_blank" rel="noopener" title="${esc(endpoint.protocol.toUpperCase()+' '+endpoint.http_status)}">${esc(endpoint.protocol.toUpperCase())} :${endpoint.port}${icon('external')}</a>` : `<span title="仅在宿主机本地监听">${esc(endpoint.protocol.toUpperCase())} :${endpoint.port} · 仅本机</span>`}${me.role === 'admin' ? `<button data-service-add="${index}" type="button" aria-label="将端口 ${endpoint.port} 添加到我的应用" title="添加到我的应用">${icon('plus')}</button>` : ''}</span>`;
+    return `<span class="service-web-entry">${target ? `<a href="${esc(target)}" target="_blank" rel="noopener" title="${esc(endpoint.protocol.toUpperCase()+' '+endpoint.http_status)}">${esc(endpoint.protocol.toUpperCase())} :${endpoint.port}${icon('external')}</a>` : `<span title="${RemoteHubApplications.meshGateway()?'添加到我的应用后可通过 ORH 通道打开':'仅在宿主机本地监听'}">${esc(endpoint.protocol.toUpperCase())} :${endpoint.port}${RemoteHubApplications.meshGateway()?' · 添加应用以打开':' · 仅本机'}</span>`}${me.role === 'admin' ? `<button data-service-add="${index}" type="button" aria-label="将端口 ${endpoint.port} 添加到我的应用" title="添加到我的应用">${icon('plus')}</button>` : ''}</span>`;
   }
 
   function draw() {

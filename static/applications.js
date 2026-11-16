@@ -7,11 +7,29 @@ window.RemoteHubApplications = (() => {
   let query = '';
   let category = '';
   let applications = [];
+  const meshGateway = () => location.hostname.startsWith('orh-') && location.hostname.endsWith('.localhost');
+
+  async function openService(kind, id) {
+    const response = await fetch('/__remotehub__/open', {method:'POST', headers:{'Content-Type':'application/json','X-ORH-Request':'1'}, body:JSON.stringify({kind,id})});
+    const result = await response.json();
+    if (!response.ok) throw Error(result.detail || '无法建立服务通道');
+    return result.url;
+  }
+
+  function nativeOpen(address) {
+    if (window.ORHAndroid?.openService) { window.ORHAndroid.openService(address); return true; }
+    if (window.pywebview?.state) { window.pywebview.state.service_request = {url:address, sequence:performance.now()}; return true; }
+    return false;
+  }
 
   function url(entry, hostname = location.hostname) {
     if (entry.mode === 'custom') return entry.url;
     const host = hostname.includes(':') && !hostname.startsWith('[') ? '[' + hostname + ']' : hostname;
     return new URL(entry.path || '/', `${entry.scheme || 'http'}://${host}:${entry.port}/`).href;
+  }
+
+  function address(entry) {
+    return entry.mode === 'host' && meshGateway() ? `${entry.scheme.toUpperCase()} :${entry.port}${entry.path || '/'} · ORH 私网通道` : url(entry);
   }
 
   async function render(check) {
@@ -30,7 +48,7 @@ window.RemoteHubApplications = (() => {
 
   function draw() {
     const rows = applications.filter(entry => (!category || entry.group === category) && `${entry.name} ${entry.group} ${url(entry)}`.toLowerCase().includes(query.toLowerCase()));
-    $('#appEntries').innerHTML = rows.length ? `<div class="application-grid">${rows.map(entry => `<article class="application-card" data-application="${entry.id}"><div class="application-heading"><span>${icon('applications')}</span><h2>${esc(entry.name)}</h2>${entry.group ? `<small>${esc(entry.group)}</small>` : ''}</div><p class="application-address mono">${esc(url(entry))}</p><div class="application-actions"><a class="button primary" href="${esc(url(entry))}" target="_blank" rel="noopener">${icon('external')}打开应用</a>${me.role === 'admin' ? `<button data-application-action="edit">${icon('rename')}编辑</button><button data-application-action="remove" class="danger">${icon('delete')}移除</button>` : ''}</div></article>`).join('')}</div>` : empty(query || category ? '没有匹配的应用' : '添加常用 Web 服务，或从“本地服务”中添加入口。');
+    $('#appEntries').innerHTML = rows.length ? `<div class="application-grid">${rows.map(entry => `<article class="application-card" data-application="${entry.id}"><div class="application-heading"><span>${icon('applications')}</span><h2>${esc(entry.name)}</h2>${entry.group ? `<small>${esc(entry.group)}</small>` : ''}</div><p class="application-address mono">${esc(address(entry))}</p><div class="application-actions"><a class="button primary" href="${esc(entry.mode === 'host' && meshGateway() ? '#' : url(entry))}" target="_blank" rel="noopener">${icon('external')}打开应用</a>${me.role === 'admin' ? `<button data-application-action="edit">${icon('rename')}编辑</button><button data-application-action="remove" class="danger">${icon('delete')}移除</button>` : ''}</div></article>`).join('')}</div>` : empty(query || category ? '没有匹配的应用' : '添加 Web 服务，或从“进程与服务”中添加。使用 Client 访问远端设备时会自动建立私网通道。');
     $('#appEntries').querySelectorAll('[data-application-action]').forEach(button => {
       button.onclick = async () => {
         const entry = rows.find(item => item.id === button.closest('[data-application]').dataset.application);
@@ -42,6 +60,21 @@ window.RemoteHubApplications = (() => {
             notify('应用入口已移除');
           }
         } catch (error) { showError(error); }
+      };
+    });
+    if (meshGateway()) $('#appEntries').querySelectorAll('.application-actions a').forEach(anchor => {
+      const entry = rows.find(item => item.id === anchor.closest('[data-application]').dataset.application);
+      if (entry.mode !== 'host') return;
+      anchor.onclick = async event => {
+        event.preventDefault();
+        const native = Boolean(window.ORHAndroid?.openService || window.pywebview?.state);
+        const popup = native ? null : window.open('about:blank', '_blank');
+        try {
+          const target = await withBusy(anchor, 'application:open:' + entry.id, '连接中…', () => openService('application', entry.id));
+          if (nativeOpen(target)) return;
+          if (popup) { popup.opener = null; popup.location.replace(target); }
+          else location.assign(target);
+        } catch (error) { popup?.close(); showError(error); }
       };
     });
   }
@@ -60,7 +93,7 @@ window.RemoteHubApplications = (() => {
       <label for="appMode">访问地址</label><select id="appMode" name="mode"><option value="host" ${value.mode === 'host' ? 'selected' : ''}>当前主机端口</option><option value="custom" ${value.mode === 'custom' ? 'selected' : ''}>自定义网址</option></select>
       <div data-host-fields><div class="entry-form-grid"><label>协议<select name="scheme"><option value="http" ${value.scheme === 'http' ? 'selected' : ''}>HTTP</option><option value="https" ${value.scheme === 'https' ? 'selected' : ''}>HTTPS</option></select></label><label>端口<input name="port" type="number" min="1" max="65535" value="${esc(value.port || '')}" placeholder="例如 3000"></label></div><label>路径<input name="path" value="${esc(value.path || '/')}" placeholder="/"></label></div>
       <label data-custom-fields>网址<input name="url" type="url" value="${esc(value.url || '')}" placeholder="https://example.com/"></label>
-      <label>分组<input name="group" maxlength="80" value="${esc(value.group || '')}" placeholder="可选"></label><p id="appUrlPreview" class="entry-url-preview mono"></p>${preset.binding === 'loopback' ? '<p class="muted entry-form-note">此服务仅监听宿主机回环地址，远程直连需在该服务中启用局域网监听。</p>' : ''}<p class="entry-form-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary" type="submit">${entry ? '保存' : '添加应用'}</button></div></form>`;
+      <label>分组<input name="group" maxlength="80" value="${esc(value.group || '')}" placeholder="可选"></label><p id="appUrlPreview" class="entry-url-preview mono"></p>${preset.binding === 'loopback' ? '<p class="muted entry-form-note">此服务仅监听主机回环地址。通过 ORH Client 打开时会建立认证通道，直接使用局域网地址访问需在该服务中启用局域网监听。</p>' : ''}<p class="entry-form-error" role="alert" hidden></p><div class="dialog-actions"><button class="primary" type="submit">${entry ? '保存' : '添加应用'}</button></div></form>`;
     const form = dialog.querySelector('form');
     const update = () => {
       const custom = form.elements.mode.value === 'custom';
@@ -72,7 +105,7 @@ window.RemoteHubApplications = (() => {
       for (const name of ['scheme','port','path']) form.elements[name].disabled = custom;
       try {
         const values = Object.fromEntries(new FormData(form));
-        $('#appUrlPreview').textContent = custom ? values.url : values.port ? url(values) : '主机地址随当前控制台访问地址变化';
+        $('#appUrlPreview').textContent = custom ? values.url : values.port ? address(values) : '填写目标设备上的服务端口';
       } catch { $('#appUrlPreview').textContent = ''; }
     };
     form.oninput = update;
@@ -104,5 +137,5 @@ window.RemoteHubApplications = (() => {
 
   function canLeave() { return !saving; }
   function reset() { if (dialog?.open) dialog.close(); current = () => false; }
-  return {render, url, addFromService:preset=>edit(null,preset), canLeave, reset, isOpen:()=>Boolean(dialog?.open)};
+  return {render, url, meshGateway, openService, nativeOpen, addFromService:preset=>edit(null,preset), canLeave, reset, isOpen:()=>Boolean(dialog?.open)};
 })();

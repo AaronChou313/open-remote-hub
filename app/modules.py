@@ -17,6 +17,8 @@ CATALOG = {
     'terminal': ('终端', 'zellij', 'terminal', ('Darwin', 'Linux', 'Windows')),
     'files': ('文件管理', 'files', 'files', ('Darwin', 'Linux', 'Windows')),
     'docker': ('Docker', 'docker', 'docker', ('Darwin', 'Linux', 'Windows')),
+    'lan': ('本地局域网', None, 'lan', ('Darwin', 'Linux', 'Windows')),
+    'nodebaby': ('节点小宝', 'nodebaby', 'nodebaby', ('Darwin', 'Linux')),
     'desktop': ('远程桌面', 'rustdesk', 'desktop', ('Darwin', 'Linux', 'Windows')),
     'ssh': ('SSH 管理', 'ssh', 'ssh', ('Darwin', 'Linux')),
     'services': ('进程与服务', None, 'services', ('Darwin', 'Linux', 'Windows')),
@@ -33,8 +35,9 @@ GUIDES = {
     'rustdesk': ('安装 RustDesk 并启用直连访问；被控 macOS 还需屏幕录制和辅助功能权限。', 'https://rustdesk.com/download', ''),
     'ssh': ('安装 OpenSSH 客户端。', 'https://www.openssh.com/portable.html', ''),
     'git': ('安装 Git 后重新检测。', 'https://git-scm.com/downloads', ''),
-    'dsh': ('安装 DeepSeek Harness 后配置 ORH_DSH_BIN，然后重新检测。', 'https://www.npmjs.com/package/@deepseek-ai/dsh', ''),
-    'proxy': ('启用后在「网络连接 → 网络代理」点击「安装 Mihomo」，并在目标主机完成一次管理员授权。', '', ''),
+    'dsh': ('安装 DeepSeek Harness 桌面版或 dsh 命令后重新检测，ORH 会自动识别。首次进入原生工作台后完成模型账号配置。', 'https://www.npmjs.com/package/@deepseek-ai/dsh', ''),
+    'nodebaby': ('安装并登录节点小宝客户端，再回到此处重新检测。', 'https://yc.iepose.com/', ''),
+    'proxy': ('启用后在「网络代理」点击「安装 Mihomo」，并在目标主机完成一次管理员授权。', '', ''),
 }
 
 
@@ -47,11 +50,16 @@ def load():
     path = state_path()
     with lock:
         if path.exists():
-            return json.loads(path.read_text(encoding='utf-8'))
+            value = json.loads(path.read_text(encoding='utf-8'))
+            if 'lan' not in value:
+                value['lan'] = True
+                value['nodebaby'] = value.get('desktop', False)
+                save(value)
+            return value
         # Existing installations retain their available entry points. A fresh
         # Agent initializes this file before its first account login.
         legacy = any((path.parent / name).exists() for name in ('credentials.json', 'cloud-binding.json'))
-        value = {name: legacy or name in ('terminal','files','services') for name in CATALOG}
+        value = {name: legacy or name in ('terminal','files','services','lan') for name in CATALOG}
         save(value)
         return value
 
@@ -71,6 +79,10 @@ def enabled(identifier):
 def dependency(identifier):
     if identifier is None or identifier == 'files':
         return dict(available=True, detail='宿主机内置能力')
+    if identifier == 'nodebaby':
+        from app.remote_connect.nodebaby import status
+        value = status()
+        return dict(available=value['ready'], detail='节点小宝本地接口已连接' if value['ready'] else '请安装并登录节点小宝客户端')
     if identifier == 'conpty':
         present = importlib.util.find_spec('winpty') is not None
         return dict(available=present, detail='ConPTY / PowerShell' if present else '缺少 pywinpty')
@@ -127,8 +139,9 @@ def for_path(path):
     groups = {
         'terminal': ('/api/zellij', '/api/zellij-web', '/terminal'),
         'files': ('/api/files',), 'docker': ('/api/docker',),
+        'lan': ('/api/remote-connect/lan',), 'nodebaby': ('/api/remote-connect/nodebaby',),
         'desktop': ('/api/remote-connect/rustdesk',), 'ssh': ('/api/ssh',),
-        'services': ('/api/local-services', '/api/services', '/api/tasks'),
+        'services': ('/api/local-services', '/api/services', '/api/tasks', '/api/applications'),
         'projects': ('/api/projects',), 'environments': ('/api/environments',),
         'knowledge': ('/api/knowledge',), 'dsh': ('/api/dsh',), 'proxy': ('/api/proxy',),
     }

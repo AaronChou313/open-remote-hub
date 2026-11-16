@@ -13,8 +13,8 @@ from test_files import workspace
 def test_fresh_core_has_no_optional_requirements(tmp_path, monkeypatch):
     monkeypatch.setattr(main, 'DATA', tmp_path)
     monkeypatch.setattr(modules, 'dependency', lambda value: {'available':False,'detail':'not installed'})
-    assert {name for name,enabled in modules.load().items() if enabled}=={'terminal','files','services'}
-    assert all(value['state']=='disabled' for value in modules.listing()['modules'] if value['id'] not in ('terminal','files','services'))
+    assert {name for name,enabled in modules.load().items() if enabled}=={'terminal','files','services','lan'}
+    assert all(value['state']=='disabled' for value in modules.listing()['modules'] if value['id'] not in ('terminal','files','services','lan'))
     with pytest.raises(HTTPException) as error:
         modules.require('docker')
     assert error.value.status_code == 409

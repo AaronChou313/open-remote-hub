@@ -5,18 +5,9 @@ window.RemoteHubRemoteConnect = (() => {
   let state;
   let original = {};
   let effectiveOriginal = {};
-  let tab = "lan";
-  let requestedTab;
-  let proxyVersion = 0;
   let operation = false;
   let dirty = false;
   let loadingSettings = false;
-  let tailDirty = false;
-  let tailOriginal = {};
-  let network;
-  let lanUrls = [];
-  let query = "";
-  let onlyOnline = false;
   let expectedDisconnect = false;
   const rdApi = (path, body) => api("/remote-connect/rustdesk" + path, body);
   const confirm = (title, message) => confirmAction(title, message);
@@ -40,22 +31,7 @@ window.RemoteHubRemoteConnect = (() => {
       }
     }
   }
-  async function copy(value) {
-    if (navigator.clipboard && window.isSecureContext)
-      return navigator.clipboard.writeText(value);
-    const input = document.createElement("textarea");
-    input.value = value;
-    input.setAttribute("readonly", "");
-    document.body.append(input);
-    input.select();
-    const copied = document.execCommand("copy");
-    input.remove();
-    if (!copied) throw Error("复制未成功，请手动选中内容复制");
-  }
-  async function renderProxy() {
-    const version = ++proxyVersion;
-    return RemoteHubProxy.render(() => current() && tab === "proxy" && version === proxyVersion, "#rcNetworkProxy");
-  }
+  const copy = value => copyText(value);
   function bindRustdesk() {
     let statusRequest;
     function updateStatus(value) {
@@ -73,13 +49,10 @@ window.RemoteHubRemoteConnect = (() => {
       );
       $("#rcDeviceId").value = value.device_id || "—";
       $("#rcCopyId").disabled = !value.device_id;
-      $("#rcConnectHere").href = value.device_id
-        ? "rustdesk://connection/new/" + encodeURIComponent(value.device_id)
-        : "#";
-      $("#rcConnectHere").setAttribute(
-        "aria-disabled",
-        String(!value.device_id),
-      );
+      const host = location.hostname;
+      const port = original["direct-access-port"] || "21118";
+      $("#rcConnectHere").href = "rustdesk://connection/new/" + encodeURIComponent((host.includes(":") ? "[" + host + "]" : host) + ":" + port);
+      $("#rcConnectHere").setAttribute("aria-disabled", String(!value.ready));
       $("#rcVersion").textContent = value.version
         ? "v" + value.version
         : value.installed
@@ -113,15 +86,11 @@ window.RemoteHubRemoteConnect = (() => {
     async function refresh() {
       if (statusRequest) return statusRequest;
       const owner = current;
-      const request = api("/remote-connect").then((data) => {
+      const request = rdApi("").then((data) => {
         if (!owner()) return;
-        updateStatus(data.rustdesk);
-        RemoteHubNodeBaby.update(data.nodebaby);
-        updateNetwork(data.tailscale, data.lan_urls);
-        updateOrn(data.mesh);
+        updateStatus(data);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
-        if (tab === "overview" && data.rustdesk.ready) return loadSettings();
-        if (tab === "lan") return RemoteHubLAN.refresh();
+        if (data.ready) return loadSettings();
       });
       statusRequest = request;
       try {
@@ -136,7 +105,13 @@ window.RemoteHubRemoteConnect = (() => {
         notify("ID 已复制");
       });
     $("#rcConnectHere").onclick = (event) => {
-      if (!state?.device_id) event.preventDefault();
+      event.preventDefault();
+      if (!state?.ready) return;
+      busy($("#rcConnectHere"), async () => {
+        const target = RemoteHubApplications.meshGateway()
+          ? await RemoteHubApplications.openService("desktop", "") : $("#rcConnectHere").href;
+        if (!RemoteHubApplications.nativeOpen(target)) location.assign(target);
+      });
     };
     $("#rcOpenNative").onclick = () =>
       busy($("#rcOpenNative"), async () => {
@@ -287,57 +262,6 @@ window.RemoteHubRemoteConnect = (() => {
       const patch = changes();
       if (Object.keys(patch).length) busy($("#rcSaveSettings"), () => saveSettings(patch));
     };
-    async function selectTab(next, button) {
-      return busy(button, async () => {
-          if (next === tab) return;
-          if (tab === "proxy" && !await RemoteHubProxyManager.canLeave()) return;
-          if (tab === "proxy") proxyVersion++;
-          if (
-            (dirty || tailDirty) &&
-            !(await confirm(
-              "放弃未保存的修改",
-              "离开设置将丢弃本次尚未保存的修改。",
-            ))
-          )
-            return;
-          if (dirty) fillSettings(original, effectiveOriginal, false);
-          if (next === "overview" && state?.ready) await loadSettings();
-          else {
-            dirty = false;
-            $("#rcDirty").hidden = true;
-          }
-          if (tailDirty && network?.preferences)
-            fillTailPreferences(network.preferences);
-          tailDirty = false;
-          tab = next;
-          $("#rcRoot").dataset.tab = next;
-          document.querySelectorAll("[data-rc-card]").forEach((card) => {
-            card.hidden = card.dataset.rcCard !== next;
-          });
-          $("#rcLAN").hidden = next !== "lan";
-          $("#rcNetworkProxy").hidden = next !== "proxy";
-          $("#rcNetwork").hidden = next !== "network";
-          $("#rcNodeBaby").hidden = next !== "nodebaby";
-          if (next === "nodebaby") RemoteHubNodeBaby.maybeCheck();
-          $("#rcOverview").hidden = next !== "overview";
-
-          document
-            .querySelectorAll("[data-rc-tab]")
-            .forEach((item) =>
-              item.classList.toggle("active", item.dataset.rcTab === next),
-            );
-          if (next === "network") await loadMeshConfig();
-          if (next === "lan") await RemoteHubLAN.refresh();
-          if (next === "proxy") await renderProxy();
-          window.scrollTo?.(0, 0);
-      });
-    }
-    document.querySelectorAll("[data-rc-open]").forEach((button) => {
-      button.onclick = () => selectTab(button.dataset.rcOpen, button);
-    });
-    document.querySelectorAll("[data-rc-tab]").forEach((button) => {
-      button.onclick = () => selectTab(button.dataset.rcTab, button);
-    });
     $("#rcChangePassword").onclick = () => {
       $("#rcPasswordForm").reset();
       $("#rcPasswordError").hidden = true;
@@ -386,20 +310,11 @@ window.RemoteHubRemoteConnect = (() => {
         await refresh();
       });
 
-    return { refresh, selectTab, settle: () => statusRequest || Promise.resolve() };
+    return { refresh, settle: () => statusRequest || Promise.resolve() };
   }
 
   function markup() {
-    return `<div id="rcRoot" class="remote-connect" data-tab="lan">
-<div class="workspace-tabs rc-tabs" role="group" aria-label="网络连接管理"><button data-rc-tab="lan" class="active">${icon("network")}本地局域网</button><button data-rc-tab="nodebaby">${icon("link")}节点小宝</button><button data-rc-tab="proxy">${icon("settings")}网络代理</button><button data-rc-tab="overview">${icon("server")}RustDesk</button></div>
-${RemoteHubLAN.markup()}
-<section id="rcNetworkProxy" hidden></section>
-${RemoteHubNodeBaby.markup()}
-<section id="rcNetwork" hidden><div id="rcNetworkNotice" class="notice" hidden></div><div class="mesh-hero"><div class="mesh-hero-head"><span id="rcHeroDot" class="mesh-dot"></span><div><h2>组网</h2><p id="rcOrnHost" class="muted">—</p></div><div class="rc-tail-actions"><button id="rcTailToggle" class="primary" disabled>读取状态…</button><button id="rcTailReconnect" disabled>${icon("refresh")}重新连接</button><button id="rcTailNetcheck" disabled>${icon("diagnose")}网络诊断</button><button id="rcOrnTakeover" class="button" hidden>由 ORH 托管组网</button><a id="rcTailLogin" class="button" target="_blank" rel="noopener" hidden>登录组网 ${icon("external")}</a><a class="button" href="https://cloud.openremotehub.top/" target="_blank" rel="noopener">设备目录 ${icon("external")}</a></div></div><p id="rcTailOperation" class="muted" hidden></p><p id="rcTailErrors" role="alert" class="rc-error" hidden></p></div><details class="rc-network-details"><summary>本机组网设置</summary><dl class="rc-tail-identity"><div><dt>设备名称</dt><dd id="rcTailHostname">—</dd></div><div><dt>MagicDNS</dt><dd id="rcTailDns" class="mono">—</dd></div><div><dt>组网</dt><dd id="rcTailNetwork">—</dd></div><div><dt>版本</dt><dd id="rcTailVersion">—</dd></div></dl><form id="rcTailSettings"><div class="rc-tail-preferences"><label class="switch-row"><span>使用组网 DNS</span><input type="checkbox" data-tail-option="accept-dns"></label><label class="switch-row"><span>接收子网路由</span><input type="checkbox" data-tail-option="accept-routes"></label><label class="switch-row"><span>拦截组网入站连接</span><input type="checkbox" data-tail-option="shields-up"></label><label class="switch-row"><span>使用出口节点时保留局域网访问</span><input type="checkbox" data-tail-option="exit-node-allow-lan-access"></label><label>出口节点<select id="rcExitNode" data-tail-option="exit-node"><option value="">不使用出口节点</option></select></label></div><div class="rc-form-actions"><span id="rcTailDirty" class="muted" hidden>尚未保存</span><button id="rcTailSave" type="submit" class="primary" disabled>保存组网设置</button></div></form></details>
-<details class="rc-network-details rc-orn-admin"><summary>组网管理</summary><p class="muted">组网地址由控制服务自动分配；这里修改设备名称、控制服务和本机发布到组网的端口，保存后会重启组网组件。其他设备的改名或解绑请在 Cloud 设备目录完成。</p><form id="rcOrnForm"><label>设备名称<input id="rcOrnHostname" maxlength="63" required autocomplete="off"></label><label>控制服务<input id="rcOrnControl" required autocomplete="off"></label><label>发布端口<textarea id="rcOrnPublish" rows="3" spellcheck="false" placeholder="8765=127.0.0.1:8765"></textarea></label><div class="rc-form-actions"><span id="rcOrnNotice" class="muted" hidden></span><button id="rcOrnSave" type="submit" class="primary">保存并重启</button><button id="rcOrnRestart" type="button">重启组网</button><button id="rcOrnLeave" type="button" class="rc-destructive">解绑本机设备</button></div></form></details>
-<div class="rc-peer-toolbar"><input id="rcPeerSearch" type="search" aria-label="搜索组网设备" placeholder="搜索设备名称或组网地址"><label class="rc-online-filter"><input id="rcOnlyOnline" type="checkbox">仅在线设备</label></div><div id="rcPeerList" class="rc-peers"></div>
-</section>
-        <section id="rcOverview" hidden>
+    return `<div id="rcRoot" class="remote-connect" data-tab="overview"><section id="rcOverview">
           <article class="panel rd-connection">
             <div class="section-heading"><h2>连接信息</h2><span id="rcOnline" class="badge">—</span><span id="rcVersion" class="version-label">—</span></div>
             <div class="rd-credentials">
@@ -498,481 +413,33 @@ ${RemoteHubNodeBaby.markup()}
 
   let controller;
 
-  function fillTailPreferences(preferences) {
-    tailOriginal = preferences;
-    document.querySelectorAll("[data-tail-option]").forEach((input) => {
-      const value = preferences[input.dataset.tailOption];
-      if (input.type === "checkbox") input.checked = value === true;
-      else input.value = value || "";
-      input.disabled = false;
-    });
-    tailDirty = false;
-    $("#rcTailDirty").hidden = true;
-  }
-
-  function tailChanges() {
-    const changes = {};
-    document.querySelectorAll("[data-tail-option]").forEach((input) => {
-      const value = input.type === "checkbox" ? input.checked : input.value;
-      if (value !== tailOriginal[input.dataset.tailOption])
-        changes[input.dataset.tailOption] = value;
-    });
-    return changes;
-  }
-
-  function fallbackNotice(message) {
-    expectedDisconnect = true;
-    $("#rcNetworkNotice").innerHTML =
-      `<p>${esc(message)}</p>${lanUrls.map((url) => `<a class="button" href="${esc(url)}">使用局域网入口 ${icon("external")}</a>`).join("")}`;
-    $("#rcNetworkNotice").hidden = false;
-  }
-
-  function updateNetwork(value, urls) {
-    network = value;
-    lanUrls = urls;
-    const connected = value.state === "Running";
-    if (connected && value.last_operation?.state !== "pending") {
-      expectedDisconnect = false;
-      $("#rcNetworkNotice").hidden = true;
-    }
-    const labels = {
-      Running: "已连接",
-      Stopped: "已断开",
-      NeedsLogin: "需要登录",
-      NeedsMachineAuth: "等待设备批准",
-      Starting: "正在连接",
-      NoState: "正在初始化",
-    };
-    const setText = (id, text) => { const node = $("#" + id); if (node) node.textContent = text; };
-    setText("rcTailState", !value.available
-      ? "未安装"
-      : !value.reachable
-        ? "不可用"
-        : labels[value.state] || value.state || "未知");
-    $("#rcTailState")?.classList.toggle("online", connected);
-    setText("rcTailAddress", value.device?.addresses?.join(" · ") || "—");
-    setText("rcTailCounts", connected
-      ? `${value.peers.filter((peer) => peer.online).length} / ${value.peers.length} 台其他设备在线`
-      : "当前未连接组网");
-    setText("rcNativeSummary", state?.ready
-      ? `${state.device_id} · ${state.connections ?? 0} 个远程连接`
-      : state?.message || "客户端未就绪");
-    setText("rcTailHostname", value.device?.hostname || "—");
-    setText("rcTailDns", value.device?.dns || "—");
-    setText("rcTailVersion", value.version || "—");
-    $("#rcTailNetwork").textContent = value.network || "—";
-    $("#rcTailErrors").textContent = [
-      value.error,
-      value.preference_error,
-      ...(value.health || []),
-    ]
-      .filter(Boolean)
-      .join("\n");
-    $("#rcTailErrors").hidden = !$("#rcTailErrors").textContent;
-    $("#rcTailToggle").textContent = connected ? "断开组网" : "连接组网";
-    $("#rcHeroDot")?.classList.toggle("online", connected);
-    $("#rcTailNetcheck").disabled = !value.available;
-    $("#rcTailToggle").disabled =
-      !value.available || value.last_operation?.state === "pending";
-    $("#rcTailReconnect").disabled =
-      !value.available || value.last_operation?.state === "pending";
-    $("#rcTailLogin").href = value.auth_url || "#";
-    $("#rcTailLogin").hidden = !value.auth_url;
-    const exit = $("#rcExitNode");
-    const selected = tailDirty
-      ? exit.value
-      : value.preferences?.["exit-node"] || "";
-    const options = value.peers
-      .filter((peer) => peer.exit_node_available)
-      .map((peer) => ({
-        name: peer.hostname || peer.dns,
-        ip: peer.addresses.find((ip) => !ip.includes(":")) || peer.addresses[0],
-      }));
-    exit.innerHTML =
-      '<option value="">不使用出口节点</option>' +
-      options
-        .map(
-          (item) =>
-            `<option value="${esc(item.ip)}">${esc(item.name)} · ${esc(item.ip)}</option>`,
-        )
-        .join("");
-    if (selected && !options.some((item) => item.ip === selected))
-      exit.insertAdjacentHTML(
-        "beforeend",
-        `<option value="${esc(selected)}">${esc(selected)} · 已选择</option>`,
-      );
-    exit.value = selected;
-    $("#rcTailSettings").hidden = value.backend === "orn";
-    $("#rcTailSave").disabled = !value.preferences;
-    if (value.preferences && !tailDirty) fillTailPreferences(value.preferences);
-    if (!value.preferences)
-      document.querySelectorAll("[data-tail-option]").forEach((input) => {
-        input.disabled = true;
-      });
-    const last = value.last_operation;
-    $("#rcTailOperation").textContent =
-      last?.state === "pending"
-        ? "正在执行组网操作…"
-        : last?.state === "error"
-          ? last.message
-          : "";
-    $("#rcTailOperation").hidden = !$("#rcTailOperation").textContent;
-    drawPeers();
-  }
-
-  function peerAddress(node) {
-    if (!node) throw Error("设备已不在当前列表中，请刷新");
-    return (
-      node.addresses.find((address) => !address.includes(":")) ||
-      node.addresses[0]
-    );
-  }
-
-  async function loadMeshConfig() {
-    try {
-      const value = await api("/remote-connect/mesh/config");
-      $("#rcOrnHostname").value = value.hostname || "";
-      $("#rcOrnControl").value = value.control_url || "";
-      $("#rcOrnPublish").value = Object.entries(value.publish || {})
-        .map(([port, target]) => `${port}=${target}`)
-        .join("\n");
-      $("#rcOrnNotice").hidden = true;
-    } catch (error) {
-      $("#rcOrnNotice").textContent = error.message;
-      $("#rcOrnNotice").hidden = false;
-    }
-  }
-
-  function updateOrn(value) {
-    if (!value) return;
-    const label = !value.available
-      ? "未发现组网组件，组网功能不可用"
-      : value.managed
-        ? "组网组件由 ORH 托管，随本控制台启停"
-        : value.standalone
-          ? `组网组件由独立服务运行（${value.standalone}）`
-          : value.running
-            ? "组网组件以独立进程运行"
-            : "组网组件未运行";
-    $("#rcOrnHost").textContent = value.note
-      ? `${label} · ${value.note}`
-      : label;
-    // Only offer takeover when a standalone unit actually still exists.
-    $("#rcOrnTakeover").hidden = !(value.available && value.standalone && !value.managed);
-  }
-
-  function drawPeers() {
-    if (network?.state !== "Running") {
-      $("#rcPeerList").innerHTML = empty("组网连接后显示设备状态");
-      return;
-    }
-    const rows = (network?.peers || []).filter(
-      (peer) =>
-        (!onlyOnline || peer.online) &&
-        `${peer.hostname} ${peer.dns} ${peer.addresses.join(" ")}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-    );
-    $("#rcPeerList").innerHTML = rows.length
-      ? `<div class="mesh-peers">${rows.map((peer) => {
-          const name = peer.hostname === "localhost" && peer.dns ? peer.dns.split(".")[0] : peer.hostname || peer.dns || "未命名设备";
-          const path = peer.online ? (peer.route === "direct" ? "直连" : peer.route === "relay" ? "中继" : "待连接") : "离线";
-          const recent = peer.last_seen && !peer.last_seen.startsWith("0001")
-            ? (peer.online ? "最近活跃 " + new Date(peer.last_seen).toLocaleTimeString() : "上次在线 " + new Date(peer.last_seen).toLocaleString())
-            : "暂无近期连接";
-          return `<article class="peer-card"><div class="peer-head"><span class="rc-dot ${peer.online ? "online" : ""}"></span><div class="peer-name"><strong>${esc(name)}</strong><small>${esc(peer.os)}${peer.console === false ? " · 仅远程桌面" : ""}</small></div><span class="peer-path ${peer.route === "direct" ? "direct" : peer.route === "relay" ? "relay" : ""}">${path}</span></div><div class="peer-ips mono">${peer.addresses.map((address) => `<span>${esc(address)}</span>`).join("")}</div><p class="peer-note">${recent}</p><div class="rc-peer-actions"><button data-peer-console="${esc(peer.id)}" ${peer.console === false ? 'disabled title="此设备没有 ORH 控制台，仅提供远程桌面等组网服务"' : ""}>${icon("external")}控制台</button><button class="primary" data-peer-desktop="${esc(peer.id)}">${icon("server")}远程桌面</button><button data-peer-ping="${esc(peer.id)}">${icon("diagnose")}检测</button><button data-peer-copy="${esc(peer.id)}">${icon("copy")}复制 IP</button></div></article>`;
-        }).join("")}</div>`
-      : empty(
-          query || onlyOnline ? "没有匹配的组网设备" : "当前组网中没有其他设备",
-        );
-    document.querySelectorAll("[data-peer-ping]").forEach(
-      (button) =>
-        (button.onclick = () =>
-          busy(button, async () => {
-            const node = network.peers.find(
-              (peer) => peer.id === button.dataset.peerPing,
-            );
-            const result = await api("/remote-connect/tailscale/ping", {
-              id: node.id,
-            });
-            if (current())
-              output("组网 · " + node.hostname, result.output);
-          })),
-    );
-    document.querySelectorAll("[data-peer-console]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const node = network.peers.find(
-            (peer) => peer.id === button.dataset.peerConsole,
-          );
-          // Open the tab inside the click gesture; async work happens after it.
-          const tab = window.open("", "_blank");
-          busy(button, async () => {
-            try {
-              const result = await api("/remote-connect/peers/console", {
-                peer_ip: peerAddress(node),
-              });
-              if (tab) tab.location.replace(result.url);
-              if (current())
-                notify(
-                  tab
-                    ? "已打开 " + (node.hostname || "设备") + " 的控制台"
-                    : "控制台地址：" + result.url,
-                );
-            } catch (error) {
-              if (tab) tab.close();
-              throw error;
-            }
-          });
-        }),
-    );
-    document.querySelectorAll("[data-peer-desktop]").forEach(
-      (button) =>
-        (button.onclick = () =>
-          busy(button, async () => {
-            const node = network.peers.find(
-              (peer) => peer.id === button.dataset.peerDesktop,
-            );
-            const result = await api("/remote-connect/peers/desktop", {
-              peer_ip: peerAddress(node),
-            });
-            if (current())
-              notify(
-                result.launch_error ||
-                  "已在本机打开 " +
-                    (node.hostname || "") +
-                    " 的远程桌面 " +
-                    result.address,
-              );
-          })),
-    );
-    document.querySelectorAll("[data-peer-copy]").forEach(
-      (button) =>
-        (button.onclick = () =>
-          busy(button, async () => {
-            const node = network.peers.find(
-              (peer) => peer.id === button.dataset.peerCopy,
-            );
-            await copy(
-              node.addresses.find((address) => !address.includes(":")) ||
-                node.addresses[0],
-            );
-            notify("组网 IP 已复制");
-          })),
-    );
-  }
-
-  function bindNetwork() {
-    $("#rcPeerSearch").oninput = (event) => {
-      query = event.target.value;
-      drawPeers();
-    };
-    $("#rcOnlyOnline").onchange = (event) => {
-      onlyOnline = event.target.checked;
-      drawPeers();
-    };
-    $("#rcTailSettings").onchange = () => {
-      tailDirty = Object.keys(tailChanges()).length > 0;
-      $("#rcTailDirty").hidden = !tailDirty;
-    };
-    $("#rcTailSettings").onsubmit = (event) => {
-      event.preventDefault();
-      busy($("#rcTailSave"), async () => {
-        const changes = tailChanges();
-        const disruptive =
-          changes["shields-up"] === true ||
-          "exit-node" in changes ||
-          "exit-node-allow-lan-access" in changes;
-        if (
-          disruptive &&
-          !(await confirm(
-            "更改组网连接设置",
-            "入站拦截或出口路由更改可能中断当前远程访问。请确认已准备好局域网访问方式。",
-          ))
-        )
-          return;
-        if (disruptive)
-          fallbackNotice(
-            "正在应用组网设置。连接中断时可从局域网入口继续管理。",
-          );
-        const controls = [
-          ...$("#rcTailSettings").querySelectorAll("input,select,button"),
-        ];
-        controls.forEach((control) => {
-          control.disabled = true;
-        });
-        try {
-          const result = await api("/remote-connect/tailscale/settings", {
-            changes,
-            before: tailOriginal,
-            confirm: disruptive,
-          });
-          fillTailPreferences(result.preferences);
-          expectedDisconnect = false;
-          notify("组网设置已保存");
-          await controller.refresh();
-        } catch (error) {
-          if (!disruptive || error.status) {
-            expectedDisconnect = false;
-            $("#rcNetworkNotice").hidden = true;
-            throw error;
-          }
-          notify("请从可用的网络入口刷新，核对组网设置结果");
-        } finally {
-          controls.forEach((control) => {
-            control.disabled = false;
-          });
-        }
-      });
-    };
-    async function control(action, button) {
-      await busy(button, async () => {
-        if (
-          action !== "connect" &&
-          !(await confirm(
-            action === "disconnect" ? "断开组网" : "重新连接组网",
-            "当前通过组网建立的控制台和远程桌面连接将中断。可通过局域网入口继续管理。",
-          ))
-        )
-          return;
-        await api("/remote-connect/tailscale/control", {
-          action,
-          confirm: action !== "connect",
-        });
-        if (action !== "connect")
-          fallbackNotice(
-            "组网操作请求已发送。当前入口断开后，请使用局域网入口查看执行结果。",
-          );
-        else notify("已请求连接组网");
-        if (action === "connect") await controller.refresh();
-      });
-    }
-    $("#rcTailToggle").onclick = () =>
-      control(
-        network?.state === "Running" ? "disconnect" : "connect",
-        $("#rcTailToggle"),
-      );
-    $("#rcTailReconnect").onclick = () =>
-      control("reconnect", $("#rcTailReconnect"));
-    $("#rcTailNetcheck").onclick = () =>
-      busy($("#rcTailNetcheck"), async () => {
-        const result = await api("/remote-connect/tailscale/netcheck", {});
-        if (current()) output("组网网络诊断", result.output);
-      });
-    function publishMap() {
-      const result = {};
-      $("#rcOrnPublish").value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .forEach((line) => {
-          const [port, target] = line.split("=");
-          result[(port || "").trim()] = (target || "").trim();
-        });
-      return result;
-    }
-    $("#rcOrnForm").onsubmit = (event) => {
-      event.preventDefault();
-      busy($("#rcOrnSave"), async () => {
-        const result = await api("/remote-connect/mesh/config", {
-          hostname: $("#rcOrnHostname").value.trim(),
-          control_url: $("#rcOrnControl").value.trim(),
-          publish: publishMap(),
-        });
-        if (current()) {
-          updateOrn(result);
-          notify("组网配置已保存并重启");
-        }
-        await controller.refresh();
-      });
-    };
-    $("#rcOrnRestart").onclick = () =>
-      busy($("#rcOrnRestart"), async () => {
-        const result = await api("/remote-connect/mesh/restart", {});
-        if (current()) {
-          updateOrn(result);
-          notify("组网已重启");
-        }
-        await controller.refresh();
-      });
-    $("#rcOrnLeave").onclick = () =>
-      busy($("#rcOrnLeave"), async () => {
-        if (
-          !(await confirm(
-            "解绑本机设备",
-            "将从 Cloud 删除本机设备条目和组网身份，控制台与远程桌面需要重新绑定后才能使用。这个操作不可撤销。",
-          ))
-        )
-          return;
-        await api("/remote-connect/mesh/leave", { confirm: true });
-        if (current()) notify("本机设备已解绑");
-      });
-    $("#rcOrnTakeover").onclick = () =>
-      busy($("#rcOrnTakeover"), async () => {
-        if (
-          !(await confirm(
-            "由 ORH 托管组网",
-            "将停止当前独立运行的组网服务，改由本控制台启动和管理。组网会短暂重启，正在使用的控制台或远程桌面连接将中断约 5 秒。设备身份与账号绑定保留。",
-          ))
-        )
-          return;
-        const result = await api("/remote-connect/mesh/takeover", {});
-        if (current()) {
-          updateOrn(result);
-          notify(result.note || "组网已由 ORH 托管");
-        }
-        await controller.refresh();
-      });
-  }
-
   async function render(check) {
     current = check;
     if (!$("#rcRoot")) {
-      tab = "lan";
       original = {};
       effectiveOriginal = {};
       dirty = false;
-      tailDirty = false;
-      expectedDisconnect = false;
       $("#content").innerHTML = markup();
       controller = bindRustdesk();
-      bindNetwork();
-      RemoteHubLAN.mount({copy, current: () => current()});
-      RemoteHubNodeBaby.mount({busy, copy, current: () => current(), refresh: () => controller.refresh()});
-      window.scrollTo?.(0, 0);
     }
     if (!operation) await controller.refresh();
-    if (window.ORH_CAPS?.rustdesk === false) document.querySelectorAll('[data-rc-tab="overview"],[data-rc-open="overview"]').forEach((item) => item.remove());
-    if (window.ORH_CAPS?.mesh === false) document.querySelectorAll('[data-rc-tab="network"],[data-rc-open="network"]').forEach((item) => item.remove());
-    if (requestedTab) {
-      const next = requestedTab;
-      requestedTab = null;
-      await controller.selectTab(next, document.querySelector(`[data-rc-tab="${next}"]`));
-    } else if (tab === "proxy") await renderProxy();
   }
   async function canLeave() {
     if (operation) return false;
     if (
-      (dirty || tailDirty) &&
+      dirty &&
       !(await confirm("放弃未保存的修改", "离开页面将丢弃尚未保存的设置。"))
     )
       return false;
     dirty = false;
-    tailDirty = false;
     return true;
   }
   function reset() {
     current = () => false;
     dirty = false;
-    tailDirty = false;
     original = {};
     effectiveOriginal = {};
-    tailOriginal = {};
-    RemoteHubLAN.reset();
-    proxyVersion++;
-    RemoteHubNodeBaby.reset();
     state = null;
-    network = null;
     document
       .querySelectorAll(".remote-connect dialog[open]")
       .forEach((dialog) => dialog.close());
@@ -986,7 +453,6 @@ ${RemoteHubNodeBaby.markup()}
       current() &&
       !document.hidden &&
       !operation &&
-      tab !== "proxy" &&
       !document.querySelector(".remote-connect dialog[open]") &&
       !$("#outputDialog").open &&
       !$("#confirmDialog").open
@@ -997,14 +463,13 @@ ${RemoteHubNodeBaby.markup()}
     }
   }, 5000);
   window.addEventListener("beforeunload", (event) => {
-    if (current() && (dirty || tailDirty)) {
+    if (current() && dirty) {
       event.preventDefault();
       event.returnValue = "";
     }
   });
   return {
     render,
-    openTab: (next) => { requestedTab = next; },
     canLeave,
     reset,
     isOpen: () =>

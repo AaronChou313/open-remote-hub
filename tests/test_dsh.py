@@ -195,3 +195,28 @@ def test_start_repairs_instead_of_refusing_a_stale_cookie(dsh_client,monkeypatch
     assert c.post('/api/dsh/start',json={}).status_code==200
     assert state['recovered'] and c.get('/api/dsh/status').json()['running']
 
+
+
+def test_adopt_existing_supervisor_credentials_without_restart(tmp_path,monkeypatch):
+    import json
+    from app import dsh_auth
+    old=tmp_path/'old';old.mkdir()
+    data=tmp_path/'installed';data.mkdir()
+    monkeypatch.setattr(main,'DATA',data)
+    monkeypatch.setenv('ORH_DSH_PORT','9741')
+    plan=old/'dsh-launch.json';plan.write_text(json.dumps(dict(port=9741,data=str(old))))
+    args=['python','/old/scripts/dsh_host.py',str(plan)]
+    (old/'dsh-process.json').write_text(json.dumps(dict(pid=88,created=123,argv=args)))
+    dsh_auth.save(old,dict(port=9741,cookie='existing',launch_token='old-launch',renew_after=9999999999))
+    class Process:
+        pid=88
+        info={'cmdline':args}
+        def username(self):return 'same-user'
+        def create_time(self):return 123
+    monkeypatch.setattr(dsh.psutil,'process_iter',lambda attrs:[Process()])
+    monkeypatch.setattr(dsh.psutil,'Process',lambda:Process())
+    monkeypatch.setattr(dsh_auth,'exchange',lambda port,token:dict(port=port,cookie='renewed',launch_token=token,renew_after=9999999999))
+    assert dsh.recover()
+    assert dsh.native_cookie()=='renewed'
+    assert json.loads((data/'dsh-process.json').read_text())['pid']==88
+    assert (old/'dsh-auth.json').is_file()
