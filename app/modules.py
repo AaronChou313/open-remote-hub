@@ -103,11 +103,13 @@ def dependency(identifier):
     if not binary:
         return dict(available=False, detail='未安装 ' + identifier)
     if identifier == 'docker':
+        desktop = programs.docker_desktop()
+        hint = '请打开 Docker Desktop 完成启动后重新检测。' if desktop else '请启动 Docker Engine，并检查当前账户的访问权限。'
         try:
             result = subprocess.run([binary, 'info', '--format', '{{.ServerVersion}}'], capture_output=True, text=True, timeout=6)
-            return dict(available=result.returncode == 0, installed=True, can_open=bool(programs.docker_desktop()), detail=result.stdout.strip() if result.returncode == 0 else 'Docker 已安装，Engine 尚未启动或当前账户无法访问。请打开 Docker Desktop 完成启动后重新检测。')
+            return dict(available=result.returncode == 0, installed=True, can_open=bool(desktop), detail=result.stdout.strip() if result.returncode == 0 else 'Docker 已安装，Engine 尚未启动或当前账户无法访问。'+hint)
         except (OSError, subprocess.TimeoutExpired):
-            return dict(available=False, installed=True, can_open=bool(programs.docker_desktop()), detail='Docker 已安装，Engine 暂时无法访问，请在 Docker Desktop 查看启动状态。')
+            return dict(available=False, installed=True, can_open=bool(desktop), detail='Docker 已安装，Engine 暂时无法访问。'+hint)
     return dict(available=True, detail=binary)
 
 
