@@ -20,7 +20,7 @@ from app.dsh_auth import exchange,save,redact
 os.umask(0o077)
 plan=json.loads(Path(sys.argv[1]).read_text())
 port=plan['port'];data=Path(plan['data']);base=f'http://127.0.0.1:{port}'
-env=dict(os.environ);env['DSH_HOME']=plan['home']
+env=dict(os.environ);env.update(plan.get('env',{}));env['DSH_HOME']=plan['home']
 child=subprocess.Popen(plan['argv'],cwd=str(Path.home()),env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
 def stop(signum,frame):
     if child.poll() is None:child.terminate()

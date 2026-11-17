@@ -220,3 +220,44 @@ def test_adopt_existing_supervisor_credentials_without_restart(tmp_path,monkeypa
     assert dsh.native_cookie()=='renewed'
     assert json.loads((data/'dsh-process.json').read_text())['pid']==88
     assert (old/'dsh-auth.json').is_file()
+
+
+@pytest.mark.parametrize('version, supported', [('0.2.2-rc.3', True), ('0.10.0', True), ('0.1.9', False)])
+def test_windows_desktop_uses_the_bundled_electron_cli(tmp_path, monkeypatch, version, supported):
+    from types import SimpleNamespace
+    from app import programs
+    folder = tmp_path / 'DeepSeek Harness'
+    launcher = folder / 'resources/runtime/cli/bin/dsh.cmd'
+    launcher.parent.mkdir(parents=True)
+    launcher.touch()
+    (folder / 'DeepSeek Harness.exe').touch()
+    (folder / 'resources/app.asar').touch()
+    monkeypatch.setattr(programs, 'windows_install_directory', lambda name:folder)
+    monkeypatch.setattr(dsh.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
+    calls = []
+    def version_query(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0, stdout=version+'\n')
+    monkeypatch.setattr(dsh.subprocess, 'run', version_query)
+    result = dsh.windows_desktop_installation()
+    assert bool(result) == supported
+    if supported:
+        assert result['argv'][0] == str(folder / 'DeepSeek Harness.exe')
+        assert result['argv'][1] == '--expose-internals'
+        assert result['argv'][2].endswith('dsh-desktop-host/lib/cli.js')
+        assert result['env'] == {'ELECTRON_RUN_AS_NODE':'1'}
+        assert calls[0][1]['env']['ELECTRON_RUN_AS_NODE'] == '1'
+
+
+def test_windows_restart_stops_owned_children_before_supervisor(dsh_client, monkeypatch):
+    client, _, _ = dsh_client
+    from types import SimpleNamespace
+    stopped = []
+    child = SimpleNamespace(terminate=lambda:stopped.append('native-child'))
+    supervisor = SimpleNamespace(children=lambda recursive:[child], terminate=lambda:stopped.append('supervisor'))
+    monkeypatch.setattr(dsh.sys, 'platform', 'win32')
+    monkeypatch.setattr(dsh, 'managed', lambda:supervisor)
+    monkeypatch.setattr(dsh.psutil, 'wait_procs', lambda processes, timeout:(processes, []))
+    monkeypatch.setattr(dsh, 'start', lambda:dict(running=True))
+    assert dsh.restart(dsh.RestartRequest(confirm=True)) == {'running':True}
+    assert stopped == ['native-child']

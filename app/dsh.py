@@ -7,6 +7,7 @@ import plistlib
 import re
 import socket
 import subprocess
+import sys
 import threading
 import time
 import httpx
@@ -29,8 +30,44 @@ def settings():
     return dict(enabled=enabled,gateway_port=gateway,port=upstream,home=str(Path(os.environ.get('ORH_DSH_HOME',str(Path.home()/'.dsh'))).expanduser().resolve()))
 
 
+def windows_desktop_installation():
+    from app.programs import windows_install_directory
+    folders = [windows_install_directory('DeepSeek Harness')]
+    for variable in ('LOCALAPPDATA', 'ProgramFiles'):
+        if os.environ.get(variable):
+            relative = 'Programs/DeepSeek Harness' if variable == 'LOCALAPPDATA' else 'DeepSeek Harness'
+            folders.append(Path(os.environ[variable]) / relative)
+    for folder in folders:
+        if folder is None:
+            continue
+        executable = folder / 'DeepSeek Harness.exe'
+        resources = folder / 'resources'
+        launcher = resources / 'runtime/cli/bin/dsh.cmd'
+        if not (executable.is_file() and launcher.is_file() and (resources / 'app.asar').is_file()):
+            continue
+        # This is the argv/env used by Desktop's own dsh.cmd launcher. Electron
+        # resolves its packaged ASAR entry while running its bundled Node runtime.
+        entry = resources / 'app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js'
+        argv = [str(executable), '--expose-internals', str(entry)]
+        environment = {'ELECTRON_RUN_AS_NODE':'1'}
+        try:
+            result = subprocess.run(argv + ['--version'], capture_output=True, text=True, timeout=4,
+                                    env={**os.environ, **environment}, creationflags=subprocess.CREATE_NO_WINDOW)
+            version = result.stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        match = re.match(r'^(\d+)\.(\d+)\.(\d+)', version)
+        if result.returncode == 0 and match and tuple(map(int, match.groups())) >= (0,2,0):
+            return dict(argv=argv, env=environment, version=version)
+    return None
+
+
 def installation():
     explicit=os.environ.get('ORH_DSH_BIN')
+    if sys.platform == 'win32' and not explicit:
+        desktop = windows_desktop_installation()
+        if desktop:
+            return desktop
     candidates=[]
     if explicit:candidates.append((Path(explicit).expanduser(),None))
     else:
@@ -85,7 +122,8 @@ def listener():
     cfg=settings()
     for p in psutil.process_iter(['pid','cmdline']):
         args=p.info['cmdline'] or []
-        if not any('/@deepseek-ai/dsh/' in a or '/@deepseek-ai/dsh-desktop-host/' in a or Path(a).name=='dsh' for a in args):continue
+        normalized = [argument.replace('\\', '/') for argument in args]
+        if not any('/@deepseek-ai/dsh/' in a or '/@deepseek-ai/dsh-desktop-host/' in a or Path(a).name in ('dsh','dsh.cmd') for a in normalized):continue
         try:
             candidates=[p,*p.children(recursive=True)]
             for child in candidates:
@@ -192,15 +230,18 @@ def start():
             if sock.connect_ex(('127.0.0.1',cfg['port']))==0:raise HTTPException(409,'DSH 内部端口已占用，未连接未知服务')
         argv=info['argv']+['web','--patch',str(main.ROOT/'config/dsh-web.patch.yml'),'--host','127.0.0.1','--port',str(cfg['port']),'--no-open']
         plan=main.DATA/'dsh-launch.json'
-        plan.write_text(json.dumps(dict(argv=argv,home=cfg['home'],port=cfg['port'],data=str(main.DATA))))
+        plan.write_text(json.dumps(dict(argv=argv,env=info.get('env',{}),home=cfg['home'],port=cfg['port'],data=str(main.DATA))))
         plan.chmod(0o600)
         from app.runtime import script
         wrapper=script('dsh_host.py',plan)
         env={k:v for k,v in os.environ.items() if not k.startswith('ORH_')}
         log=main.DATA/'dsh-supervisor.log'
-        fd=os.open(log,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600);os.fchmod(fd,0o600)
+        fd=os.open(log,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
+        os.chmod(log,0o600)
         with os.fdopen(fd,'ab') as f:
-            child=subprocess.Popen(wrapper,cwd=str(Path.home()),env=env,stdin=subprocess.DEVNULL,stdout=f,stderr=f,start_new_session=True)
+            child=subprocess.Popen(wrapper,cwd=str(Path.home()),env=env,stdin=subprocess.DEVNULL,stdout=f,stderr=f,
+                                   start_new_session=sys.platform!='win32',
+                                   creationflags=(subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP) if sys.platform=='win32' else 0)
         identity=dict(pid=child.pid,created=psutil.Process(child.pid).create_time(),argv=wrapper,version=info['version'])
         temp=state_path().with_suffix('.tmp');temp.write_text(json.dumps(identity));temp.chmod(0o600);temp.replace(state_path())
         for _ in range(80):
@@ -231,7 +272,14 @@ def restart(body: RestartRequest):
         if not process:raise HTTPException(409,'此 DSH 实例由其他软件启动，请先在原客户端退出')
         try:
             children=process.children(recursive=True)
-            process.terminate()
+            if sys.platform == 'win32':
+                # TerminateProcess does not deliver SIGTERM to the supervisor.
+                # Stop its owned child tree so the log reader exits on EOF.
+                for child in reversed(children):
+                    try:child.terminate()
+                    except psutil.NoSuchProcess:pass
+            else:
+                process.terminate()
             _,alive=psutil.wait_procs([process,*children],timeout=8)
             if alive:raise HTTPException(409,'DSH 尚未退出，请稍后重试')
         except psutil.NoSuchProcess:pass

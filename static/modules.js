@@ -8,14 +8,14 @@ window.RemoteHubModules = (() => {
       <section class="module-row">
         <div class="module-summary"><h2>${esc(module.name)}</h2><span class="badge">${module.state==='missing_dependency' && module.dependency.installed ? '后台未就绪' : labels[module.state]}</span></div>
         <p class="muted">${esc(module.dependency.detail)}</p>
-        ${module.state !== 'ready' && !module.dependency.installed && module.guide.text ? `<p>${esc(module.guide.text)}</p>` : ''}
-        ${module.state !== 'ready' && !module.dependency.installed && module.guide.command ? `<code class="module-command">${esc(module.guide.command)}</code>` : ''}
+        ${module.supported && module.state !== 'ready' && !module.dependency.installed && module.guide.text ? `<p>${esc(module.guide.text)}</p>` : ''}
+        ${module.supported && module.state !== 'ready' && !module.dependency.installed && module.guide.command ? `<code class="module-command">${esc(module.guide.command)}</code>` : ''}
         <div class="toolbar">
           ${module.supported ? `<button data-module="${module.id}" data-operation="${module.enabled ? 'disable' : 'enable'}" ${module.enabled ? '' : 'class="primary"'}>${module.enabled ? '停用' : '启用'}</button>` : ''}
           ${(module.state === 'ready' && document.querySelector('[data-view="' + module.entry + '"]')) || (module.id === 'proxy' && module.supported && module.enabled) ? `<button data-module-entry="${module.entry}">${module.state === 'ready' ? '打开' : '前往安装'}</button>` : ''}
-          ${module.guide.url && module.state !== 'ready' && !module.dependency.installed ? `<a class="button" href="${esc(module.guide.url)}" target="_blank" rel="noopener">安装说明</a>` : ''}
+          ${module.guide.url && module.supported && module.state !== 'ready' && !module.dependency.installed ? `<a class="button" href="${esc(module.guide.url)}" target="_blank" rel="noopener">安装说明</a>` : ''}
           ${module.dependency.can_open && module.state !== 'ready' ? '<button data-module-open="docker">打开 Docker Desktop</button>' : ''}
-          ${module.enabled && module.state !== 'ready' ? '<button data-module-check>重新检测</button>' : ''}
+          ${module.supported && module.enabled && module.state !== 'ready' ? '<button data-module-check>重新检测</button>' : ''}
         </div>
       </section>`;
     $('#content').innerHTML = [['basic','基本功能'],['advanced','进阶功能']].map(([group,title]) => `<section class="module-section"><h2 class="section-title">${title}</h2><div class="module-list">${result.modules.filter(module => (module.group || (['terminal','files','services','lan'].includes(module.id) ? 'basic' : 'advanced')) === group).map(row).join('')}</div></section>`).join('');

@@ -49,3 +49,5 @@ Android 使用应用内 tsnet，与系统 VPN 并行运行。通用 TCP 转发�
 “关于 ORH”展示当前版本、平台、最新发行版本和更新说明，并提供检查、下载与安装入口。Windows 安装更新后自动重启，macOS 与 Linux 打开系统安装包后提供重启入口。桌面 DSH 独立窗口共享应用登录会话，Android 在应用内打开工作台。
 
 Windows 的节点小宝复用现有本地 HTTP 适配。Docker 安装检测包含当前用户目录和系统安装注册信息。RustDesk 在 Windows 使用官方 CLI 获取 ID，并检测进程与直连端口，原生密码与权限设置由 RustDesk 客户端提供。模块状态明确区分宿主软件未安装、后台未就绪和 ORH 尚未完成的平台适配。
+
+Windows DSH 复用已安装的官方桌面版 CLI 和运行时，提供与 macOS / Linux 相同的认证 Web 工作台、原生独立窗口与托管进程恢复入口。Agent 重启后接续现有 DSH，显式重启 DSH 时停止其所属子进程。

@@ -25,7 +25,7 @@ CATALOG = {
     'projects': ('项目', None, 'projects', ('Darwin', 'Linux')),
     'environments': ('开发环境', None, 'environments', ('Darwin', 'Linux')),
     'knowledge': ('知识库', 'files', 'knowledge', ('Darwin', 'Linux')),
-    'dsh': ('DSH 工作台', 'dsh', 'dsh', ('Darwin', 'Linux')),
+    'dsh': ('DSH 工作台', 'dsh', 'dsh', ('Darwin', 'Linux', 'Windows')),
     'proxy': ('网络代理', 'proxy', 'proxy', ('Darwin', 'Linux')),
 }
 GUIDES = {
@@ -122,9 +122,11 @@ def status(identifier, values=None):
         requirement = 'conpty'
     supported = system in platforms
     active = (values if values is not None else load()).get(identifier, False)
-    reasons = {'ssh':'SSH 管理尚未适配 Windows 的终端与 SSH 文件权限，当前实现使用 Unix PTY。', 'projects':'项目模块尚未适配 Windows 文件目录操作、环境路径和终端启动。', 'environments':'开发环境尚未适配 Windows 的 Scripts 目录和命令执行方式。', 'knowledge':'知识库尚未接入已有的 Windows 文件操作后端，当前目录操作仍使用 POSIX 文件描述符。', 'dsh':'DSH 尚未适配 Windows 的安装检测、进程托管和本机认证。', 'proxy':'网络代理尚未适配 Windows 服务、管理员授权和 TUN 管理。'}
+    reasons = {'ssh':'SSH 管理尚未适配 Windows 的终端与 SSH 文件权限，当前实现使用 Unix PTY。', 'projects':'项目模块尚未适配 Windows 文件目录操作、环境路径和终端启动。', 'environments':'开发环境尚未适配 Windows 的 Scripts 目录和命令执行方式。', 'knowledge':'知识库尚未接入已有的 Windows 文件操作后端，当前目录操作仍使用 POSIX 文件描述符。', 'proxy':'网络代理尚未适配 Windows 服务、管理员授权和 TUN 管理。'}
     check = dependency(requirement) if supported else dict(available=False, detail=reasons.get(identifier, '此模块尚未支持 ' + system) if system == 'Windows' else '此模块尚未支持 ' + system)
     hint, url, command = GUIDES.get(requirement, ('', '', ''))
+    if not supported:
+        hint, url, command = '', '', ''
     if requirement == 'zellij' and system == 'Linux':
         command = ''
     state = 'disabled' if not active else 'error' if not supported else 'ready' if check['available'] else 'missing_dependency'

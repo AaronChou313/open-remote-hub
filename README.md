@@ -7,11 +7,11 @@
 
 | 平台 | 安装包 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `ORH-Setup-0.6.17.exe` | 运行安装向导，从开始菜单打开 |
-| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.17-macos-arm64.dmg` | 把应用拖入 Applications |
-| macOS 15+ Intel | `OpenRemoteHub-0.6.17-macos-amd64.dmg` | 把应用拖入 Applications |
-| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.17-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.17-linux-amd64.deb` |
-| Android 8+ ARM64 | `OpenRemoteHub-0.6.17-android-arm64.apk` | 下载 APK 后安装 |
+| Windows 10/11 x64 | `ORH-Setup-0.6.18.exe` | 运行安装向导，从开始菜单打开 |
+| macOS 15+ Apple Silicon | `OpenRemoteHub-0.6.18-macos-arm64.dmg` | 把应用拖入 Applications |
+| macOS 15+ Intel | `OpenRemoteHub-0.6.18-macos-amd64.dmg` | 把应用拖入 Applications |
+| Ubuntu 22.04+ / Debian 12+ x64 | `OpenRemoteHub-0.6.18-linux-amd64.deb` | 软件安装器打开，或 `sudo apt install ./OpenRemoteHub-0.6.18-linux-amd64.deb` |
+| Android 8+ ARM64 | `OpenRemoteHub-0.6.18-android-arm64.apk` | 下载 APK 后安装 |
 
 桌面包自带 Python 运行时和 Mesh，使用时无需安装开发工具。Linux 包自带 Qt WebEngine，其系统库依赖由包管理器安装。macOS 包采用本地签名，目前没有 Apple 开发者公证。Windows 包目前没有 Authenticode 证书。Android 正式包使用固定发布密钥，旧调试版需要先卸载一次，再安装正式版。
 
@@ -36,7 +36,8 @@ Android 需要按应用内提示允许通知和后台运行。第一阶段只控
 | 远程桌面 | 三个桌面平台及 Android 控制端，需要 RustDesk。Windows 使用官方 CLI 读取 ID，密码及权限在原生客户端设置 |
 | 节点小宝 | 三个桌面平台通过已安装客户端的本地 HTTP API 读取状态和设备映射 |
 | 进程与服务 | macOS launchd、Linux systemd、Windows Services |
-| SSH、项目、开发环境、知识库、DSH、网络代理 | macOS/Linux。按功能检测宿主机依赖，Windows 界面明确显示支持状态 |
+| DSH | 三个桌面平台，自动检测已安装的 DeepSeek Harness 0.2+ 桌面版或 CLI |
+| SSH、项目、开发环境、知识库、网络代理 | macOS/Linux。按功能检测宿主机依赖，Windows 界面明确显示支持状态 |
 
 macOS / Linux 可在“功能管理”启用网络代理，然后点击“前往安装 → 安装 Mihomo”，在目标主机完成系统管理员授权。已有 ORH Mihomo 后台自动识别，机场配置保存在目标主机。
 
@@ -146,4 +147,6 @@ Docker Desktop 支持系统级与当前用户安装，ORH 在重新检测及每�
 
 RustDesk 的安装、进程、ID 和 IP 直连状态独立检测。Windows 的本机 IPC 限制外部程序访问，ORH 使用官方 `--get-id` 命令读取 ID，安全设置通过主机原生客户端管理。
 
-SSH、项目、开发环境、知识库、DSH 和网络代理模块仍包含 Unix PTY、POSIX 目录操作、Unix 环境路径或服务管理实现，尚待对应的 Windows 适配。功能管理会显示各模块的具体原因。
+SSH、项目、开发环境、知识库和网络代理模块仍包含 Unix PTY、POSIX 目录操作、Unix 环境路径或服务管理实现，尚待对应的 Windows 适配。功能管理会显示各模块的具体原因。
+
+Windows DSH 可复用已安装的 DeepSeek Harness 桌面版。ORH 读取安装目录，使用其官方 CLI 入口和内置 Electron Node 运行时启动 Web 工作台，无需额外配置 Node 或修改 PATH。在功能管理启用 DSH 后，点击“启动并进入 DSH”。原生账号、插件、配置与会话继续由本机 DSH 管理。
