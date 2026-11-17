@@ -90,3 +90,9 @@ DSH 独立桌面窗口与主窗口共用 pywebview 用户配置和 Cookie 存储
 程序发现同时读取当前 PATH、Windows 安装注册信息和 Docker Desktop / RustDesk 的标准用户及系统安装位置。Docker 的模块检测、容器操作与日志使用同一解析结果，安装后重新检测即可识别。程序已安装且 Engine 尚未就绪时，页面显示后台状态并提供打开 Docker Desktop 的入口。
 
 Windows RustDesk 使用官方 CLI 查询设备 ID，通过实际进程与本机 TCP 端口判断运行和直连接入状态。RustDesk 1.5.3 的 Windows 本机管理通道包含进程身份与权限检查，ORH 的安全设置入口转到原生客户端。Unix 平台继续使用现有 IPC 适配。节点小宝在 Windows 复用已验证的本地 HTTP API。其他尚未适配的模块逐项展示实际依赖原因。
+
+## Windows DSH（0.6.18）
+
+Windows 安装检测读取 DeepSeek Harness 的安装注册信息和标准用户、系统安装位置。ORH 使用桌面版官方 `dsh.cmd` 对应的 Electron Node 启动参数，运行 ASAR 中的 CLI 入口，并将 `ELECTRON_RUN_AS_NODE` 仅传给 DSH 子进程。CLI 安装保持原有检测入口。
+
+托管 Supervisor 使用独立 Windows 进程组并隐藏控制台窗口，继续复用官方 launch-token 到 Cookie 的认证交换。Agent 重启后保留 Supervisor，显式重启 DSH 时先结束其所属子进程树，Supervisor 从输出 EOF 退出。HTTP、WebSocket、内嵌工作台和独立入口沿用已有认证网关和共享前端。

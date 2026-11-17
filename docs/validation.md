@@ -1,5 +1,11 @@
 # 验证记录
 
+## 0.6.18 增量
+
+AaronDell 安装的官方 DeepSeek Harness 为 0.2.2-rc.3。实机验证内置 Electron Node 及 ASAR CLI 可以独立启动 Web，无需安装额外 Node。ORH 正常模块入口检测为 supported / ready，启动接口返回 running / managed，认证网关页面返回 200，原生 `/api/remote.mux` WebSocket 建立成功。
+
+实机显式重启 DSH 后，新 Supervisor 正常启动，旧进程退出。随后确认 Windows 终端会话与任务均空闲，重启 Agent，DSH Supervisor PID 保持不变并恢复认证访问。Mac Client 经真实 P2P 通道加载 Windows 的完整原生 DSH 工作台，默认工作区和既有会话加载正常，独立浏览器入口共享 ORH 登录会话。已完成首次预览说明，未发送模型任务。相关 DSH、模块和共享页面回归检查通过。
+
 ## 0.6.17 增量
 
 AaronDell 实机确认 Docker Desktop 为当前用户安装，CLI 位于 `%LOCALAPPDATA%/Programs/DockerDesktop/resources/bin/docker.exe`，ORH 启动时的 PATH 尚未包含该目录。修复将实际安装路径同时用于检测和正常 Docker API。Docker CLI 当时返回 Engine 命名管道不存在，界面会明确显示已安装且后台尚未就绪。
