@@ -4,7 +4,7 @@
 
 AaronDell 实机确认 Docker Desktop 为当前用户安装，CLI 位于 `%LOCALAPPDATA%/Programs/DockerDesktop/resources/bin/docker.exe`，ORH 启动时的 PATH 尚未包含该目录。修复将实际安装路径同时用于检测和正常 Docker API。Docker CLI 当时返回 Engine 命名管道不存在，界面会明确显示已安装且后台尚未就绪。
 
-RustDesk 1.5.3 实机进程名为 `rustdesk.exe`，原进程筛选遗漏了扩展名。Windows 官方 `--get-id` 成功读取设备 ID，直接访问受保护的本机管道被拒绝。修复后 Windows 使用官方 CLI 和实际直连端口提供状态，安全设置在原生客户端中完成。节点小宝 4.5.3 的 Windows 本地版本与路由 API 均正常返回，复用现有适配并开放 Windows 模块入口。相关后端及共享页面回归检查通过。
+RustDesk 1.5.3 实机进程名为 `rustdesk.exe`，原进程筛选遗漏了扩展名。Windows 官方 `--get-id` 成功读取设备 ID，直接访问受保护的本机管道被拒绝。修复后 Windows 使用官方 CLI 和实际直连端口提供状态，安全设置在原生客户端中完成。节点小宝 4.5.3 的 Windows 本地版本与路由 API 均正常返回，复用现有适配并开放 Windows 模块入口。相关后端及共享页面回归检查通过。Mac 与 AaronDell 已安装最终 0.6.17，Windows 返回真实 RustDesk ID、两个用户进程与可用直连端口，节点小宝状态 ready，Docker installed=true 且后台未就绪。通过 Mac Client 的共享工作区实际查看 Windows 的模块状态和远程桌面页面，页面正常显示设备 ID 和进程，未再请求不受支持的 Unix 设置接口。
 
 ## 0.6.16 增量
 
