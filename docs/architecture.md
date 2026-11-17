@@ -84,3 +84,9 @@ DSH 状态检测会通过官方 launch token 恢复本机 Cookie。源码版迁�
 `/api/client/software` 复用 launcher 的发行资产选择与平台安装流程，提供检查、下载进度和安装状态。Cloud 不参与安装包下载和设备业务流量。Windows 使用安装器更新后重启应用，桌面原生菜单仅在 macOS 按系统习惯保留。
 
 DSH 独立桌面窗口与主窗口共用 pywebview 用户配置和 Cookie 存储，Android 共用当前 WebView。设备网关同时转换 DSH 登录错误页面中的目标登录地址。页面操作事件限定在自身组件内，避免匹配到设备工作区根节点。
+
+## Windows 宿主工具发现（0.6.17）
+
+程序发现同时读取当前 PATH、Windows 安装注册信息和 Docker Desktop / RustDesk 的标准用户及系统安装位置。Docker 的模块检测、容器操作与日志使用同一解析结果，安装后重新检测即可识别。程序已安装且 Engine 尚未就绪时，页面显示后台状态并提供打开 Docker Desktop 的入口。
+
+Windows RustDesk 使用官方 CLI 查询设备 ID，通过实际进程与本机 TCP 端口判断运行和直连接入状态。RustDesk 1.5.3 的 Windows 本机管理通道包含进程身份与权限检查，ORH 的安全设置入口转到原生客户端。Unix 平台继续使用现有 IPC 适配。节点小宝在 Windows 复用已验证的本地 HTTP API。其他尚未适配的模块逐项展示实际依赖原因。

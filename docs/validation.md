@@ -1,5 +1,11 @@
 # 验证记录
 
+## 0.6.17 增量
+
+AaronDell 实机确认 Docker Desktop 为当前用户安装，CLI 位于 `%LOCALAPPDATA%/Programs/DockerDesktop/resources/bin/docker.exe`，ORH 启动时的 PATH 尚未包含该目录。修复将实际安装路径同时用于检测和正常 Docker API。Docker CLI 当时返回 Engine 命名管道不存在，界面会明确显示已安装且后台尚未就绪。
+
+RustDesk 1.5.3 实机进程名为 `rustdesk.exe`，原进程筛选遗漏了扩展名。Windows 官方 `--get-id` 成功读取设备 ID，直接访问受保护的本机管道被拒绝。修复后 Windows 使用官方 CLI 和实际直连端口提供状态，安全设置在原生客户端中完成。节点小宝 4.5.3 的 Windows 本地版本与路由 API 均正常返回，复用现有适配并开放 Windows 模块入口。相关后端及共享页面回归检查通过。
+
 ## 0.6.16 增量
 
 Python 回归通过 304 项，共享前端交互脚本全部通过，Go 全包 race 检查通过。新增检查覆盖模块操作限定作用域、旧 Cloud 绑定登录入口、组件化代理配置保留自定义字段、SSH 配置保留注释，以及软件更新状态与下载。Android 正式签名构建及 lint 通过，Android 35 ARM64 模拟器通过真实 Mesh、Ticket 和账号会话进入已安装 Mac Agent 的共享控制台。
