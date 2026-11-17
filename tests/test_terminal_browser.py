@@ -6,7 +6,10 @@ from app import main,terminal_browser as browser
 from fastapi import HTTPException
 import pytest
 
-SOURCE=b'''function installSoftKeyboardCapture(term, sendFunction) {
+SOURCE=b'''function installImeBypass(term, sendFunction) {
+    legacyDesktopIme();
+}
+function installSoftKeyboardCapture(term, sendFunction) {
     const div = document.createElement("input");
     div.type = "password";
 }
@@ -24,6 +27,8 @@ def test_mobile_client_patch_and_updated_integrity():
     asset,compatible=browser.client_asset(SOURCE)
     assert compatible and b'window.RemoteHubTerminal.installMobileInput(term, sendFunction)' in asset
     assert b'window.__zjSoftKbdEnabled = false;' in asset
+    assert b'function installImeBypass(term, sendFunction) {\n    if (isCoarsePointerDevice()) return;' in asset
+    assert b'legacyDesktopIme();' in asset
     assert b'div.type = "password"' not in asset
     assert b'function nativeScrolling() { return "unchanged"; }' in asset
     page=browser.client_page(PAGE,SOURCE)

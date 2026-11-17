@@ -18,13 +18,18 @@ def mobile_client(source):
     start='function installSoftKeyboardCapture(term, sendFunction) {'
     end='// inputmode="none" stops the OS keyboard'
     enabled='window.__zjSoftKbdEnabled = true;'
-    if source.count(start)!=1 or source.count(end)!=1 or source.count(enabled)!=1:
+    ime='function installImeBypass(term, sendFunction) {'
+    if any(source.count(marker)!=1 for marker in (start,end,enabled,ime)):
         return source,False
     before,remaining=source.split(start,1)
     capture,after=remaining.split(end,1)
     if 'div.type = "password";' not in capture:return source,False
     replacement='function installSoftKeyboardCapture(term, sendFunction) {\n    window.RemoteHubTerminal.installMobileInput(term, sendFunction);\n}\n\n'
-    return (before+replacement+end+after).replace(enabled,'window.__zjSoftKbdEnabled = false;',1),True
+    patched=(before+replacement+end+after).replace(enabled,'window.__zjSoftKbdEnabled = false;',1)
+    # xterm already tracks the committed portion of an Android IME composition.
+    # The old Process-key bypass resends its full context and clears that state.
+    patched=patched.replace(ime,ime+'\n    if (isCoarsePointerDevice()) return;',1)
+    return patched,True
 
 
 def client_asset(content):

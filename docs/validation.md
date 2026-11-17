@@ -1,5 +1,13 @@
 # 验证记录
 
+## 0.6.19 增量
+
+用户反馈 Android App 配合蓝牙键盘在 Mac 终端输入中文时重复输入历史文本。在已安装 Zellij 0.45.1 的真实 xterm.js 中构造连续中文、组合输入和候选词携带历史上下文的浏览器事件。旧 Process-key IME bypass 在最后一种情况下重复发送“你好世界”并产生额外删除字符，预期输出为“你好世界测试”。移动端改用原生 xterm IME 处理后，同一组序列输出符合预期，桌面既有 bypass 保留。
+
+ORH 的屏幕键盘输入在每次提交后清空上下文，覆盖 compositionend 后才更新 textarea、没有最终 input、取消组合、重复中文、emoji、英文空格、退格和提交键。键盘按钮保留点击前焦点并区分显示与收起。移动版 Zellij 顶栏原有 z-index 高于 ORH 工具栏，输入工具栏改为顶栏下方独立一行，并预留终端显示高度。
+
+相关 Python 检查通过 12 项，终端前端事件回归通过。浏览器使用实际 Zellij xterm.js 复现和验证 IME 序列，尚未使用用户的实体平板与蓝牙键盘完成同一输入法的实机复验。
+
 ## 0.6.18 增量
 
 AaronDell 安装的官方 DeepSeek Harness 为 0.2.2-rc.3。实机验证内置 Electron Node 及 ASAR CLI 可以独立启动 Web，无需安装额外 Node。ORH 正常模块入口检测为 supported / ready，启动接口返回 running / managed，认证网关页面返回 200，原生 `/api/remote.mux` WebSocket 建立成功。

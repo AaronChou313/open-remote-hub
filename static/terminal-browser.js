@@ -91,26 +91,31 @@ window.RemoteHubTerminal=(()=>{
   state.element=input;
   const syncCursor=()=>{term.options.cursorInactiveStyle=term.options.cursorStyle||'block'};
   syncCursor();window.__zjSyncInactiveCursorStyle=syncCursor;
-  let composing=false,last='';
+  let composing=false,last='',commitTimer=null;
   const reset=()=>{last='\u00a0'.repeat(8);input.value=last;input.setSelectionRange(4,4)};
   const update=event=>{
    if(composing||event?.isComposing)return;
+   clearTimeout(commitTimer);commitTimer=null;
    const value=input.value;
    if(value===last)return;
    const change=inputDiff(last,value);
    if(change.deleted)state.sendFn('\x7f'.repeat(change.deleted));
    if(change.inserted)state.sendFn(change.inserted);
-   last=value;
-   if(event?.inputType==='deleteContentBackward'||value.length>4096)reset();
+   reset();
   };
   reset();
-  input.addEventListener('compositionstart',()=>{composing=true});
-  input.addEventListener('compositionend',()=>{composing=false;update()});
+  input.addEventListener('compositionstart',()=>{update();composing=true});
+  input.addEventListener('compositionend',()=>{
+   composing=false;
+   // Some IMEs update the textarea in the final input event after compositionend.
+   // That event commits immediately, or the timer commits when no event follows.
+   clearTimeout(commitTimer);commitTimer=setTimeout(update,0);
+  });
   input.addEventListener('input',update);
   input.addEventListener('keydown',event=>{
    if(composing||event.isComposing||event.keyCode===229)return;
    const controls={Enter:'\r',Tab:'\t',Escape:'\x1b',ArrowUp:'\x1b[A',ArrowDown:'\x1b[B',ArrowRight:'\x1b[C',ArrowLeft:'\x1b[D'};
-   if(controls[event.key]){event.preventDefault();state.sendFn(controls[event.key]);if(event.key==='Enter')reset()}
+   if(controls[event.key]){event.preventDefault();update();state.sendFn(controls[event.key]);reset()}
   });
   input.addEventListener('focus',()=>{
    state.isFocused=true;
@@ -150,11 +155,11 @@ window.RemoteHubTerminal=(()=>{
  }
  function mount(){
   const controls=document.createElement('div');controls.className='orh-terminal-tools zj-mobile-chrome';
-  controls.innerHTML='<button id="orh-terminal-copy" type="button" hidden>复制</button><button id="orh-terminal-keyboard" type="button" aria-pressed="false" hidden>键盘</button><button id="orh-terminal-help-open" type="button" aria-label="剪贴板与快捷键">剪贴板</button><input id="orh-terminal-image" type="file" accept="image/png,image/jpeg,image/webp" hidden>';
+  controls.innerHTML='<button id="orh-terminal-copy" type="button" hidden>复制</button><button id="orh-terminal-keyboard" type="button" aria-pressed="false" hidden>显示键盘</button><button id="orh-terminal-help-open" type="button" aria-label="剪贴板与快捷键">剪贴板</button><input id="orh-terminal-image" type="file" accept="image/png,image/jpeg,image/webp" hidden>';
   document.body.appendChild(controls);
   const status=document.createElement('div');status.id='orh-terminal-status';status.className='zj-mobile-chrome';status.setAttribute('role','status');status.hidden=true;document.body.appendChild(status);
   const help=document.createElement('dialog');help.id='orh-terminal-help';help.className='zj-mobile-chrome';help.setAttribute('aria-labelledby','orh-terminal-help-title');
-  help.innerHTML='<div class="orh-terminal-help-head"><h2 id="orh-terminal-help-title">剪贴板与快捷键</h2><button id="orh-terminal-help-close" type="button">关闭</button></div><p>选中文字会尝试自动复制。无法粘贴时，点击“复制”使用浏览器原生复制。按住 Shift 拖选可使用浏览器终端的选区。</p><table><thead><tr><th>操作</th><th>Windows / Linux</th><th>Mac</th></tr></thead><tbody><tr><td>复制选区</td><td>Ctrl + Shift + C</td><td>⌘ C</td></tr><tr><td>粘贴文字</td><td>Ctrl + V / Ctrl + Shift + V</td><td>⌘ V</td></tr><tr><td>粘贴图片</td><td>Ctrl + V</td><td>⌘ V</td></tr><tr><td>中断程序</td><td>Ctrl + C</td><td>Ctrl + C</td></tr><tr><td>锁定 / 解锁 Zellij</td><td>Ctrl + G</td><td>Ctrl + G</td></tr></tbody></table><p>手机默认查看输出，可上下滑动。点击右上角“键盘”开始输入，再次点击收起键盘。中文在终端内组合输入。</p><p>图片会上传到 Mac，并将文件路径插入当前终端。Codex 可识别图片路径；程序在容器内时，需使用容器可访问的文件路径。</p><div class="orh-terminal-help-actions"><button id="orh-terminal-copy-current" type="button">复制选中内容</button><button id="orh-terminal-upload" type="button">上传图片</button></div><label for="orh-terminal-copy-text">最近选择的文字</label><textarea id="orh-terminal-copy-text" readonly placeholder="尚未选中文字，可在终端选中后返回这里复制。"></textarea><p id="orh-terminal-copy-hint" hidden></p><p id="orh-terminal-compat-warning" hidden>当前 Zellij 版本尚未匹配移动端适配，手机输入行为请以实际版本为准。</p>';
+  help.innerHTML='<div class="orh-terminal-help-head"><h2 id="orh-terminal-help-title">剪贴板与快捷键</h2><button id="orh-terminal-help-close" type="button">关闭</button></div><p>选中文字会尝试自动复制。无法粘贴时，点击“复制”使用浏览器原生复制。按住 Shift 拖选可使用浏览器终端的选区。</p><table><thead><tr><th>操作</th><th>Windows / Linux</th><th>Mac</th></tr></thead><tbody><tr><td>复制选区</td><td>Ctrl + Shift + C</td><td>⌘ C</td></tr><tr><td>粘贴文字</td><td>Ctrl + V / Ctrl + Shift + V</td><td>⌘ V</td></tr><tr><td>粘贴图片</td><td>Ctrl + V</td><td>⌘ V</td></tr><tr><td>中断程序</td><td>Ctrl + C</td><td>Ctrl + C</td></tr><tr><td>锁定 / 解锁 Zellij</td><td>Ctrl + G</td><td>Ctrl + G</td></tr></tbody></table><p>手机默认查看输出，可上下滑动。点击右上角“显示键盘”开始输入，点击“收起键盘”返回浏览。蓝牙键盘可直接输入，中文选定候选词后提交到终端。</p><p>图片会上传到 Mac，并将文件路径插入当前终端。Codex 可识别图片路径；程序在容器内时，需使用容器可访问的文件路径。</p><div class="orh-terminal-help-actions"><button id="orh-terminal-copy-current" type="button">复制选中内容</button><button id="orh-terminal-upload" type="button">上传图片</button></div><label for="orh-terminal-copy-text">最近选择的文字</label><textarea id="orh-terminal-copy-text" readonly placeholder="尚未选中文字，可在终端选中后返回这里复制。"></textarea><p id="orh-terminal-copy-hint" hidden></p><p id="orh-terminal-compat-warning" hidden>当前 Zellij 版本尚未匹配移动端适配，手机输入行为请以实际版本为准。</p>';
   document.body.appendChild(help);
   const openHelp=()=>{
    node('orh-terminal-copy-text').value=terminal()?.getSelection()||copiedText;
@@ -171,15 +176,20 @@ window.RemoteHubTerminal=(()=>{
   node('orh-terminal-help-open').onclick=openHelp;
   node('orh-terminal-help-close').onclick=()=>help.close();
   const keyboard=node('orh-terminal-keyboard');keyboard.hidden=!coarse()||!mobileCompatible;
+  const keyboardState=visible=>{
+   keyboard.setAttribute('aria-pressed',String(visible));
+   keyboard.textContent=visible?'收起键盘':'显示键盘';
+  };
+  keyboard.addEventListener('pointerdown',event=>event.preventDefault());
   keyboard.onclick=()=>{
    const capture=window.__zjSoftKbdCapture;
    if(!capture?.element){notify('请等待终端连接');return}
    const enabled=!window.__zjSoftKbdEnabled;
    window.__zjSoftKbdEnabled=enabled;
    if(enabled)capture.element.focus({preventScroll:true});else capture.element.blur();
-   keyboard.setAttribute('aria-pressed',String(enabled));
+   keyboardState(enabled);
   };
-  window.addEventListener('zellij:soft-keyboard-visibility',event=>keyboard.setAttribute('aria-pressed',String(event.detail.visible)));
+  window.addEventListener('zellij:soft-keyboard-visibility',event=>keyboardState(event.detail.visible));
   const copyFromControl=()=>window.isSecureContext?copy(terminal()?.getSelection()||copiedText):manualCopy();
   node('orh-terminal-copy').onclick=copyFromControl;
   node('orh-terminal-copy-current').onclick=copyFromControl;

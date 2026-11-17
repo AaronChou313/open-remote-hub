@@ -4,6 +4,11 @@ import assert from 'node:assert/strict';
 
 const nodes=new Map(),documentEvents=new Map(),windowEvents=new Map(),sent=[],pasted=[];
 let legacyWorks=true,legacyCalls=0,secureWrites=0;
+let nextTimer=0;
+const timers=new Map();
+function flushCommits(){
+ for(const [id,timer] of [...timers])if(timer.delay===0){timers.delete(id);timer.fn()}
+}
 function element(tag='div'){
  const listeners=new Map();
  return {tagName:tag.toUpperCase(),value:'',hidden:false,dataset:{},style:{},open:false,
@@ -19,7 +24,7 @@ const native={getSelection:()=>'',options:{},paste:text=>pasted.push(text)};
 class Addon{constructor(base64,provider){this.provider=provider}}
 const document={currentScript:{dataset:{mobileCompatible:'true'}},readyState:'complete',activeElement:null,body:element(),getElementById:node,querySelector:()=>null,createElement:element,addEventListener:(name,fn)=>documentEvents.set(name,fn),removeEventListener:(name)=>documentEvents.delete(name),execCommand:()=>{legacyCalls++;if(legacyWorks)documentEvents.get('copy')?.({clipboardData:{setData(){}},preventDefault(){}});return legacyWorks}};
 const window={term:native,isSecureContext:false,ClipboardAddon:{ClipboardAddon:Addon},matchMedia:()=>({matches:true}),addEventListener:(name,fn)=>windowEvents.set(name,fn),dispatchEvent:event=>windowEvents.get(event.type)?.(event)};
-const context=vm.createContext({window,document,navigator:{platform:'Win32',userAgent:'test',maxTouchPoints:1},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail}},Array,Promise,Error,JSON,Number,String,Math,Set,setTimeout(){return 1},clearTimeout(){},location:{pathname:'/terminal/fixture'},AbortSignal,fetch:async()=>({ok:true,json:async()=>({path:'/private/test.png'})})});
+const context=vm.createContext({window,document,navigator:{platform:'Win32',userAgent:'test',maxTouchPoints:1},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail}},Array,Promise,Error,JSON,Number,String,Math,Set,setTimeout(fn,delay){const id=++nextTimer;timers.set(id,{fn,delay});return id},clearTimeout(id){timers.delete(id)},location:{pathname:'/terminal/fixture'},AbortSignal,fetch:async()=>({ok:true,json:async()=>({path:'/private/test.png'})})});
 vm.runInContext(fs.readFileSync('static/terminal-browser.js','utf8'),context);
 const api=window.RemoteHubTerminal;
 const addon=new window.ClipboardAddon.ClipboardAddon();
@@ -47,12 +52,61 @@ input.value=baseline.slice(0,4)+'你好哈哈'+baseline.slice(4);
 input.dispatch('compositionend');
 input.dispatch('input',{isComposing:false});
 assert.deepEqual(sent,['你好哈哈'],'Committed Chinese is sent exactly once, including repeated characters');
+assert.equal(input.value,baseline,'Committed text never remains as the next IME context');
+flushCommits();
+assert.deepEqual(sent,['你好哈哈'],'Final input cancels the deferred composition commit');
+
+sent.length=0;
+for(const word of ['你好','你好','哈哈','🙂']){
+ input.dispatch('compositionstart');
+ input.value=baseline.slice(0,4)+'pinyin'+baseline.slice(4);
+ input.dispatch('input',{isComposing:true,inputType:'insertCompositionText'});
+ input.dispatch('compositionend',{data:word});
+ input.value=baseline.slice(0,4)+word+baseline.slice(4);
+ input.dispatch('input',{isComposing:false,inputType:'insertFromComposition',data:word});
+ flushCommits();
+ assert.equal(input.value,baseline);
+}
+assert.deepEqual(sent,['你好','你好','哈哈','🙂'],'Consecutive Chinese candidates never replay earlier text or suppress legitimate repeats');
+input.dispatch('compositionstart');
+input.value=baseline.slice(0,4)+'完成'+baseline.slice(4);
+input.dispatch('compositionend',{data:'完成'});
+flushCommits();
+input.dispatch('input',{inputType:'insertText'});
+assert.equal(sent.at(-1),'完成','Composition without a final input still commits exactly once');
+const count=sent.length;
+input.dispatch('compositionstart');
+input.value=baseline.slice(0,4)+'cancelled'+baseline.slice(4);
+input.value=baseline;
+input.dispatch('compositionend',{data:''});
+flushCommits();
+assert.equal(sent.length,count,'Cancelled composition sends nothing');
+
+for(const key of ['a','a',' ']){
+ input.value=baseline.slice(0,4)+key+baseline.slice(4);
+ input.dispatch('input',{inputType:'insertText',data:key});
+ assert.equal(input.value,baseline);
+}
+assert.deepEqual(sent.slice(-3),['a','a',' ']);
+input.value=baseline.slice(1);
+input.dispatch('input',{inputType:'deleteContentBackward'});
+assert.equal(sent.at(-1),'\x7f');
+input.dispatch('compositionstart');
+input.value=baseline.slice(0,4)+'末尾'+baseline.slice(4);
+input.dispatch('compositionend',{data:'末尾'});
 input.dispatch('keydown',{key:'Enter',preventDefault(){}});
+flushCommits();
+assert.deepEqual(sent.slice(-2),['末尾','\r'],'Enter flushes a pending candidate before submitting');
 assert.equal(sent.at(-1),'\r');
+let preservedFocus=false;
+node('orh-terminal-keyboard').dispatch('pointerdown',{preventDefault(){preservedFocus=true}});
+assert.equal(preservedFocus,true,'Keyboard toggle preserves capture focus until click');
 node('orh-terminal-keyboard').onclick();
 assert.equal(window.__zjSoftKbdEnabled,true);
+assert.equal(node('orh-terminal-keyboard').textContent,'收起键盘');
 node('orh-terminal-keyboard').onclick();
 assert.equal(window.__zjSoftKbdEnabled,false);
+assert.equal(node('orh-terminal-keyboard').textContent,'显示键盘');
 assert.ok(!windowEvents.has('touchend')&&!windowEvents.has('click'),'No global tap-to-refocus loop');
 
 const target=element();target.isTerminal=true;
