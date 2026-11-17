@@ -7,6 +7,9 @@ import re
 
 
 def command(args, timeout=15, cwd=None):
+    if args[0] == 'docker':
+        from app.programs import find
+        args = [find('docker') or 'docker', *args[1:]]
     try:
         p = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd, env={**{k:v for k,v in __import__('os').environ.items() if not k.startswith('ORH_')}, 'TERM':'xterm-256color'})
     except (OSError, subprocess.TimeoutExpired) as e:

@@ -4,12 +4,12 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException
 from app.remote_connect.api import administrator
+from app import programs
 
 lock = threading.RLock()
 router = APIRouter(prefix='/api/modules', tags=['modules'], dependencies=[Depends(administrator)])
@@ -18,7 +18,7 @@ CATALOG = {
     'files': ('文件管理', 'files', 'files', ('Darwin', 'Linux', 'Windows')),
     'docker': ('Docker', 'docker', 'docker', ('Darwin', 'Linux', 'Windows')),
     'lan': ('本地局域网', None, 'lan', ('Darwin', 'Linux', 'Windows')),
-    'nodebaby': ('节点小宝', 'nodebaby', 'nodebaby', ('Darwin', 'Linux')),
+    'nodebaby': ('节点小宝', 'nodebaby', 'nodebaby', ('Darwin', 'Linux', 'Windows')),
     'desktop': ('远程桌面', 'rustdesk', 'desktop', ('Darwin', 'Linux', 'Windows')),
     'ssh': ('SSH 管理', 'ssh', 'ssh', ('Darwin', 'Linux')),
     'services': ('进程与服务', None, 'services', ('Darwin', 'Linux', 'Windows')),
@@ -94,20 +94,20 @@ def dependency(identifier):
         from app.proxy_manager import settings
         present = bool(settings() or os.environ.get('ORH_CLASH_SOCKET') or os.environ.get('ORH_CLASH_URL'))
         return dict(available=present, detail='Mihomo broker' if present else '尚未安装代理 broker')
-    binary = shutil.which(identifier)
-    if identifier == 'rustdesk' and not binary:
-        if platform.system() == 'Darwin':
-            binary = next((str(path) for path in (Path('/Applications/RustDesk.app/Contents/MacOS/RustDesk'), Path('/Applications/RustDesk.app/Contents/MacOS/rustdesk')) if path.exists()), None)
-        elif platform.system() == 'Windows':
-            binary = next((str(Path(base) / 'RustDesk/rustdesk.exe') for base in (os.environ.get('ProgramFiles', ''), os.environ.get('ProgramFiles(x86)', '')) if base and (Path(base) / 'RustDesk/rustdesk.exe').exists()), None)
+    if identifier == 'rustdesk':
+        from app.remote_connect.rustdesk.client import binary as rustdesk_binary
+        executable = rustdesk_binary()
+        binary = str(executable) if executable.is_file() else None
+    else:
+        binary = programs.find(identifier)
     if not binary:
         return dict(available=False, detail='未安装 ' + identifier)
     if identifier == 'docker':
         try:
             result = subprocess.run([binary, 'info', '--format', '{{.ServerVersion}}'], capture_output=True, text=True, timeout=6)
-            return dict(available=result.returncode == 0, detail=result.stdout.strip() if result.returncode == 0 else 'Docker Engine 未启动或当前账户无法访问')
+            return dict(available=result.returncode == 0, installed=True, can_open=bool(programs.docker_desktop()), detail=result.stdout.strip() if result.returncode == 0 else 'Docker 已安装，Engine 尚未启动或当前账户无法访问。请打开 Docker Desktop 完成启动后重新检测。')
         except (OSError, subprocess.TimeoutExpired):
-            return dict(available=False, detail='Docker Engine 无法访问')
+            return dict(available=False, installed=True, can_open=bool(programs.docker_desktop()), detail='Docker 已安装，Engine 暂时无法访问，请在 Docker Desktop 查看启动状态。')
     return dict(available=True, detail=binary)
 
 
@@ -120,7 +120,8 @@ def status(identifier, values=None):
         requirement = 'conpty'
     supported = system in platforms
     active = (values if values is not None else load()).get(identifier, False)
-    check = dependency(requirement) if supported else dict(available=False, detail='此模块尚未支持 ' + system)
+    reasons = {'ssh':'SSH 管理尚未适配 Windows 的终端与 SSH 文件权限，当前实现使用 Unix PTY。', 'projects':'项目模块尚未适配 Windows 文件目录操作、环境路径和终端启动。', 'environments':'开发环境尚未适配 Windows 的 Scripts 目录和命令执行方式。', 'knowledge':'知识库尚未接入已有的 Windows 文件操作后端，当前目录操作仍使用 POSIX 文件描述符。', 'dsh':'DSH 尚未适配 Windows 的安装检测、进程托管和本机认证。', 'proxy':'网络代理尚未适配 Windows 服务、管理员授权和 TUN 管理。'}
+    check = dependency(requirement) if supported else dict(available=False, detail=reasons.get(identifier, '此模块尚未支持 ' + system) if system == 'Windows' else '此模块尚未支持 ' + system)
     hint, url, command = GUIDES.get(requirement, ('', '', ''))
     if requirement == 'zellij' and system == 'Linux':
         command = ''
@@ -183,3 +184,12 @@ def disable(identifier: str):
         values[identifier] = False
         save(values)
     return status(identifier)
+
+
+@router.post('/docker/open')
+def open_docker_desktop():
+    desktop = programs.docker_desktop()
+    if desktop is None:
+        raise HTTPException(409, '未找到 Docker Desktop，请先安装')
+    subprocess.Popen([str(desktop)], close_fds=True)
+    return dict(ok=True)

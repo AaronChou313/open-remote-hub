@@ -35,6 +35,12 @@ window.RemoteHubRemoteConnect = (() => {
     let statusRequest;
     function updateStatus(value) {
       state = value;
+      const nativeSettings = value.native_settings !== false;
+      $("#rcSettingsForm").hidden = !nativeSettings;
+      $("#rcTemporaryCredential").hidden = !nativeSettings;
+      $("#rcPasswordFact").hidden = !nativeSettings;
+      $("#rcConnectionsFact").hidden = !nativeSettings;
+      $("#rcServiceActions").hidden = !nativeSettings;
       $("#rcOnline").textContent = value.ready
         ? value.accepting
           ? value.online
@@ -42,6 +48,9 @@ window.RemoteHubRemoteConnect = (() => {
             : "正在连接网络"
           : "已暂停接入"
         : "客户端未就绪";
+      if (!nativeSettings) $("#rcOnline").textContent = value.ready
+        ? value.accepting ? "运行中 · 直连接入可用" : "运行中 · 请在原生客户端启用 IP 直连"
+        : value.installed ? "已安装，尚未运行" : "尚未安装";
       $("#rcOnline").classList.toggle(
         "online",
         value.ready && value.online && value.accepting,
@@ -49,9 +58,9 @@ window.RemoteHubRemoteConnect = (() => {
       $("#rcDeviceId").value = value.device_id || "—";
       $("#rcCopyId").disabled = !value.device_id;
       const host = location.hostname;
-      const port = original["direct-access-port"] || "21118";
+      const port = value.direct_access_port || original["direct-access-port"] || "21118";
       $("#rcConnectHere").href = "rustdesk://connection/new/" + ((host.includes(":") ? "[" + host + "]" : host) + ":" + port);
-      $("#rcConnectHere").setAttribute("aria-disabled", String(!value.ready));
+      $("#rcConnectHere").setAttribute("aria-disabled", String(!value.ready || (!nativeSettings && !value.accepting)));
       $("#rcVersion").textContent = value.version
         ? "v" + value.version
         : value.installed
@@ -89,7 +98,7 @@ window.RemoteHubRemoteConnect = (() => {
         if (!owner()) return;
         updateStatus(data);
         $("#updated").textContent = "更新于 " + new Date().toLocaleTimeString();
-        if (data.ready) return loadSettings();
+        if (data.ready && data.native_settings !== false) return loadSettings();
       });
       statusRequest = request;
       try {
@@ -105,7 +114,7 @@ window.RemoteHubRemoteConnect = (() => {
       });
     $("#rcConnectHere").onclick = (event) => {
       event.preventDefault();
-      if (!state?.ready) return;
+      if (!state?.ready || (state.native_settings === false && !state.accepting)) return;
       busy($("#rcConnectHere"), async () => {
         const target = RemoteHubApplications.meshGateway()
           ? await RemoteHubApplications.openService("desktop", "") : $("#rcConnectHere").href;
@@ -321,13 +330,13 @@ window.RemoteHubRemoteConnect = (() => {
                 <label for="rcDeviceId">RustDesk ID</label>
                 <div class="device-id-row"><input id="rcDeviceId" readonly value="—" aria-label="RustDesk ID"><button id="rcCopyId" class="icon-button" aria-label="复制 ID" title="复制 ID">${icon("copy")}</button></div>
               </div>
-              <div class="rd-credential">
+              <div id="rcTemporaryCredential" class="rd-credential">
                 <label for="rcTemporaryValue">临时密码</label>
                 <div class="device-id-row"><input id="rcTemporaryValue" readonly autocomplete="off" aria-label="临时密码"><button id="rcCopyTemporary" class="icon-button" aria-label="复制临时密码" title="复制临时密码">${icon("copy")}</button></div>
               </div>
             </div>
             <div class="rd-connection-bottom">
-              <dl class="rd-facts"><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
+              <dl class="rd-facts"><div><dt>接入服务</dt><dd id="rcAccepting">—</dd></div><div id="rcConnectionsFact"><dt>正在远程控制</dt><dd id="rcConnections">—</dd></div><div id="rcPasswordFact"><dt>固定密码</dt><dd id="rcPasswordSet">—</dd></div><div><dt>进程</dt><dd id="rcProcesses" class="mono">—</dd></div></dl>
               <a id="rcConnectHere" class="button rd-open-client" href="#">${icon("external")}在当前设备的 RustDesk 中打开</a>
             </div>
             <p class="muted small">当前设备需先<a href="https://rustdesk.com/download" target="_blank" rel="noopener">安装 RustDesk</a>。被控 Mac 还需在系统设置中授权屏幕录制和辅助功能。</p>
@@ -335,7 +344,7 @@ window.RemoteHubRemoteConnect = (() => {
               <div class="rd-runtime-heading"><h3>运行管理</h3><button id="rcOpenNative" class="text-button">在主机打开客户端 ${icon("external")}</button></div>
               <div class="rd-runtime-controls">
                 <label class="switch-row"><span>登录主机后自动运行</span><input id="rcAutostart" class="rd-toggle" type="checkbox" role="switch"></label>
-                <div class="service-actions"><button id="rcServiceToggle">启动接入服务</button><button id="rcServiceRestart">重新连接接入服务</button></div>
+                <div id="rcServiceActions" class="service-actions"><button id="rcServiceToggle">启动接入服务</button><button id="rcServiceRestart">重新连接接入服务</button></div>
               </div>
               <p id="rcNativeMessage" class="muted small" hidden></p>
             </div>

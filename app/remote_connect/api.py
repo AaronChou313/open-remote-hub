@@ -154,7 +154,7 @@ def service(value=Depends(body)):
                 subprocess.run(['/usr/bin/open', '-a', str(client.BINARY.parents[2])], check=True, timeout=8,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
-                subprocess.Popen([str(client.BINARY)], stdin=subprocess.DEVNULL,
+                subprocess.Popen([str(client.binary())], stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         except (OSError, subprocess.SubprocessError):
             raise NativeError('无法打开 RustDesk，请检查本机安装状态') from None

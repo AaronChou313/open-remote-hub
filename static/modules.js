@@ -14,6 +14,7 @@ window.RemoteHubModules = (() => {
           ${module.supported ? `<button data-module="${module.id}" data-operation="${module.enabled ? 'disable' : 'enable'}" ${module.enabled ? '' : 'class="primary"'}>${module.enabled ? '停用' : '启用'}</button>` : ''}
           ${(module.state === 'ready' && document.querySelector('[data-view="' + module.entry + '"]')) || (module.id === 'proxy' && module.supported && module.enabled) ? `<button data-module-entry="${module.entry}">${module.state === 'ready' ? '打开' : '前往安装'}</button>` : ''}
           ${module.guide.url && module.state !== 'ready' ? `<a class="button" href="${esc(module.guide.url)}" target="_blank" rel="noopener">安装说明</a>` : ''}
+          ${module.dependency.can_open && module.state !== 'ready' ? '<button data-module-open="docker">打开 Docker Desktop</button>' : ''}
           ${module.enabled && module.state !== 'ready' ? '<button data-module-check>重新检测</button>' : ''}
         </div>
       </section>`;
@@ -27,6 +28,10 @@ window.RemoteHubModules = (() => {
         await render(current);
       } catch (error) { showError(error); }
     }));
+    $('#content').querySelectorAll('button[data-module-open]').forEach(button => button.onclick = async () => {
+      try { await withBusy(button,'module:open-docker','正在打开…',()=>api('/modules/docker/open',{})); notify('Docker Desktop 已打开，Engine 就绪后点击重新检测'); }
+      catch(error) { showError(error); }
+    });
     $('#content').querySelectorAll('button[data-module-entry]').forEach(button => button.onclick = () => switchView(button.dataset.moduleEntry));
     $('#content').querySelectorAll('button[data-module-check]').forEach(button => button.onclick = async () => { caps = await api('/capabilities'); window.ORH_CAPS = caps;
         updateNavigation(); await render(current); });

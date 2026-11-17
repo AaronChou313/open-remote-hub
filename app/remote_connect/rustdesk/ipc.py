@@ -6,6 +6,7 @@ local client configuration adapter, separate from the remote desktop protocol.
 import json
 import socket
 import stat
+import sys
 from .settings import SOCKET
 
 
@@ -45,6 +46,8 @@ class Native:
         self.path = path
 
     def request(self, kind, content=None):
+        if sys.platform == 'win32':
+            raise NativeError('Windows 的 RustDesk 安全设置请在主机原生客户端中管理')
         try:
             info = self.path.lstat()
             if not stat.S_ISSOCK(info.st_mode):

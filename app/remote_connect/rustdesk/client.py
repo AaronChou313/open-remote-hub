@@ -2,6 +2,8 @@ import json
 import os
 import plistlib
 import re
+import socket
+import tomllib
 import subprocess
 import sys
 import threading
@@ -14,6 +16,14 @@ from .ipc import native, NativeError
 from .settings import BINARY, data_dir, OPTIONS, DEFAULTS
 
 lock = threading.RLock()
+
+
+def binary():
+    if sys.platform == 'win32' and not os.environ.get('ORH_RUSTDESK_BIN'):
+        from app.programs import find
+        return Path(find('rustdesk') or BINARY)
+    return BINARY
+
 def autostart_path():
     return data_dir() / 'rustdesk-autostart.json'
 
@@ -33,14 +43,14 @@ def set_autostart(enabled):
 def processes():
     result = []
     for process in psutil.process_iter(['pid', 'name', 'create_time', 'username']):
-        if (process.info['name'] or '').lower() != 'rustdesk':
+        if (process.info['name'] or '').lower().removesuffix('.exe') != 'rustdesk':
             continue
         try:
             executable = Path(process.exe())
             # Gatekeeper can run the existing app from an AppTranslocation
             # bundle even when the installed copy is in /Applications.
             native_bundle = executable.parts[-4:] == ('RustDesk.app', 'Contents', 'MacOS', BINARY.name)
-            if (executable != BINARY and not native_bundle) or (sys.platform != 'win32' and process.uids().real != os.getuid()):
+            if (executable != binary() and not native_bundle) or (sys.platform != 'win32' and process.uids().real != os.getuid()):
                 continue
             args = process.cmdline()[1:]
             if any(flag in args for flag in ('--cm', '--get-id', '--option')):
@@ -52,7 +62,7 @@ def processes():
 
 
 def launch(*arguments):
-    argv = [str(BINARY), *arguments]
+    argv = [str(binary()), *arguments]
     if sys.platform == 'darwin':
         bundle = next((parent for parent in BINARY.parents if parent.suffix.lower() == '.app'), BINARY)
         # LaunchServices assigns screen-capture permission to RustDesk itself.
@@ -64,13 +74,15 @@ def launch(*arguments):
 
 def start():
     with lock:
+        if sys.platform == 'win32' and processes():
+            return dict(reused=True)
         try:
             native.config('id')
             return dict(reused=True)
         except NativeError:
             if processes():
                 raise NativeError('RustDesk 进程已存在，本机接口尚未就绪，请稍后刷新')
-        if not BINARY.is_file():
+        if not binary().is_file():
             raise NativeError('未找到已安装的 RustDesk 客户端')
         launch('--server')
         return dict(reused=False)
@@ -88,14 +100,47 @@ def watch(stop):
             continue
 
 
+def windows_status(rows):
+    executable = binary()
+    identifier = None
+    if executable.is_file() and rows:
+        try:
+            result = subprocess.run([str(executable), '--get-id'], capture_output=True, text=True, timeout=4,
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+            value = result.stdout.strip()
+            if result.returncode == 0 and re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', value):
+                identifier = value
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    port = 21118
+    config = Path(os.environ.get('APPDATA', str(Path.home()))) / 'RustDesk/config/RustDesk2.toml'
+    try:
+        options = tomllib.loads(config.read_text(encoding='utf-8')).get('options', {})
+        port = int(options.get('direct-access-port') or port)
+    except (OSError, ValueError):
+        pass
+    accepting = False
+    try:
+        with socket.create_connection(('127.0.0.1', port), timeout=.3):
+            accepting = True
+    except OSError:
+        pass
+    return dict(installed=executable.is_file(), version=None, processes=rows, autostart=autostart(),
+                ready=bool(rows) or accepting, device_id=identifier, online=None, accepting=accepting,
+                connections=None, permanent_password_set=None, native_settings=False, direct_access_port=port,
+                message='Windows 的连接验证、密码和权限设置请在主机 RustDesk 原生客户端中管理。', time=time.time())
+
+
 def status():
     rows = processes()
+    if sys.platform == 'win32':
+        return windows_status(rows)
     version = None
     info = BINARY.parents[1] / 'Info.plist'
     if info.exists():
         with info.open('rb') as stream:
             version = plistlib.load(stream).get('CFBundleShortVersionString')
-    result = dict(installed=BINARY.is_file(), version=version, processes=rows,
+    result = dict(installed=binary().is_file(), native_settings=True, version=version, processes=rows,
                   autostart=autostart(), ready=False, device_id=None, online=False,
                   accepting=False, connections=None, permanent_password_set=None,
                   time=time.time())

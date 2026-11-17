@@ -376,10 +376,12 @@ def docker_action(identifier:str,body:Action):
 def logs(identifier:str,request:Request,follow:bool=False):
     container_id(identifier)
     if not follow:
-        p=subprocess.run(['docker','logs','--tail','200','--timestamps',identifier],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=15)
+        from app.programs import find
+        p=subprocess.run([find('docker') or 'docker','logs','--tail','200','--timestamps',identifier],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=15)
         return {'output':p.stdout[-65536:]}
     async def stream():
-        p=await asyncio.create_subprocess_exec('docker','logs','--tail','100','--timestamps','--follow',identifier,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT)
+        from app.programs import find
+        p=await asyncio.create_subprocess_exec(find('docker') or 'docker','logs','--tail','100','--timestamps','--follow',identifier,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.STDOUT)
         try:
             while True:
                 if await request.is_disconnected():break

@@ -12,6 +12,7 @@ function element(){
 }
 for(const id of ['#content','#updated','#outputDialog','#confirmDialog'])nodes.set(id,element());
 const document={hidden:false,querySelector:s=>nodes.get(s)||null,querySelectorAll:()=>[]};
+let rustdeskStatus={ready:false,processes:[],connections:0};
 const ctx=vm.createContext({window:{addEventListener(){},scrollTo(){}},document,Date,JSON,Object,Promise,
  location:{hostname:'localhost'},copyText:async()=>{},Set,setInterval(){},setTimeout(){},bytes:String,table:()=>'',icon:()=>'',esc:String,empty:String,me:{role:'admin'},
  showError:error=>errors.push(error.message),notify(){},confirmAction:async()=>true,withBusy:async(b,k,l,work)=>work(),
@@ -22,7 +23,7 @@ const ctx=vm.createContext({window:{addEventListener(){},scrollTo(){}},document,
   if(path==='/remote-connect/lan'){lanRefreshes++;return {interfaces:[],devices:[],gateways:[],dns:[],warnings:[]}}
   if(path==='/remote-connect/nodebaby')return {available:false,addresses:[],mappings:[]};
   assert.equal(path,'/remote-connect/rustdesk');
-  return {ready:false,processes:[],connections:0};
+  return rustdeskStatus;
  }});
 for(const file of ['lan','nodebaby','remote-connect']){
  vm.runInContext(fs.readFileSync('static/'+file+'.js','utf8'),ctx);
@@ -37,6 +38,12 @@ assert.equal(nodes.has('#rcLAN'),false);
 assert.equal(nodes.has('#rcNodeBaby'),false);
 assert.equal(nodes.has('#rcNetworkProxy'),false);
 assert.equal(nodes.has('#rcOverview'),true);
+rustdeskStatus={installed:true,ready:true,native_settings:false,device_id:'502852432',accepting:true,online:null,processes:[{pid:42}],connections:null,permanent_password_set:null};
+await view.render(()=>true);
+assert.equal(nodes.get('#rcSettingsForm').hidden,true);
+assert.equal(nodes.get('#rcTemporaryCredential').hidden,true);
+assert.equal(nodes.get('#rcDeviceId').value,'502852432');
+assert.match(nodes.get('#rcOnline').textContent,/直连接入可用/);
 nodes.delete('#rcRoot');
 await ctx.RemoteHubLAN.render(()=>true);
 assert.equal(lanRefreshes,1);
