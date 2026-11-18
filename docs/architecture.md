@@ -39,7 +39,7 @@ Cloud API 承载账号、目录、授权与协调。终端和文件等管理流�
 
 新 Agent 在首次登录前建立模块状态，终端、文件和进程与服务默认开启，其他可选功能默认关闭。已有绑定或本机凭据的旧安装保留已有入口。模块依赖状态支持未启用、缺少依赖、可用和不可用。依赖安装由用户在明确选择后完成。已启用模块集中显示在设备工作区，扩展模块收纳在“进阶功能”。停用功能保留外部软件和现有任务。
 
-原生窗口、托盘和 Agent 分进程。macOS 使用用户 LaunchAgent，Linux 优先使用用户 systemd，Windows 使用启动项与独立后台进程。Agent 持有 Mesh 生命周期和 ConPTY 会话。Zellij 的会话进程独立运行。
+原生窗口、托盘和 Agent 分进程。macOS 使用用户 LaunchAgent，Linux 优先使用用户 systemd，Windows 使用启动项与独立后台进程。Agent 持有 Mesh 生命周期和 ConPTY 会话。Zellij 的会话进程独立运行。Unix 会话进入与管理操作共用同名锁。结束操作先尝试原生命令，IPC 无响应时按目标 PID 与创建时间结束其进程树。删除前备份目标布局，随后直接清理目标缓存目录。重命名后的目录保存 `orh-process.json`，以 PID 和创建时间关联仍保留原始命令行的进程。
 
 macOS 上 RustDesk 的启动与连接通过 `/usr/bin/open -n -a RustDesk.app --args ...` 交给 LaunchServices，屏幕采集的 TCC 归属 RustDesk。系统授权仍由用户授予 RustDesk。
 

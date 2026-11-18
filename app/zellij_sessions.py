@@ -4,6 +4,7 @@ A stalled Zellij IPC peer must not hide every other session. The fallback does
 not ping, attach to, restart, or terminate any session or child process.
 """
 import os
+import json
 from pathlib import Path
 import re
 import psutil
@@ -16,6 +17,14 @@ def cache_roots():
 
 
 def host_sessions():
+    roots=cache_roots()
+    renamed={}
+    for root in roots:
+        for marker in root.glob('*/session_info/*/orh-process.json'):
+            try:
+                identity=json.loads(marker.read_text())
+                renamed[(identity['pid'],identity['created'])]=marker.parent.name
+            except (OSError,ValueError,KeyError,TypeError):continue
     live = {}
     for p in psutil.process_iter(['name', 'cmdline', 'uids', 'status']):
         try:
@@ -28,15 +37,16 @@ def host_sessions():
             index = argv.index('--server')
             if index + 1 >= len(argv):
                 continue
-            name = Path(argv[index + 1]).name
+            socket=Path(argv[index + 1])
+            created=p.create_time()
+            name=renamed.get((p.pid,created),socket.name)
             if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', name):
                 continue
-            orphan=not Path(argv[index+1]).exists() and not p.children(recursive=True)
-            live[name] = dict(name=name,status='exited' if orphan else 'running',pid=p.pid,created=p.create_time(),orphan=orphan,
+            orphan=not socket.with_name(name).exists() and not p.children(recursive=True)
+            live[name] = dict(name=name,status='exited' if orphan else 'running',pid=p.pid,created=created,orphan=orphan,
                               detail='会话已退出，服务进程仍在清理' if orphan else f'Zellij PID {p.pid}')
         except (psutil.Error, OSError, ValueError):
             continue
-    roots = cache_roots()
     entries = dict(live)
     for root in roots:
         for layout in root.glob('*/session_info/*/session-layout.kdl'):

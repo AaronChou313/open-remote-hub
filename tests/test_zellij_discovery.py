@@ -1,4 +1,4 @@
-import sys,time
+import sys,time,json
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from app import zellij_sessions as discovery
@@ -31,3 +31,26 @@ def test_saved_layout_is_evidence_but_orphan_metadata_is_not(tmp_path,monkeypatc
     (root/'orphan').mkdir()
     (root/'orphan/session-metadata.kdl').write_text('old record')
     assert [(r['name'],r['status']) for r in discovery.host_sessions()]==[('saved','exited')]
+
+
+def test_renamed_session_keeps_verified_process_identity(tmp_path,monkeypatch):
+    root=tmp_path/'cache'
+    folder=root/'contract_version_1/session_info/renamed'
+    folder.mkdir(parents=True)
+    (folder/'session-layout.kdl').write_text('layout {}')
+    marker=folder/'orh-process.json'
+    marker.write_text(json.dumps({'pid':3456,'created':123.0}))
+    sockets=tmp_path/'sockets';sockets.mkdir();(sockets/'renamed').touch()
+    class Process:
+        pid=3456
+        info={'name':'zellij','cmdline':['zellij','--server',str(sockets/'original')],'uids':None,'status':'running'}
+        def create_time(self):return 123.0
+        def children(self,recursive=False):return []
+    monkeypatch.setattr(discovery,'cache_roots',lambda:[root])
+    monkeypatch.setattr(discovery.psutil,'process_iter',lambda attrs:iter([Process()]))
+    rows=discovery.host_sessions()
+    assert len(rows)==1 and rows[0]['name']=='renamed'
+    assert rows[0]['status']=='running' and rows[0]['pid']==3456
+    marker.write_text(json.dumps({'pid':3456,'created':122.0}))
+    renamed=next(s for s in discovery.host_sessions() if s['name']=='renamed')
+    assert renamed['status']=='exited','Stale rename metadata never claims a reused PID'

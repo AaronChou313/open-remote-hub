@@ -11,6 +11,11 @@ web_lock = threading.RLock()
 session_locks = {}
 
 
+def session_lock(name):
+    with lock:
+        return session_locks.setdefault(name,threading.RLock())
+
+
 def ensure_web():
     with web_lock:
         return _ensure_web()
@@ -38,9 +43,7 @@ def prepare(name,cwd=None):
         from app.conpty import prepare as windows_prepare
         return windows_prepare(name, cwd)
     main.zname(name)
-    with lock:
-        session_lock=session_locks.setdefault(name,threading.RLock())
-    with session_lock:
+    with session_lock(name):
         entries=host_sessions()
         existing=next((s for s in entries if s['name']==name),None)
         state='reused'

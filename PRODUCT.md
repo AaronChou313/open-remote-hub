@@ -34,7 +34,7 @@ Android 使用应用内 tsnet，与系统 VPN 并行运行。通用 TCP 转发�
 
 沿用用户指定的 FlClash 风格，采用浅灰背景、柔和圆角卡片、蓝色主操作和克制的阴影，支持暗色和窄屏。普通操作直接执行，停止、删除和丢弃草稿明确目标并确认一次。
 
-保留现有账号、Headscale / tsnet、Agent API、终端、文件、Docker 与平台适配。Windows 使用 ConPTY，macOS / Linux 复用 Zellij。关闭窗口后后台与会话继续运行，停止后台通过托盘或菜单栏执行。
+保留现有账号、Headscale / tsnet、Agent API、终端、文件、Docker 与平台适配。Windows 使用 ConPTY，macOS / Linux 复用 Zellij。用户确认结束并删除后，Agent 可清理无响应的目标会话及其任务，已退出历史可独立删除。关闭窗口后后台与会话继续运行，停止后台通过托盘或菜单栏执行。
 
 ## 独立服务与扩展首次使用
 
